@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from projects.llm_d.orchestration import llmd_runtime
-from projects.llm_d.orchestration import prepare_llmd
-from projects.llm_d.orchestration import test_llmd
+from projects.llm_d.toolbox.prepare import main as prepare_toolbox
+from projects.llm_d.toolbox.test import main as test_toolbox
 
 
 def test_derive_namespace_uses_prefix_once() -> None:
@@ -16,10 +16,12 @@ def test_derive_namespace_uses_prefix_once() -> None:
 
 def test_parse_overrides_rejects_unknown_keys() -> None:
     with pytest.raises(ValueError, match="Unsupported llm_d override keys"):
-        llmd_runtime.parse_overrides('{"model":"other"}')
+        llmd_runtime.parse_overrides('{"model":"other"}', allowed_keys=("namespace",))
 
 
-def test_load_run_configuration_resolves_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_run_configuration_resolves_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
@@ -30,7 +32,9 @@ def test_load_run_configuration_resolves_alias(tmp_path: Path, monkeypatch: pyte
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
 
     assert config.preset_name == "smoke"
     assert config.preset_alias == "cks"
@@ -39,23 +43,48 @@ def test_load_run_configuration_resolves_alias(tmp_path: Path, monkeypatch: pyte
     assert config.namespace_is_managed is True
 
 
-def test_namespace_override_is_not_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_run_configuration_consolidates_config_d(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+
+    llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    consolidated = llmd_runtime.load_yaml(artifact_dir / "config.yaml")
+
+    assert "platform" in consolidated
+    assert "models" in consolidated
+    assert "runtime" in consolidated
+    assert "workloads" in consolidated
+    assert consolidated["runtime"]["default_preset"] == "smoke"
+
+
+def test_namespace_override_is_not_managed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"custom-ns"}')
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
 
     assert config.namespace == "custom-ns"
     assert config.namespace_is_managed is False
 
 
-def test_render_inference_service_injects_model_and_epp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_inference_service_injects_model_and_epp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
     manifest = llmd_runtime.render_inference_service(config)
 
     assert manifest["metadata"]["name"] == "llm-d"
@@ -64,12 +93,16 @@ def test_render_inference_service_injects_model_and_epp(tmp_path: Path, monkeypa
     assert manifest["spec"]["model"]["uri"] == "hf://Qwen/Qwen3-0.6B"
     assert manifest["spec"]["model"]["name"] == config.model["served_model_name"]
     assert manifest["spec"]["model"]["uri"] == config.model["uri"]
-    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
+    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0][
+        "args"
+    ]
     assert router_args[-2] == "--config-text"
     assert "EndpointPickerConfig" in router_args[-1]
 
 
-def test_render_guidellm_job_uses_target_and_rate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_render_guidellm_job_uses_target_and_rate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
@@ -78,7 +111,9 @@ def test_render_guidellm_job_uses_target_and_rate(tmp_path: Path, monkeypatch: p
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
     manifest = llmd_runtime.render_guidellm_job(config, "https://example.test")
 
     container = manifest["spec"]["template"]["spec"]["containers"][0]
@@ -93,12 +128,14 @@ def test_prepare_gpu_operator_skips_existing_clusterpolicy(
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
 
     calls: list[str] = []
 
     monkeypatch.setattr(
-        prepare_llmd,
+        prepare_toolbox,
         "ensure_operator_subscription",
         lambda operator_spec: calls.append(f"subscription:{operator_spec['package']}"),
     )
@@ -129,9 +166,12 @@ def test_prepare_gpu_operator_skips_existing_clusterpolicy(
         lambda kind, name: {"status": {"state": "ready"}},
     )
 
-    prepare_llmd.prepare_gpu_operator(config)
+    prepare_toolbox.prepare_gpu_operator(config)
 
-    assert calls == ["subscription:gpu-operator-certified", "crd:clusterpolicies.nvidia.com"]
+    assert calls == [
+        "subscription:gpu-operator-certified",
+        "crd:clusterpolicies.nvidia.com",
+    ]
 
 
 def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
@@ -140,7 +180,9 @@ def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
 
     applied: list[Path] = []
     manifest = {
@@ -150,9 +192,11 @@ def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
         "spec": {},
     }
 
-    monkeypatch.setattr(prepare_llmd, "ensure_operator_subscription", lambda _: None)
+    monkeypatch.setattr(prepare_toolbox, "ensure_operator_subscription", lambda _: None)
     monkeypatch.setattr(llmd_runtime, "wait_for_crd", lambda *_, **__: None)
-    monkeypatch.setattr(llmd_runtime, "load_manifest_template", lambda _config, _path: manifest)
+    monkeypatch.setattr(
+        llmd_runtime, "load_manifest_template", lambda _config, _path: manifest
+    )
     monkeypatch.setattr(llmd_runtime, "resource_exists", lambda kind, name: False)
     monkeypatch.setattr(
         llmd_runtime,
@@ -165,7 +209,7 @@ def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
         lambda kind, name: {"status": {"state": "ready"}},
     )
 
-    prepare_llmd.prepare_gpu_operator(config)
+    prepare_toolbox.prepare_gpu_operator(config)
 
     assert applied == [artifact_dir / "src" / "gpu-clusterpolicy.yaml"]
 
@@ -196,7 +240,9 @@ def test_resolve_endpoint_url_requires_gateway_address(
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path, artifact_dir=artifact_dir
+    )
 
     def fake_oc_get_json(kind: str, **_: object) -> dict[str, object]:
         assert kind == "llminferenceservice"
@@ -205,4 +251,4 @@ def test_resolve_endpoint_url_requires_gateway_address(
     monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
 
     with pytest.raises(RuntimeError, match="Gateway address"):
-        test_llmd.resolve_endpoint_url(config)
+        test_toolbox.resolve_endpoint_url(config)

@@ -350,7 +350,9 @@ class Config:
 
         # --- #
 
-        new_value = simple_dereference() if value.startswith("@") else multi_dereference()
+        new_value = (
+            simple_dereference() if value.startswith("@") else multi_dereference()
+        )
 
         if not handled_secretly:
             logger.info(f"resolve_reference: {value} ==> '{new_value}'")
@@ -477,8 +479,6 @@ def init(orchestration_dir, *, apply_config_overrides=True):
     config_path, src_config = __get_config_path(orchestration_dir)
 
     project = Config(config_path)
-
-    env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
     if not apply_config_overrides:
         logger.info(

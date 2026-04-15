@@ -1,0 +1,7 @@
+default_preset: smoke
+allowed_override_keys:
+  - namespace
+selected_preset: smoke
+model_key: qwen3-0-6b
+smoke_request_key: default
+benchmark_key: null

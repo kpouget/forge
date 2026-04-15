@@ -7,7 +7,6 @@ import os
 import re
 import shlex
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,15 +14,11 @@ from typing import Any, Iterable
 
 import yaml
 
-FORGE_HOME = Path(__file__).resolve().parents[3]
-if str(FORGE_HOME) not in sys.path:
-    sys.path.insert(0, str(FORGE_HOME))
-
-from projects.core.library import env, run
+from projects.core.library import config, env, run
 
 LOGGER = logging.getLogger(__name__)
-CONFIG_DIR = FORGE_HOME / "config" / "llm_d"
-ALLOWED_OVERRIDE_KEYS = frozenset({"namespace"})
+ORCHESTRATION_DIR = env.FORGE_HOME / "projects" / "llm_d" / "orchestration"
+CONFIG_DIR = ORCHESTRATION_DIR
 
 
 class CommandError(RuntimeError):
@@ -72,39 +67,42 @@ def load_run_configuration(
     *, cwd: Path | None = None, artifact_dir: Path | None = None
 ) -> ResolvedConfig:
     cwd = cwd or Path.cwd()
-    artifact_dir = artifact_dir or env.ARTIFACT_DIR
-    if artifact_dir is None:
-        raise RuntimeError("ARTIFACT_DIR is not initialized")
+    if artifact_dir is not None:
+        os.environ["ARTIFACT_DIR"] = str(artifact_dir)
+    artifact_dir = init()
+    _reinitialize_project_config()
 
-    platform_data = load_yaml(CONFIG_DIR / "platform.yaml")
-    models_data = load_yaml(CONFIG_DIR / "models.yaml")["models"]
-    workloads_data = load_yaml(CONFIG_DIR / "workloads.yaml")
-    preset_data = load_yaml(CONFIG_DIR / "presets.yaml")
-
+    platform_data = copy.deepcopy(config.project.get_config("platform"))
     fournos_config = load_fournos_config(cwd)
-    overrides = parse_overrides(os.environ.get("FORGE_CONFIG_OVERRIDES", ""))
+    overrides = parse_overrides(
+        os.environ.get("FORGE_CONFIG_OVERRIDES", ""),
+        allowed_keys=config.project.get_config("runtime.allowed_override_keys", []),
+    )
 
     requested_preset = (
-        fournos_config.get("preset") or os.environ.get("FORGE_PRESET") or "smoke"
+        fournos_config.get("preset")
+        or os.environ.get("FORGE_PRESET")
+        or config.project.get_config("runtime.default_preset")
     )
-    alias = (
-        requested_preset if requested_preset in preset_data.get("aliases", {}) else None
+    apply_requested_preset(requested_preset)
+
+    preset_name = config.project.get_config("runtime.selected_preset")
+    preset_alias = requested_preset if requested_preset != preset_name else None
+
+    model_name = config.project.get_config("runtime.model_key")
+    model = copy.deepcopy(config.project.get_config(f"models.{model_name}"))
+
+    smoke_request_name = config.project.get_config("runtime.smoke_request_key")
+    smoke_request = copy.deepcopy(
+        config.project.get_config(f"workloads.smoke_requests.{smoke_request_name}")
     )
-    preset_name = preset_data.get("aliases", {}).get(requested_preset, requested_preset)
-    preset = preset_data["presets"].get(preset_name)
-    if preset is None:
-        raise ValueError(f"Unknown llm_d preset: {requested_preset}")
 
-    model_name = preset["model"]
-    model = copy.deepcopy(models_data[model_name])
-
-    smoke_request_name = preset.get("smoke_request", "default")
-    smoke_request = copy.deepcopy(workloads_data["smoke_requests"][smoke_request_name])
-
-    benchmark_name = preset.get("benchmark")
+    benchmark_name = config.project.get_config("runtime.benchmark_key", None)
     benchmark = None
     if benchmark_name:
-        benchmark = copy.deepcopy(workloads_data["benchmarks"][benchmark_name])
+        benchmark = copy.deepcopy(
+            config.project.get_config(f"workloads.benchmarks.{benchmark_name}")
+        )
 
     job_name = fournos_config.get("job-name") or os.environ.get("FORGE_JOB_NAME")
     if not job_name:
@@ -121,10 +119,10 @@ def load_run_configuration(
 
     return ResolvedConfig(
         artifact_dir=Path(artifact_dir),
-        project_root=FORGE_HOME,
-        config_dir=CONFIG_DIR,
+        project_root=env.FORGE_HOME,
+        config_dir=ORCHESTRATION_DIR,
         preset_name=preset_name,
-        preset_alias=alias,
+        preset_alias=preset_alias,
         job_name=job_name,
         namespace=namespace,
         namespace_is_managed=namespace_override is None,
@@ -136,6 +134,26 @@ def load_run_configuration(
         fournos_config=fournos_config,
         overrides=overrides,
     )
+
+
+def _reinitialize_project_config() -> None:
+    config.project = None
+    artifact_config = env.ARTIFACT_DIR / "config.yaml"
+    if artifact_config.exists():
+        artifact_config.unlink()
+
+    presets_applied = env.ARTIFACT_DIR / "presets_applied"
+    if presets_applied.exists():
+        presets_applied.unlink()
+
+    config.init(ORCHESTRATION_DIR)
+
+
+def apply_requested_preset(requested_preset: str) -> None:
+    if not config.project.get_preset(requested_preset):
+        raise ValueError(f"Unknown llm_d preset: {requested_preset}")
+
+    config.project.apply_preset(requested_preset)
 
 
 def load_fournos_config(cwd: Path) -> dict[str, Any]:
@@ -153,7 +171,7 @@ def load_fournos_config(cwd: Path) -> dict[str, Any]:
     return data
 
 
-def parse_overrides(raw: str) -> dict[str, Any]:
+def parse_overrides(raw: str, *, allowed_keys: Iterable[str]) -> dict[str, Any]:
     if not raw or raw.strip() in {"", "null", "{}"}:
         return {}
 
@@ -165,11 +183,12 @@ def parse_overrides(raw: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("FORGE_CONFIG_OVERRIDES must decode to a JSON object")
 
-    unsupported = sorted(set(data) - ALLOWED_OVERRIDE_KEYS)
+    allowed_keys = frozenset(allowed_keys)
+    unsupported = sorted(set(data) - allowed_keys)
     if unsupported:
         raise ValueError(
             "Unsupported llm_d override keys: "
-            f"{', '.join(unsupported)}. Allowed keys: {', '.join(sorted(ALLOWED_OVERRIDE_KEYS))}"
+            f"{', '.join(unsupported)}. Allowed keys: {', '.join(sorted(allowed_keys))}"
         )
 
     return data
