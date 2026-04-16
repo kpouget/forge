@@ -21,9 +21,7 @@ def run() -> int:
 
 
 def run_prepare(config: llmd_runtime.ResolvedConfig) -> int:
-    LOGGER.info(
-        "Preparing llm_d preset=%s namespace=%s", config.preset_name, config.namespace
-    )
+    LOGGER.info("Preparing llm_d preset=%s namespace=%s", config.preset_name, config.namespace)
 
     verify_oc_access()
     verify_cluster_version(config)
@@ -59,14 +57,10 @@ def verify_cluster_version(config: llmd_runtime.ResolvedConfig) -> None:
         or payload.get("serverVersion", {}).get("platform")
     )
     if not openshift_version:
-        raise RuntimeError(
-            "Could not determine OpenShift version from `oc version -o json`"
-        )
+        raise RuntimeError("Could not determine OpenShift version from `oc version -o json`")
 
     minimum = config.platform["cluster"]["minimum_openshift_version"]
-    if llmd_runtime.version_tuple(openshift_version) < llmd_runtime.version_tuple(
-        minimum
-    ):
+    if llmd_runtime.version_tuple(openshift_version) < llmd_runtime.version_tuple(minimum):
         raise RuntimeError(
             f"Cluster version {openshift_version} is older than the llm_d minimum {minimum}"
         )
@@ -89,9 +83,7 @@ def prepare_cert_manager(config: llmd_runtime.ResolvedConfig) -> None:
 
 
 def prepare_leader_worker_set(config: llmd_runtime.ResolvedConfig) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(
-        config.platform, "leader-worker-set"
-    )
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "leader-worker-set")
     ensure_operator_subscription(operator_spec)
 
 
@@ -103,9 +95,7 @@ def prepare_nfd(config: llmd_runtime.ResolvedConfig) -> None:
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
 
-    manifest = llmd_runtime.load_manifest_template(
-        config, operator_spec["bootstrap_manifest"]
-    )
+    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
     llmd_runtime.apply_manifest(
         config.artifact_dir / "src" / "nfd-nodefeaturediscovery.yaml",
         manifest,
@@ -122,24 +112,18 @@ def prepare_nfd(config: llmd_runtime.ResolvedConfig) -> None:
         ),
     )
 
-    wait_for_nfd_gpu_labels(
-        config, timeout_seconds=operator_spec["wait_timeout_seconds"]
-    )
+    wait_for_nfd_gpu_labels(config, timeout_seconds=operator_spec["wait_timeout_seconds"])
 
 
 def prepare_gpu_operator(config: llmd_runtime.ResolvedConfig) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(
-        config.platform, "gpu-operator-certified"
-    )
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "gpu-operator-certified")
     ensure_operator_subscription(operator_spec)
     llmd_runtime.wait_for_crd(
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
 
-    manifest = llmd_runtime.load_manifest_template(
-        config, operator_spec["bootstrap_manifest"]
-    )
+    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
     clusterpolicy_name = manifest["metadata"]["name"]
     if llmd_runtime.resource_exists("clusterpolicy", clusterpolicy_name):
         LOGGER.info(
@@ -163,9 +147,7 @@ def prepare_gpu_operator(config: llmd_runtime.ResolvedConfig) -> None:
     )
 
 
-def wait_for_gpu_clusterpolicy_ready(
-    clusterpolicy_name: str, *, timeout_seconds: int
-) -> None:
+def wait_for_gpu_clusterpolicy_ready(clusterpolicy_name: str, *, timeout_seconds: int) -> None:
     def _clusterpolicy_ready() -> bool:
         payload = llmd_runtime.oc_get_json(
             "clusterpolicy",
@@ -183,16 +165,12 @@ def wait_for_gpu_clusterpolicy_ready(
 
 
 def prepare_rhoai_operator(config: llmd_runtime.ResolvedConfig) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(
-        config.platform, "rhods-operator"
-    )
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
     ensure_operator_subscription(operator_spec)
     ensure_required_crds(config.platform["rhoai"]["required_crds_before_dsc"], config)
 
 
-def ensure_required_crds(
-    crd_names: list[str], config: llmd_runtime.ResolvedConfig
-) -> None:
+def ensure_required_crds(crd_names: list[str], config: llmd_runtime.ResolvedConfig) -> None:
     for crd_name in crd_names:
         llmd_runtime.wait_for_crd(
             crd_name,
@@ -202,9 +180,7 @@ def ensure_required_crds(
 
 def apply_datasciencecluster(config: llmd_runtime.ResolvedConfig) -> None:
     manifest = llmd_runtime.render_datasciencecluster(config)
-    llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "datasciencecluster.yaml", manifest
-    )
+    llmd_runtime.apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
     llmd_runtime.oc(
         "get",
         "datasciencecluster",
@@ -243,17 +219,13 @@ def wait_for_datasciencecluster_ready(config: llmd_runtime.ResolvedConfig) -> No
 
 def ensure_gateway(config: llmd_runtime.ResolvedConfig) -> None:
     gateway = config.platform["gateway"]
-    if not llmd_runtime.resource_exists(
-        "gateway", gateway["name"], namespace=gateway["namespace"]
-    ):
+    if not llmd_runtime.resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
         if not gateway["create_if_missing"]:
             raise RuntimeError(
                 f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
             )
         manifest = llmd_runtime.render_gateway(config)
-        llmd_runtime.apply_manifest(
-            config.artifact_dir / "src" / "gateway.yaml", manifest
-        )
+        llmd_runtime.apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
 
     def _gateway_programmed() -> bool:
         resource = llmd_runtime.oc_get_json(
@@ -291,16 +263,12 @@ def verify_gpu_nodes(config: llmd_runtime.ResolvedConfig) -> None:
         )
 
 
-def wait_for_nfd_gpu_labels(
-    config: llmd_runtime.ResolvedConfig, *, timeout_seconds: int
-) -> None:
+def wait_for_nfd_gpu_labels(config: llmd_runtime.ResolvedConfig, *, timeout_seconds: int) -> None:
     selectors = config.platform["cluster"]["nfd_gpu_detection_labels"]
 
     def _labels_present() -> bool:
         for selector in selectors:
-            data = llmd_runtime.oc_get_json(
-                "nodes", selector=selector, ignore_not_found=True
-            )
+            data = llmd_runtime.oc_get_json("nodes", selector=selector, ignore_not_found=True)
             if data and data.get("items"):
                 return True
         return False
@@ -342,13 +310,9 @@ def capture_prepare_state(config: llmd_runtime.ResolvedConfig) -> None:
         capture_output=True,
     )
     if gateway_service.returncode == 0 and gateway_service.stdout:
-        llmd_runtime.write_text(
-            artifacts_dir / "gateway.service.yaml", gateway_service.stdout
-        )
+        llmd_runtime.write_text(artifacts_dir / "gateway.service.yaml", gateway_service.stdout)
     if config.platform["artifacts"]["capture_namespace_events"]:
-        capture_namespace_events(
-            config.namespace, artifacts_dir / "namespace.events.txt"
-        )
+        capture_namespace_events(config.namespace, artifacts_dir / "namespace.events.txt")
 
 
 def capture_resource_yaml(

@@ -9,9 +9,10 @@ import re
 import shlex
 import subprocess
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -201,9 +202,7 @@ def load_fournos_config(cwd: Path) -> dict[str, Any]:
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise ValueError(
-            f"Unexpected FOURNOS config type in {config_path}: {type(data)}"
-        )
+        raise ValueError(f"Unexpected FOURNOS config type in {config_path}: {type(data)}")
     return data
 
 
@@ -253,9 +252,7 @@ def derive_namespace(job_name: str, prefix: str, max_length: int) -> str:
 
     namespace = namespace[:max_length].rstrip("-")
     if not namespace:
-        raise ValueError(
-            f"Could not derive a valid namespace from job name: {job_name}"
-        )
+        raise ValueError(f"Could not derive a valid namespace from job name: {job_name}")
     return namespace
 
 
@@ -282,9 +279,7 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
     elif source_uri.startswith("oci://"):
         source_scheme = "oci"
     else:
-        raise ValueError(
-            f"Unsupported model cache source URI for {config.model_key}: {source_uri}"
-        )
+        raise ValueError(f"Unsupported model cache source URI for {config.model_key}: {source_uri}")
 
     model_cache_overrides = config.model.get("cache", {})
     pvc_defaults = config.model_cache["pvc"]
@@ -302,9 +297,7 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
         namespace=config.namespace,
         pvc_name=pvc_name,
         pvc_size=model_cache_overrides.get("pvc_size", pvc_defaults["size"]),
-        access_mode=model_cache_overrides.get(
-            "access_mode", pvc_defaults["access_mode"]
-        ),
+        access_mode=model_cache_overrides.get("access_mode", pvc_defaults["access_mode"]),
         storage_class_name=model_cache_overrides.get(
             "storage_class_name", pvc_defaults.get("storage_class_name")
         ),
@@ -323,9 +316,7 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
             "oci_registry_auth_secret_name",
             config.model_cache["oci"].get("registry_auth_secret_name"),
         ),
-        oci_registry_auth_secret_key=config.model_cache["oci"].get(
-            "registry_auth_secret_key"
-        ),
+        oci_registry_auth_secret_key=config.model_cache["oci"].get("registry_auth_secret_key"),
     )
 
 
@@ -460,9 +451,7 @@ def wait_until(
         time.sleep(interval_seconds)
 
     if last_error:
-        raise RuntimeError(
-            f"Timed out waiting for {description}: {last_error}"
-        ) from last_error
+        raise RuntimeError(f"Timed out waiting for {description}: {last_error}") from last_error
     raise RuntimeError(f"Timed out waiting for {description}")
 
 
@@ -487,15 +476,11 @@ def wait_for_crd(crd_name: str, timeout_seconds: int) -> None:
     )
 
 
-def wait_for_operator_csv(
-    package: str, namespace: str, timeout_seconds: int
-) -> dict[str, Any]:
+def wait_for_operator_csv(package: str, namespace: str, timeout_seconds: int) -> dict[str, Any]:
     selector = f"operators.coreos.com/{package}.{namespace}"
 
     def _csv_ready() -> dict[str, Any] | None:
-        data = oc_get_json(
-            "csv", namespace=namespace, selector=selector, ignore_not_found=True
-        )
+        data = oc_get_json("csv", namespace=namespace, selector=selector, ignore_not_found=True)
         if not data:
             return None
         items = data.get("items", [])
@@ -557,9 +542,7 @@ def ensure_subscription(operator_spec: dict[str, Any]) -> None:
         namespace=namespace,
         ignore_not_found=True,
     )
-    if current and not subscription_spec_matches(
-        current.get("spec", {}), subscription["spec"]
-    ):
+    if current and not subscription_spec_matches(current.get("spec", {}), subscription["spec"]):
         LOGGER.info("Reconciling subscription drift for %s in %s", package, namespace)
 
     oc("apply", "-f", "-", input_text=yaml.safe_dump(subscription, sort_keys=False))
@@ -611,9 +594,7 @@ def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str
     raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
 
 
-def load_manifest_template(
-    config: ResolvedConfig, relative_path: str
-) -> dict[str, Any]:
+def load_manifest_template(config: ResolvedConfig, relative_path: str) -> dict[str, Any]:
     return load_yaml(config.config_dir / relative_path)
 
 
@@ -634,9 +615,7 @@ def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool
     return expected_mode in actual_modes
 
 
-def wait_for_pvc_bound(
-    pvc_name: str, namespace: str, *, timeout_seconds: int
-) -> dict[str, Any]:
+def wait_for_pvc_bound(pvc_name: str, namespace: str, *, timeout_seconds: int) -> dict[str, Any]:
     def _pvc_bound() -> dict[str, Any] | None:
         payload = oc_get_json(
             "persistentvolumeclaim",
@@ -718,9 +697,7 @@ def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | No
 
 
 def render_datasciencecluster(config: ResolvedConfig) -> dict[str, Any]:
-    template_path = (
-        config.config_dir / config.platform["rhoai"]["datasciencecluster_template"]
-    )
+    template_path = config.config_dir / config.platform["rhoai"]["datasciencecluster_template"]
     manifest = load_yaml(template_path)
     manifest["metadata"]["name"] = config.platform["rhoai"]["datasciencecluster_name"]
     manifest["metadata"]["namespace"] = config.platform["rhoai"]["namespace"]
@@ -732,9 +709,7 @@ def render_gateway(config: ResolvedConfig) -> dict[str, Any]:
     manifest = load_yaml(template_path)
     manifest["metadata"]["name"] = config.platform["gateway"]["name"]
     manifest["metadata"]["namespace"] = config.platform["gateway"]["namespace"]
-    manifest["spec"]["gatewayClassName"] = config.platform["gateway"][
-        "gateway_class_name"
-    ]
+    manifest["spec"]["gatewayClassName"] = config.platform["gateway"]["gateway_class_name"]
     return manifest
 
 
@@ -766,9 +741,7 @@ def render_model_cache_pvc(spec: ModelCacheSpec) -> dict[str, Any]:
     return manifest
 
 
-def render_model_cache_job(
-    config: ResolvedConfig, spec: ModelCacheSpec
-) -> dict[str, Any]:
+def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict[str, Any]:
     common_env = [
         {"name": "MODEL_SOURCE", "value": spec.source_uri},
         {"name": "MODEL_TARGET_DIR", "value": f"/cache/{spec.model_path}"},
@@ -859,9 +832,7 @@ cat > "${MARKER_FILE}" <<EOF
 EOF
 """
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
-        common_env.append(
-            {"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"}
-        )
+        common_env.append({"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"})
         if registry_auth_secret_name:
             volumes.append(
                 {
@@ -907,9 +878,7 @@ EOF
         },
         "spec": {
             "backoffLimit": 0,
-            "activeDeadlineSeconds": config.model_cache["download"][
-                "wait_timeout_seconds"
-            ],
+            "activeDeadlineSeconds": config.model_cache["download"]["wait_timeout_seconds"],
             "template": {
                 "metadata": {
                     "labels": {
@@ -955,7 +924,7 @@ def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
         "-n",
         spec.namespace,
         "--overwrite",
-        f"forge.openshift.io/model-cache-ready=true",
+        "forge.openshift.io/model-cache-ready=true",
         f"forge.openshift.io/model-cache-key={spec.cache_key}",
         f"forge.openshift.io/model-source-uri={spec.source_uri}",
         f"forge.openshift.io/model-uri={spec.model_uri}",
@@ -978,21 +947,15 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
     )
 
     cache_spec = resolve_model_cache(config)
-    manifest["spec"]["model"]["uri"] = (
-        cache_spec.model_uri if cache_spec else config.model["uri"]
-    )
+    manifest["spec"]["model"]["uri"] = cache_spec.model_uri if cache_spec else config.model["uri"]
     manifest["spec"]["model"]["name"] = config.model["served_model_name"]
     manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(
         config.model["resources"]
     )
 
-    epp_path = (
-        config.config_dir / config.platform["inference_service"]["epp_config_template"]
-    )
+    epp_path = config.config_dir / config.platform["inference_service"]["epp_config_template"]
     epp_config = epp_path.read_text(encoding="utf-8")
-    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0][
-        "args"
-    ]
+    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     if not router_args or router_args[-1] != "--config-text":
         raise ValueError("Expected llm-d router args to end with --config-text")
     router_args.append(epp_config)
@@ -1078,9 +1041,7 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
                         {"name": "home", "emptyDir": {}},
                         {
                             "name": "results",
-                            "persistentVolumeClaim": {
-                                "claimName": config.benchmark["job_name"]
-                            },
+                            "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
                         },
                     ],
                 },
@@ -1140,9 +1101,7 @@ def render_guidellm_copy_pod(
             "volumes": [
                 {
                     "name": "results",
-                    "persistentVolumeClaim": {
-                        "claimName": config.benchmark["job_name"]
-                    },
+                    "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
                 }
             ],
         },

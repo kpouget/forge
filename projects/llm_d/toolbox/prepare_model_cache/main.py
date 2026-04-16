@@ -56,18 +56,13 @@ def ensure_model_cache_pvc(
     )
     if existing:
         actual_modes = existing.get("spec", {}).get("accessModes", [])
-        if not llmd_runtime.pvc_access_mode_matches(
-            actual_modes, cache_spec.access_mode
-        ):
+        if not llmd_runtime.pvc_access_mode_matches(actual_modes, cache_spec.access_mode):
             raise RuntimeError(
                 f"PVC {cache_spec.pvc_name} exists with access modes {actual_modes}, expected {cache_spec.access_mode}"
             )
 
         actual_storage_class = existing.get("spec", {}).get("storageClassName")
-        if (
-            cache_spec.storage_class_name
-            and actual_storage_class != cache_spec.storage_class_name
-        ):
+        if cache_spec.storage_class_name and actual_storage_class != cache_spec.storage_class_name:
             raise RuntimeError(
                 f"PVC {cache_spec.pvc_name} exists with storageClassName={actual_storage_class}, expected {cache_spec.storage_class_name}"
             )
@@ -155,9 +150,7 @@ def capture_model_cache_state(
         check=False,
     )
 
-    for pod_name in llmd_runtime.job_pod_names(
-        cache_spec.download_job_name, cache_spec.namespace
-    ):
+    for pod_name in llmd_runtime.job_pod_names(cache_spec.download_job_name, cache_spec.namespace):
         capture_resource_yaml(
             "pod",
             pod_name,

@@ -350,9 +350,7 @@ class Config:
 
         # --- #
 
-        new_value = (
-            simple_dereference() if value.startswith("@") else multi_dereference()
-        )
+        new_value = simple_dereference() if value.startswith("@") else multi_dereference()
 
         if not handled_secretly:
             logger.info(f"resolve_reference: {value} ==> '{new_value}'")

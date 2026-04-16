@@ -20,7 +20,6 @@ def run() -> int:
 
 
 def run_test(config: llmd_runtime.ResolvedConfig) -> int:
-    name = config.platform["inference_service"]["name"]
     namespace = config.namespace
     artifacts_dir = config.artifact_dir / "artifacts"
 
@@ -40,9 +39,7 @@ def run_test(config: llmd_runtime.ResolvedConfig) -> int:
         capture_inference_service_state(config)
         if endpoint_url:
             llmd_runtime.write_text(artifacts_dir / "endpoint.url", f"{endpoint_url}\n")
-        benchmark_name = (
-            config.benchmark["job_name"] if config.benchmark else "guidellm-benchmark"
-        )
+        benchmark_name = config.benchmark["job_name"] if config.benchmark else "guidellm-benchmark"
         llmd_runtime.oc(
             "delete",
             "job,pvc",
@@ -71,9 +68,7 @@ def run_test(config: llmd_runtime.ResolvedConfig) -> int:
             capture_output=True,
         )
         if events.returncode == 0 and events.stdout:
-            llmd_runtime.write_text(
-                artifacts_dir / "namespace.events.txt", events.stdout
-            )
+            llmd_runtime.write_text(artifacts_dir / "namespace.events.txt", events.stdout)
 
 
 def deploy_inference_service(config: llmd_runtime.ResolvedConfig) -> str:
@@ -105,9 +100,7 @@ def deploy_inference_service(config: llmd_runtime.ResolvedConfig) -> str:
     )
 
     manifest = llmd_runtime.render_inference_service(config)
-    llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "llminferenceservice.yaml", manifest
-    )
+    llmd_runtime.apply_manifest(config.artifact_dir / "src" / "llminferenceservice.yaml", manifest)
 
     def _pods_present() -> bool:
         pods = llmd_runtime.oc_get_json(
@@ -117,17 +110,13 @@ def deploy_inference_service(config: llmd_runtime.ResolvedConfig) -> str:
 
     llmd_runtime.wait_until(
         f"llm-d pods to appear in {namespace}",
-        timeout_seconds=config.platform["inference_service"][
-            "pod_appearance_timeout_seconds"
-        ],
+        timeout_seconds=config.platform["inference_service"]["pod_appearance_timeout_seconds"],
         interval_seconds=5,
         predicate=_pods_present,
     )
 
     def _service_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
-            "llminferenceservice", name=name, namespace=namespace
-        )
+        payload = llmd_runtime.oc_get_json("llminferenceservice", name=name, namespace=namespace)
         return llmd_runtime.condition_status(payload, "Ready") == "True"
 
     llmd_runtime.wait_until(
@@ -161,9 +150,7 @@ def try_resolve_endpoint_url(config: llmd_runtime.ResolvedConfig) -> str | None:
     name = config.platform["inference_service"]["name"]
     namespace = config.namespace
     gateway_name = config.platform["gateway"]["status_address_name"]
-    payload = llmd_runtime.oc_get_json(
-        "llminferenceservice", name=name, namespace=namespace
-    )
+    payload = llmd_runtime.oc_get_json("llminferenceservice", name=name, namespace=namespace)
 
     for address in payload.get("status", {}).get("addresses", []):
         if address.get("name") == gateway_name and address.get("url"):
@@ -171,12 +158,12 @@ def try_resolve_endpoint_url(config: llmd_runtime.ResolvedConfig) -> str | None:
     return None
 
 
-def run_smoke_request(
-    config: llmd_runtime.ResolvedConfig, endpoint_url: str
-) -> dict[str, object]:
+def run_smoke_request(config: llmd_runtime.ResolvedConfig, endpoint_url: str) -> dict[str, object]:
     namespace = config.namespace
     name = config.platform["inference_service"]["name"]
-    deployment_name = f"{name}{config.platform['inference_service']['workload_deployment_name_suffix']}"
+    deployment_name = (
+        f"{name}{config.platform['inference_service']['workload_deployment_name_suffix']}"
+    )
 
     payload = {
         "model": config.model["served_model_name"],
@@ -184,9 +171,7 @@ def run_smoke_request(
         "max_tokens": config.smoke_request["max_tokens"],
         "temperature": config.smoke_request["temperature"],
     }
-    llmd_runtime.write_json(
-        config.artifact_dir / "artifacts" / "smoke.request.json", payload
-    )
+    llmd_runtime.write_json(config.artifact_dir / "artifacts" / "smoke.request.json", payload)
 
     retries = config.platform["smoke"]["request_retries"]
     delay = config.platform["smoke"]["request_retry_delay_seconds"]
@@ -224,9 +209,7 @@ def run_smoke_request(
     return response
 
 
-def run_guidellm_benchmark(
-    config: llmd_runtime.ResolvedConfig, endpoint_url: str
-) -> None:
+def run_guidellm_benchmark(config: llmd_runtime.ResolvedConfig, endpoint_url: str) -> None:
     benchmark_name = config.benchmark["job_name"]
     namespace = config.namespace
 
@@ -259,9 +242,7 @@ def run_guidellm_benchmark(
     )
 
     def _job_terminal() -> dict[str, object] | None:
-        payload = llmd_runtime.oc_get_json(
-            "job", name=benchmark_name, namespace=namespace
-        )
+        payload = llmd_runtime.oc_get_json("job", name=benchmark_name, namespace=namespace)
         status = payload.get("status", {})
         if status.get("succeeded"):
             return payload
@@ -379,12 +360,8 @@ def capture_inference_service_state(config: llmd_runtime.ResolvedConfig) -> None
         artifacts_dir / "llminferenceservice.replicasets.yaml",
         selector=selector,
     )
-    capture_get(
-        "pods", None, namespace, "wide", artifacts_dir / "namespace.pods.status"
-    )
-    capture_get(
-        "services", None, namespace, "wide", artifacts_dir / "namespace.services.status"
-    )
+    capture_get("pods", None, namespace, "wide", artifacts_dir / "namespace.pods.status")
+    capture_get("services", None, namespace, "wide", artifacts_dir / "namespace.services.status")
 
     pod_list = llmd_runtime.oc_get_json(
         "pods", namespace=namespace, selector=selector, ignore_not_found=True
@@ -459,9 +436,7 @@ def capture_guidellm_state(config: llmd_runtime.ResolvedConfig) -> None:
         capture_output=True,
     )
     if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(
-            artifacts_dir / "guidellm_benchmark_job.logs", result.stdout
-        )
+        llmd_runtime.write_text(artifacts_dir / "guidellm_benchmark_job.logs", result.stdout)
 
 
 def capture_get(
