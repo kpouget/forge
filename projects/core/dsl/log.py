@@ -117,6 +117,6 @@ def _get_toolbox_function_name(filename):
     """Extract toolbox function name from file path (parent directory name)"""
     filename_path = Path(filename)
 
-    # For paths like projects/llm_d/toolbox/capture_isvc_state/main.py
-    # Return the parent directory name: capture_isvc_state
+    # For paths like projects/llm_d/toolbox/capture_llmisvc_state/main.py
+    # Return the parent directory name: capture_llmisvc_state
     return filename_path.parent.name
