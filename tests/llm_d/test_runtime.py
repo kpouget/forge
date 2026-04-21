@@ -357,6 +357,59 @@ def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
     assert applied == [artifact_dir / "src" / "gpu-clusterpolicy.yaml"]
 
 
+def test_prepare_nfd_skips_existing_nodefeaturediscovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+
+    calls: list[str] = []
+    manifest = {
+        "apiVersion": "nfd.openshift.io/v1",
+        "kind": "NodeFeatureDiscovery",
+        "metadata": {"name": "nfd-instance", "namespace": "openshift-nfd"},
+    }
+
+    monkeypatch.setattr(
+        prepare_toolbox,
+        "ensure_operator_subscription",
+        lambda operator_spec: calls.append(f"subscription:{operator_spec['package']}"),
+    )
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_for_crd",
+        lambda crd_name, *, timeout_seconds: calls.append(f"crd:{crd_name}"),
+    )
+    monkeypatch.setattr(llmd_runtime, "load_manifest_template", lambda _config, _path: manifest)
+    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_until",
+        lambda *args, **kwargs: calls.append("wait-nfd"),
+    )
+    monkeypatch.setattr(
+        prepare_toolbox,
+        "wait_for_nfd_gpu_labels",
+        lambda _config, *, timeout_seconds: calls.append("wait-labels"),
+    )
+
+    def fail_apply(*_: object, **__: object) -> None:
+        raise AssertionError("existing NodeFeatureDiscovery must not be reapplied")
+
+    monkeypatch.setattr(llmd_runtime, "apply_manifest", fail_apply)
+
+    prepare_toolbox.prepare_nfd(config)
+
+    assert calls == [
+        "subscription:nfd",
+        "crd:nodefeaturediscoveries.nfd.openshift.io",
+        "wait-nfd",
+        "wait-labels",
+    ]
+
+
 def test_gpu_clusterpolicy_manifest_has_required_default_sections() -> None:
     manifest = llmd_runtime.load_yaml(
         llmd_runtime.CONFIG_DIR / "manifests" / "gpu-clusterpolicy.yaml"

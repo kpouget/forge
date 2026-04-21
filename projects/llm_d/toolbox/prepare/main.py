@@ -96,10 +96,19 @@ def prepare_nfd(config: llmd_runtime.ResolvedConfig) -> None:
     )
 
     manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
-    llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "nfd-nodefeaturediscovery.yaml",
-        manifest,
-    )
+    nfd_name = manifest["metadata"]["name"]
+    nfd_namespace = manifest["metadata"]["namespace"]
+    if llmd_runtime.resource_exists("nodefeaturediscovery", nfd_name, namespace=nfd_namespace):
+        LOGGER.info(
+            "NodeFeatureDiscovery/%s already exists in %s; verifying GPU discovery labels",
+            nfd_name,
+            nfd_namespace,
+        )
+    else:
+        llmd_runtime.apply_manifest(
+            config.artifact_dir / "src" / "nfd-nodefeaturediscovery.yaml",
+            manifest,
+        )
 
     llmd_runtime.wait_until(
         "NodeFeatureDiscovery bootstrap resource",
@@ -107,8 +116,8 @@ def prepare_nfd(config: llmd_runtime.ResolvedConfig) -> None:
         interval_seconds=10,
         predicate=lambda: llmd_runtime.resource_exists(
             "nodefeaturediscovery",
-            manifest["metadata"]["name"],
-            namespace=manifest["metadata"]["namespace"],
+            nfd_name,
+            namespace=nfd_namespace,
         ),
     )
 
