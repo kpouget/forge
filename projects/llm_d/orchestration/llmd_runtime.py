@@ -42,7 +42,7 @@ class ResolvedConfig:
     model_key: str
     model: dict[str, Any]
     scheduler_profile_key: str
-    scheduler_profile: dict[str, Any]
+    scheduler_profile: dict[str, Any] | None
     model_cache: dict[str, Any]
     smoke_request: dict[str, Any]
     benchmark: dict[str, Any] | None
@@ -125,9 +125,11 @@ def load_run_configuration(
     model = copy.deepcopy(config.project.get_config(f"models.{model_name}"))
 
     scheduler_profile_key = config.project.get_config("runtime.scheduler_profile_key")
-    scheduler_profile = copy.deepcopy(
-        config.project.get_config(f"scheduler_profiles.{scheduler_profile_key}")
-    )
+    scheduler_profile = None
+    if scheduler_profile_key != "default":
+        scheduler_profile = copy.deepcopy(
+            config.project.get_config(f"scheduler_profiles.{scheduler_profile_key}")
+        )
 
     smoke_request_name = config.project.get_config("runtime.smoke_request_key")
     smoke_request = copy.deepcopy(
@@ -995,6 +997,13 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
     manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(
         config.model["resources"]
     )
+
+    if config.scheduler_profile_key == "default":
+        manifest["spec"]["router"]["scheduler"] = {}
+        return manifest
+
+    if config.scheduler_profile is None:
+        raise ValueError(f"Missing scheduler profile config for {config.scheduler_profile_key}")
 
     scheduler_profile_path = config.config_dir / config.scheduler_profile["config_path"]
     scheduler_profile_config = scheduler_profile_path.read_text(encoding="utf-8")

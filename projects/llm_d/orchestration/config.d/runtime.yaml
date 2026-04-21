@@ -3,6 +3,6 @@ allowed_override_keys:
   - namespace
 selected_preset: smoke
 model_key: qwen3-0-6b
-scheduler_profile_key: approximate-prefix-cache
+scheduler_profile_key: approximate
 smoke_request_key: default
 benchmark_key: null

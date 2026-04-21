@@ -107,10 +107,51 @@ def test_render_inference_service_injects_model_and_scheduler_profile(
     assert manifest["spec"]["model"]["name"] == "Qwen/Qwen3-0.6B"
     assert manifest["spec"]["model"]["uri"] == cache_spec.model_uri
     assert manifest["spec"]["model"]["name"] == config.model["served_model_name"]
-    assert config.scheduler_profile_key == "approximate-prefix-cache"
+    assert config.scheduler_profile_key == "approximate"
     router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     assert router_args[-2] == "--config-text"
     assert "EndpointPickerConfig" in router_args[-1]
+    assert "prefix-cache-scorer" in router_args[-1]
+
+
+def test_render_inference_service_supports_precise_scheduler_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (tmp_path / "fournos_config.yaml").write_text(
+        "preset: smoke-precise\njob-name: llm-d-precise\n",
+        encoding="utf-8",
+    )
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    manifest = llmd_runtime.render_inference_service(config)
+
+    assert config.scheduler_profile_key == "precise"
+    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
+    assert router_args[-2] == "--config-text"
+    assert "precise-prefix-cache-scorer" in router_args[-1]
+    assert "tokenizersCacheDir" in router_args[-1]
+
+
+def test_render_inference_service_supports_default_scheduler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (tmp_path / "fournos_config.yaml").write_text(
+        "preset: smoke-default-scheduler\njob-name: llm-d-default\n",
+        encoding="utf-8",
+    )
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    manifest = llmd_runtime.render_inference_service(config)
+
+    assert config.scheduler_profile_key == "default"
+    assert config.scheduler_profile is None
+    assert manifest["spec"]["router"]["scheduler"] == {}
 
 
 def test_resolve_model_cache_for_hf_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
