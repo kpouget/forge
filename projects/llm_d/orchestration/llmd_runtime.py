@@ -1006,6 +1006,85 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
     return manifest
 
 
+def render_smoke_request_job(
+    config: ResolvedConfig, endpoint_url: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    smoke = config.platform["smoke"]
+    command = """
+set -eu
+attempt=1
+while [ "${attempt}" -le "${REQUEST_RETRIES}" ]; do
+  if curl -k -sSf --max-time "${REQUEST_TIMEOUT_SECONDS}" \
+    "${ENDPOINT_URL}${ENDPOINT_PATH}" \
+    -H "Content-Type: application/json" \
+    -d "${REQUEST_PAYLOAD}" \
+    -o /tmp/smoke-response.json \
+    2>/tmp/smoke-error.log; then
+    cat /tmp/smoke-response.json
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep "${REQUEST_RETRY_DELAY_SECONDS}"
+done
+cat /tmp/smoke-error.log >&2 || true
+exit 1
+"""
+
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": smoke["job_name"],
+            "namespace": config.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+                "forge.openshift.io/component": "smoke",
+            },
+        },
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": (
+                smoke["request_retries"]
+                * (smoke["request_timeout_seconds"] + smoke["request_retry_delay_seconds"])
+            ),
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "app.kubernetes.io/managed-by": "forge",
+                        "forge.openshift.io/project": "llm_d",
+                        "forge.openshift.io/component": "smoke",
+                    }
+                },
+                "spec": {
+                    "restartPolicy": "Never",
+                    "containers": [
+                        {
+                            "name": "smoke",
+                            "image": smoke["client_image"],
+                            "command": ["/bin/sh", "-ceu", command],
+                            "env": [
+                                {"name": "ENDPOINT_URL", "value": endpoint_url},
+                                {"name": "ENDPOINT_PATH", "value": smoke["endpoint_path"]},
+                                {"name": "REQUEST_PAYLOAD", "value": json.dumps(payload)},
+                                {"name": "REQUEST_RETRIES", "value": str(smoke["request_retries"])},
+                                {
+                                    "name": "REQUEST_RETRY_DELAY_SECONDS",
+                                    "value": str(smoke["request_retry_delay_seconds"]),
+                                },
+                                {
+                                    "name": "REQUEST_TIMEOUT_SECONDS",
+                                    "value": str(smoke["request_timeout_seconds"]),
+                                },
+                            ],
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+
 def render_guidellm_pvc(config: ResolvedConfig) -> dict[str, Any]:
     if not config.benchmark:
         raise ValueError("Benchmark configuration is not enabled for this preset")

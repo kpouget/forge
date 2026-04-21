@@ -201,6 +201,28 @@ def test_render_guidellm_job_uses_target_and_rate(
     assert "--rate=1" in container["args"]
 
 
+def test_render_smoke_request_job_uses_curl_helper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    payload = {"model": "Qwen/Qwen3-0.6B", "prompt": "test"}
+    manifest = llmd_runtime.render_smoke_request_job(config, "https://example.test", payload)
+
+    container = manifest["spec"]["template"]["spec"]["containers"][0]
+    env = {item["name"]: item["value"] for item in container["env"]}
+
+    assert manifest["kind"] == "Job"
+    assert manifest["metadata"]["name"] == "llm-d-smoke"
+    assert container["image"] == "curlimages/curl:8.11.1"
+    assert env["ENDPOINT_URL"] == "https://example.test"
+    assert env["ENDPOINT_PATH"] == "/v1/completions"
+    assert env["REQUEST_PAYLOAD"] == '{"model": "Qwen/Qwen3-0.6B", "prompt": "test"}'
+
+
 def test_prepare_model_cache_skips_ready_pvc(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -446,6 +468,43 @@ def test_resolve_endpoint_url_requires_gateway_address(
 
     with pytest.raises(RuntimeError, match="Gateway address"):
         test_toolbox.resolve_endpoint_url(config)
+
+
+def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    oc_calls: list[tuple[str, ...]] = []
+    applied: list[Path] = []
+
+    def fake_oc(*args, **kwargs):
+        oc_calls.append(tuple(args))
+        if args[:2] == ("logs", "job/llm-d-smoke"):
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"choices":[{"text":"ok"}]}\n',
+                stderr="",
+            )
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(llmd_runtime, "oc", fake_oc)
+    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda *args, **kwargs: False)
+    monkeypatch.setattr(llmd_runtime, "wait_until", lambda *args, **kwargs: True)
+    monkeypatch.setattr(llmd_runtime, "wait_for_job_completion", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "apply_manifest",
+        lambda artifact_path, _manifest: applied.append(artifact_path),
+    )
+    monkeypatch.setattr(test_toolbox, "capture_smoke_state", lambda _config: None)
+
+    response = test_toolbox.run_smoke_request(config, "https://example.test")
+
+    assert response["choices"][0]["text"] == "ok"
+    assert applied == [artifact_dir / "src" / "smoke-job.yaml"]
+    assert not any(call and call[0] == "exec" for call in oc_calls)
 
 
 def test_wait_until_reraises_runtime_error() -> None:

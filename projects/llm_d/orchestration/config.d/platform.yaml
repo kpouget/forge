@@ -77,6 +77,9 @@ artifacts:
   capture_namespace_events: true
 
 smoke:
+  job_name: llm-d-smoke
+  client_image: curlimages/curl:8.11.1
   endpoint_path: /v1/completions
   request_retries: 30
   request_retry_delay_seconds: 10
+  request_timeout_seconds: 60

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 
 from projects.core.dsl import toolbox
@@ -40,6 +39,16 @@ def run_test(config: llmd_runtime.ResolvedConfig) -> int:
         if endpoint_url:
             llmd_runtime.write_text(artifacts_dir / "endpoint.url", f"{endpoint_url}\n")
         benchmark_name = config.benchmark["job_name"] if config.benchmark else "guidellm-benchmark"
+        smoke_job_name = config.platform["smoke"]["job_name"]
+        llmd_runtime.oc(
+            "delete",
+            "job",
+            smoke_job_name,
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
+            check=False,
+        )
         llmd_runtime.oc(
             "delete",
             "job,pvc",
@@ -160,10 +169,7 @@ def try_resolve_endpoint_url(config: llmd_runtime.ResolvedConfig) -> str | None:
 
 def run_smoke_request(config: llmd_runtime.ResolvedConfig, endpoint_url: str) -> dict[str, object]:
     namespace = config.namespace
-    name = config.platform["inference_service"]["name"]
-    deployment_name = (
-        f"{name}{config.platform['inference_service']['workload_deployment_name_suffix']}"
-    )
+    job_name = config.platform["smoke"]["job_name"]
 
     payload = {
         "model": config.model["served_model_name"],
@@ -173,40 +179,87 @@ def run_smoke_request(config: llmd_runtime.ResolvedConfig, endpoint_url: str) ->
     }
     llmd_runtime.write_json(config.artifact_dir / "artifacts" / "smoke.request.json", payload)
 
-    retries = config.platform["smoke"]["request_retries"]
-    delay = config.platform["smoke"]["request_retry_delay_seconds"]
-    result = None
-    for _ in range(retries):
-        result = llmd_runtime.oc(
-            "exec",
-            "-n",
-            namespace,
-            f"deployment/{deployment_name}",
-            "-c",
-            "main",
-            "--",
-            "curl",
-            "-k",
-            "-sSf",
-            f"{endpoint_url}{config.platform['smoke']['endpoint_path']}",
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            json.dumps(payload),
-            check=False,
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            break
-        time.sleep(delay)
+    llmd_runtime.oc(
+        "delete",
+        "job",
+        job_name,
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
+        check=False,
+    )
+    llmd_runtime.wait_until(
+        f"job/{job_name} deletion in {namespace}",
+        timeout_seconds=120,
+        interval_seconds=5,
+        predicate=lambda: not llmd_runtime.resource_exists("job", job_name, namespace=namespace),
+    )
 
-    if result is None or result.returncode != 0:
-        raise RuntimeError("Smoke request never succeeded against the llm_d endpoint")
+    llmd_runtime.apply_manifest(
+        config.artifact_dir / "src" / "smoke-job.yaml",
+        llmd_runtime.render_smoke_request_job(config, endpoint_url, payload),
+    )
+
+    try:
+        llmd_runtime.wait_for_job_completion(
+            job_name,
+            namespace,
+            timeout_seconds=(
+                config.platform["smoke"]["request_retries"]
+                * (
+                    config.platform["smoke"]["request_timeout_seconds"]
+                    + config.platform["smoke"]["request_retry_delay_seconds"]
+                )
+            ),
+            interval_seconds=5,
+        )
+    finally:
+        capture_smoke_state(config)
+
+    result = llmd_runtime.oc(
+        "logs",
+        f"job/{job_name}",
+        "-n",
+        namespace,
+        check=False,
+        capture_output=True,
+    )
+
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(
+            f"Smoke request job {job_name} completed but response logs could not be read: {result.stderr}"
+        )
 
     response = json.loads(result.stdout)
     if not response.get("choices"):
         raise RuntimeError(f"Invalid smoke response payload: {result.stdout}")
     return response
+
+
+def capture_smoke_state(config: llmd_runtime.ResolvedConfig) -> None:
+    job_name = config.platform["smoke"]["job_name"]
+    namespace = config.namespace
+    artifacts_dir = config.artifact_dir / "artifacts"
+
+    capture_get("job", job_name, namespace, "yaml", artifacts_dir / "smoke_job.yaml")
+    capture_get(
+        "pods",
+        None,
+        namespace,
+        "yaml",
+        artifacts_dir / "smoke_job.pods.yaml",
+        selector=f"job-name={job_name}",
+    )
+    result = llmd_runtime.oc(
+        "logs",
+        f"job/{job_name}",
+        "-n",
+        namespace,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode == 0 and result.stdout:
+        llmd_runtime.write_text(artifacts_dir / "smoke_job.logs", result.stdout)
 
 
 def run_guidellm_benchmark(config: llmd_runtime.ResolvedConfig, endpoint_url: str) -> None:
