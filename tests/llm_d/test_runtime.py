@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from projects.llm_d.orchestration import llmd_runtime
+from projects.llm_d.orchestration import ci as llmd_ci
+from projects.llm_d.orchestration import cli as llmd_cli
+from projects.llm_d.orchestration import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
 from projects.llm_d.toolbox.prepare import main as prepare_toolbox
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache_toolbox
@@ -89,6 +91,143 @@ def test_default_namespace_comes_from_project_config(
 
     assert config.namespace == "forge-llm-d"
     assert config.namespace_is_managed is False
+
+
+def test_write_prepare_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+
+    path = phase_inputs.write_prepare_inputs(config)
+    payload = llmd_runtime.load_yaml(path)
+    loaded = phase_inputs.load_prepare_inputs(path)
+
+    assert set(payload) == {
+        "artifact_dir",
+        "config_dir",
+        "preset_name",
+        "namespace",
+        "namespace_is_managed",
+        "platform",
+        "model_key",
+        "model",
+        "model_cache",
+        "benchmark",
+    }
+    assert loaded.artifact_dir == config.artifact_dir
+    assert loaded.config_dir == config.config_dir
+    assert loaded.namespace == config.namespace
+    assert loaded.platform == config.platform
+    assert loaded.model == config.model
+    assert loaded.model_cache == config.model_cache
+    assert loaded.benchmark == config.benchmark
+
+
+def test_write_test_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+
+    path = phase_inputs.write_test_inputs(config)
+    payload = llmd_runtime.load_yaml(path)
+    loaded = phase_inputs.load_test_inputs(path)
+
+    assert set(payload) == {
+        "artifact_dir",
+        "config_dir",
+        "preset_name",
+        "namespace",
+        "platform",
+        "model_key",
+        "model",
+        "scheduler_profile_key",
+        "scheduler_profile",
+        "model_cache",
+        "smoke_request",
+        "benchmark",
+    }
+    assert loaded.namespace == config.namespace
+    assert loaded.scheduler_profile_key == config.scheduler_profile_key
+    assert loaded.smoke_request == config.smoke_request
+    assert loaded.benchmark == config.benchmark
+
+
+@pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
+def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
+    orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration,
+        "prepare_toolbox_run",
+        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 17,
+    )
+
+    result = orchestration.run_prepare_phase()
+    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
+
+    assert result == captured["inputs_file"]
+    assert loaded.namespace == config.namespace
+
+
+@pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
+def test_orchestration_test_writes_inputs_and_invokes_toolbox(
+    orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration,
+        "test_toolbox_run",
+        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 23,
+    )
+
+    result = orchestration.run_test_phase()
+    loaded = phase_inputs.load_test_inputs(captured["inputs_file"])
+
+    assert result == captured["inputs_file"]
+    assert loaded.namespace == config.namespace
+    assert loaded.model == config.model
+
+
+@pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
+def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
+    orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration,
+        "cleanup_toolbox_run",
+        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 29,
+    )
+
+    result = orchestration.run_cleanup_phase()
+    loaded = phase_inputs.load_cleanup_inputs(captured["inputs_file"])
+
+    assert result == captured["inputs_file"]
+    assert loaded.namespace == config.namespace
+    assert loaded.platform == config.platform
 
 
 def test_render_inference_service_injects_model_and_scheduler_profile(
