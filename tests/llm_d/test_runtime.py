@@ -443,7 +443,7 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
     artifact_dir.mkdir()
 
     config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
-    oc_calls: list[tuple[str, ...]] = []
+    shell_calls: list[str] = []
 
     def fake_resource_exists(kind: str, name: str, namespace: str | None = None) -> bool:
         if kind == "namespace":
@@ -452,25 +452,21 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
 
     monkeypatch.setattr(llmd_runtime, "resource_exists", fake_resource_exists)
     monkeypatch.setattr(
-        llmd_runtime,
-        "oc",
-        lambda *args, **kwargs: oc_calls.append(tuple(args)),
+        cleanup_toolbox.shell,
+        "run",
+        lambda command, **kwargs: shell_calls.append(command),
     )
     monkeypatch.setattr(llmd_runtime, "wait_until", lambda *args, **kwargs: True)
     monkeypatch.setattr(cleanup_toolbox, "_llm_d_pods_gone", lambda *_args: True)
 
     cleanup_toolbox.delete_run_leftovers(config)
 
-    assert ("delete", "namespace", config.namespace, "--ignore-not-found=true") not in oc_calls
+    assert f"oc delete namespace {config.namespace} --ignore-not-found=true" not in shell_calls
     assert (
-        "delete",
-        "pvc",
-        "-n",
-        config.namespace,
-        "-l",
-        "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true",
-        "--ignore-not-found=true",
-    ) in oc_calls
+        f"oc delete pvc -n {config.namespace} "
+        '-l "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true" '
+        "--ignore-not-found=true"
+    ) in shell_calls
 
 
 def test_prepare_gpu_operator_skips_existing_clusterpolicy(
