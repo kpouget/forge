@@ -1,357 +1,112 @@
 from __future__ import annotations
 
-import copy
-import hashlib
 import json
 import logging
-import os
 import re
 import shlex
 import subprocess
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import yaml
 
-from projects.core.library import config, env, run
+from projects.llm_d.orchestration.runtime_config import (
+    CONFIG_DIR,
+    ORCHESTRATION_DIR,
+    ModelCacheSpec,
+    ResolvedConfig,
+    apply_requested_preset,
+    derive_namespace,
+    ensure_artifact_directories,
+    init,
+    load_fournos_config,
+    load_run_configuration,
+    load_yaml,
+    normalize_gpu_count,
+    parse_overrides,
+    resolve_model_cache,
+    slugify_identifier,
+    truncate_k8s_name,
+    version_tuple,
+    write_json,
+    write_text,
+    write_yaml,
+)
+from projects.llm_d.orchestration.runtime_manifests import (
+    load_manifest_template,
+    render_datasciencecluster,
+    render_gateway,
+    render_guidellm_copy_pod,
+    render_guidellm_job,
+    render_guidellm_pvc,
+    render_inference_service,
+    render_model_cache_pvc,
+    render_smoke_request_job,
+)
 
 LOGGER = logging.getLogger(__name__)
-ORCHESTRATION_DIR = env.FORGE_HOME / "projects" / "llm_d" / "orchestration"
-CONFIG_DIR = ORCHESTRATION_DIR
+
+__all__ = [
+    "CONFIG_DIR",
+    "ORCHESTRATION_DIR",
+    "CommandError",
+    "ModelCacheSpec",
+    "ResolvedConfig",
+    "annotate_model_cache_pvc",
+    "apply_manifest",
+    "apply_requested_preset",
+    "condition_status",
+    "derive_namespace",
+    "desired_subscription",
+    "ensure_artifact_directories",
+    "ensure_namespace",
+    "ensure_operator_group",
+    "ensure_subscription",
+    "init",
+    "job_pod_names",
+    "load_fournos_config",
+    "load_manifest_template",
+    "load_run_configuration",
+    "load_yaml",
+    "model_cache_pvc_ready",
+    "normalize_gpu_count",
+    "oc",
+    "oc_get_json",
+    "operator_spec_by_package",
+    "parse_overrides",
+    "pvc_access_mode_matches",
+    "render_datasciencecluster",
+    "render_gateway",
+    "render_guidellm_copy_pod",
+    "render_guidellm_job",
+    "render_guidellm_pvc",
+    "render_inference_service",
+    "render_model_cache_job",
+    "render_model_cache_pvc",
+    "render_smoke_request_job",
+    "resource_exists",
+    "resolve_default_serviceaccount_image_pull_secret",
+    "resolve_model_cache",
+    "run_command",
+    "slugify_identifier",
+    "subscription_spec_matches",
+    "truncate_k8s_name",
+    "version_tuple",
+    "wait_for_crd",
+    "wait_for_job_completion",
+    "wait_for_namespace_deleted",
+    "wait_for_operator_csv",
+    "wait_for_pvc_bound",
+    "wait_until",
+    "write_json",
+    "write_text",
+    "write_yaml",
+]
 
 
 class CommandError(RuntimeError):
     """Raised when an external command exits unsuccessfully."""
-
-
-@dataclass(frozen=True)
-class ResolvedConfig:
-    artifact_dir: Path
-    project_root: Path
-    config_dir: Path
-    preset_name: str
-    preset_alias: str | None
-    job_name: str
-    namespace: str
-    namespace_is_managed: bool
-    gpu_count: int | None
-    platform: dict[str, Any]
-    model_key: str
-    model: dict[str, Any]
-    scheduler_profile_key: str
-    scheduler_profile: dict[str, Any] | None
-    model_cache: dict[str, Any]
-    smoke_request: dict[str, Any]
-    benchmark: dict[str, Any] | None
-    fournos_config: dict[str, Any]
-    overrides: dict[str, Any]
-
-    @property
-    def manifests_dir(self) -> Path:
-        return self.config_dir / "manifests"
-
-
-@dataclass(frozen=True)
-class ModelCacheSpec:
-    source_uri: str
-    source_scheme: str
-    cache_key: str
-    namespace: str
-    pvc_name: str
-    pvc_size: str
-    access_mode: str
-    storage_class_name: str | None
-    model_path: str
-    model_uri: str
-    marker_filename: str
-    download_job_name: str
-    hf_token_secret_name: str | None
-    hf_token_secret_key: str | None
-    oci_image_path: str | None
-    oci_registry_auth_secret_name: str | None
-    oci_registry_auth_secret_key: str | None
-
-    @property
-    def marker_path(self) -> str:
-        return f"/cache/{self.model_path}/{self.marker_filename}"
-
-
-def init() -> Path:
-    if not logging.getLogger().handlers:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-    env.init()
-    run.init()
-    ensure_artifact_directories(env.ARTIFACT_DIR)
-    return env.ARTIFACT_DIR
-
-
-def ensure_artifact_directories(artifact_dir: Path) -> None:
-    for relative in ("src", "artifacts", "artifacts/results"):
-        (artifact_dir / relative).mkdir(parents=True, exist_ok=True)
-
-
-def load_run_configuration(
-    *, cwd: Path | None = None, artifact_dir: Path | None = None
-) -> ResolvedConfig:
-    cwd = cwd or Path.cwd()
-    if artifact_dir is not None:
-        os.environ["ARTIFACT_DIR"] = str(artifact_dir)
-    artifact_dir = init()
-    _reinitialize_project_config()
-
-    platform_data = copy.deepcopy(config.project.get_config("platform"))
-    model_cache = copy.deepcopy(config.project.get_config("model_cache"))
-    fournos_config = load_fournos_config(cwd)
-    overrides = parse_overrides(
-        os.environ.get("FORGE_CONFIG_OVERRIDES", ""),
-        allowed_keys=config.project.get_config("runtime.allowed_override_keys", []),
-    )
-
-    requested_preset = (
-        fournos_config.get("preset")
-        or os.environ.get("FORGE_PRESET")
-        or config.project.get_config("runtime.default_preset")
-    )
-    apply_requested_preset(requested_preset)
-
-    preset_name = config.project.get_config("runtime.selected_preset")
-    preset_alias = requested_preset if requested_preset != preset_name else None
-
-    model_name = config.project.get_config("runtime.model_key")
-    model = copy.deepcopy(config.project.get_config(f"models.{model_name}"))
-
-    scheduler_profile_key = config.project.get_config("runtime.scheduler_profile_key")
-    scheduler_profile = None
-    if scheduler_profile_key != "default":
-        scheduler_profile = copy.deepcopy(
-            config.project.get_config(f"scheduler_profiles.{scheduler_profile_key}")
-        )
-
-    smoke_request_name = config.project.get_config("runtime.smoke_request_key")
-    smoke_request = copy.deepcopy(
-        config.project.get_config(f"workloads.smoke_requests.{smoke_request_name}")
-    )
-
-    benchmark_name = config.project.get_config("runtime.benchmark_key", None)
-    benchmark = None
-    if benchmark_name:
-        benchmark = copy.deepcopy(
-            config.project.get_config(f"workloads.benchmarks.{benchmark_name}")
-        )
-
-    job_name = fournos_config.get("job-name") or os.environ.get("FORGE_JOB_NAME")
-    if not job_name:
-        job_name = f"local-{preset_name}"
-
-    namespace_override = overrides.get("namespace") or fournos_config.get("namespace")
-    default_namespace = platform_data["cluster"].get("namespace_name")
-    namespace = (
-        namespace_override
-        or default_namespace
-        or derive_namespace(
-            job_name,
-            platform_data["cluster"]["namespace_prefix"],
-            platform_data["cluster"]["namespace_max_length"],
-        )
-    )
-
-    gpu_count = normalize_gpu_count(fournos_config.get("gpu-count"))
-
-    return ResolvedConfig(
-        artifact_dir=Path(artifact_dir),
-        project_root=env.FORGE_HOME,
-        config_dir=ORCHESTRATION_DIR,
-        preset_name=preset_name,
-        preset_alias=preset_alias,
-        job_name=job_name,
-        namespace=namespace,
-        namespace_is_managed=namespace_override is None and default_namespace is None,
-        gpu_count=gpu_count,
-        platform=platform_data,
-        model_key=model_name,
-        model=model,
-        scheduler_profile_key=scheduler_profile_key,
-        scheduler_profile=scheduler_profile,
-        model_cache=model_cache,
-        smoke_request=smoke_request,
-        benchmark=benchmark,
-        fournos_config=fournos_config,
-        overrides=overrides,
-    )
-
-
-def _reinitialize_project_config() -> None:
-    config.project = None
-    artifact_config = env.ARTIFACT_DIR / "config.yaml"
-    if artifact_config.exists():
-        artifact_config.unlink()
-
-    presets_applied = env.ARTIFACT_DIR / "presets_applied"
-    if presets_applied.exists():
-        presets_applied.unlink()
-
-    config.init(ORCHESTRATION_DIR)
-
-
-def apply_requested_preset(requested_preset: str) -> None:
-    if not config.project.get_preset(requested_preset):
-        raise ValueError(f"Unknown llm_d preset: {requested_preset}")
-
-    config.project.apply_preset(requested_preset)
-
-
-def load_fournos_config(cwd: Path) -> dict[str, Any]:
-    config_path = cwd / "fournos_config.yaml"
-    if not config_path.exists():
-        return {}
-
-    data = load_yaml(config_path)
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ValueError(f"Unexpected FOURNOS config type in {config_path}: {type(data)}")
-    return data
-
-
-def parse_overrides(raw: str, *, allowed_keys: Iterable[str]) -> dict[str, Any]:
-    if not raw or raw.strip() in {"", "null", "{}"}:
-        return {}
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"FORGE_CONFIG_OVERRIDES is not valid JSON: {exc}") from exc
-
-    if not isinstance(data, dict):
-        raise ValueError("FORGE_CONFIG_OVERRIDES must decode to a JSON object")
-
-    allowed_keys = frozenset(allowed_keys)
-    unsupported = sorted(set(data) - allowed_keys)
-    if unsupported:
-        raise ValueError(
-            "Unsupported llm_d override keys: "
-            f"{', '.join(unsupported)}. Allowed keys: {', '.join(sorted(allowed_keys))}"
-        )
-
-    return data
-
-
-def normalize_gpu_count(value: Any) -> int | None:
-    if value in (None, ""):
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        LOGGER.warning("Ignoring invalid gpu-count value: %s", value)
-        return None
-
-
-def derive_namespace(job_name: str, prefix: str, max_length: int) -> str:
-    slug = re.sub(r"[^a-z0-9-]+", "-", job_name.lower())
-    slug = re.sub(r"-{2,}", "-", slug).strip("-")
-    if not slug:
-        slug = "run"
-
-    if slug.startswith(f"{prefix}-"):
-        namespace = slug
-    else:
-        namespace = f"{prefix}-{slug}"
-
-    namespace = namespace[:max_length].rstrip("-")
-    if not namespace:
-        raise ValueError(f"Could not derive a valid namespace from job name: {job_name}")
-    return namespace
-
-
-def slugify_identifier(value: str, *, max_length: int = 63) -> str:
-    slug = re.sub(r"[^a-z0-9-]+", "-", value.lower())
-    slug = re.sub(r"-{2,}", "-", slug).strip("-")
-    return slug[:max_length].rstrip("-") or "item"
-
-
-def truncate_k8s_name(value: str, *, max_length: int = 63) -> str:
-    return value[:max_length].rstrip("-")
-
-
-def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
-    if not config.model_cache.get("enabled", False):
-        return None
-
-    source_uri = config.model["uri"]
-    if source_uri.startswith(("pvc://", "pvc+hf://")):
-        return None
-
-    if source_uri.startswith("hf://"):
-        source_scheme = "hf"
-    elif source_uri.startswith("oci://"):
-        source_scheme = "oci"
-    else:
-        raise ValueError(f"Unsupported model cache source URI for {config.model_key}: {source_uri}")
-
-    model_cache_overrides = config.model.get("cache", {})
-    pvc_defaults = config.model_cache["pvc"]
-    pvc_prefix = config.model_cache["pvc"]["name_prefix"]
-    cache_key = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:10]
-    pvc_name = truncate_k8s_name(
-        f"{pvc_prefix}-{slugify_identifier(config.model_key, max_length=32)}-{cache_key}"
-    )
-    model_path = pvc_defaults["model_directory_name"]
-
-    return ModelCacheSpec(
-        source_uri=source_uri,
-        source_scheme=source_scheme,
-        cache_key=cache_key,
-        namespace=config.namespace,
-        pvc_name=pvc_name,
-        pvc_size=model_cache_overrides.get("pvc_size", pvc_defaults["size"]),
-        access_mode=model_cache_overrides.get("access_mode", pvc_defaults["access_mode"]),
-        storage_class_name=model_cache_overrides.get(
-            "storage_class_name", pvc_defaults.get("storage_class_name")
-        ),
-        model_path=model_path,
-        model_uri=f"pvc://{pvc_name}/{model_path}",
-        marker_filename=config.model_cache["marker_filename"],
-        download_job_name=truncate_k8s_name(f"{pvc_name}-download"),
-        hf_token_secret_name=model_cache_overrides.get(
-            "hf_token_secret_name", config.model_cache["hf"].get("token_secret_name")
-        ),
-        hf_token_secret_key=config.model_cache["hf"].get("token_secret_key"),
-        oci_image_path=model_cache_overrides.get(
-            "oci_image_path", config.model_cache["oci"].get("image_path")
-        ),
-        oci_registry_auth_secret_name=model_cache_overrides.get(
-            "oci_registry_auth_secret_name",
-            config.model_cache["oci"].get("registry_auth_secret_name"),
-        ),
-        oci_registry_auth_secret_key=config.model_cache["oci"].get("registry_auth_secret_key"),
-    )
-
-
-def load_yaml(path: Path) -> Any:
-    with path.open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
-
-
-def write_yaml(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
-
-
-def write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
 
 
 def run_command(
@@ -412,7 +167,7 @@ def oc(
     )
 
 
-def apply_manifest(artifact_path: Path, manifest: dict[str, Any]) -> None:
+def apply_manifest(artifact_path: Any, manifest: dict[str, Any]) -> None:
     write_yaml(artifact_path, manifest)
     oc("apply", "-f", str(artifact_path))
 
@@ -501,14 +256,11 @@ def wait_until(
 
 
 def wait_for_namespace_deleted(namespace: str, timeout_seconds: int) -> None:
-    def _namespace_gone() -> bool:
-        return not resource_exists("namespace", namespace)
-
     wait_until(
         f"namespace/{namespace} deletion",
         timeout_seconds=timeout_seconds,
         interval_seconds=10,
-        predicate=_namespace_gone,
+        predicate=lambda: not resource_exists("namespace", namespace),
     )
 
 
@@ -549,8 +301,7 @@ def ensure_namespace(namespace: str, *, labels: dict[str, str] | None = None) ->
         oc("create", "namespace", namespace)
 
     if labels:
-        label_args = [f"{key}={value}" for key, value in labels.items()]
-        oc("label", "namespace", namespace, "--overwrite", *label_args)
+        oc("label", "namespace", namespace, "--overwrite", *[f"{k}={v}" for k, v in labels.items()])
 
 
 def ensure_operator_group(namespace: str, package: str) -> None:
@@ -639,18 +390,8 @@ def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str
     raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
 
 
-def load_manifest_template(config: ResolvedConfig, relative_path: str) -> dict[str, Any]:
-    return load_yaml(config.config_dir / relative_path)
-
-
-def version_tuple(value: str) -> tuple[int, ...]:
-    numbers = re.findall(r"\d+", value)
-    return tuple(int(number) for number in numbers[:3])
-
-
 def condition_status(resource: dict[str, Any], condition_type: str) -> str | None:
-    conditions = resource.get("status", {}).get("conditions", [])
-    for condition in conditions:
+    for condition in resource.get("status", {}).get("conditions", []):
         if condition.get("type") == condition_type:
             return condition.get("status")
     return None
@@ -741,51 +482,6 @@ def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | No
     return None
 
 
-def render_datasciencecluster(config: ResolvedConfig) -> dict[str, Any]:
-    template_path = config.config_dir / config.platform["rhoai"]["datasciencecluster_template"]
-    manifest = load_yaml(template_path)
-    manifest["metadata"]["name"] = config.platform["rhoai"]["datasciencecluster_name"]
-    manifest["metadata"]["namespace"] = config.platform["rhoai"]["namespace"]
-    return manifest
-
-
-def render_gateway(config: ResolvedConfig) -> dict[str, Any]:
-    template_path = config.config_dir / config.platform["gateway"]["manifest_template"]
-    manifest = load_yaml(template_path)
-    manifest["metadata"]["name"] = config.platform["gateway"]["name"]
-    manifest["metadata"]["namespace"] = config.platform["gateway"]["namespace"]
-    manifest["spec"]["gatewayClassName"] = config.platform["gateway"]["gateway_class_name"]
-    return manifest
-
-
-def render_model_cache_pvc(spec: ModelCacheSpec) -> dict[str, Any]:
-    manifest: dict[str, Any] = {
-        "apiVersion": "v1",
-        "kind": "PersistentVolumeClaim",
-        "metadata": {
-            "name": spec.pvc_name,
-            "namespace": spec.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "forge",
-                "forge.openshift.io/project": "llm_d",
-                "forge.openshift.io/model-cache": "true",
-                "forge.openshift.io/preserve": "true",
-            },
-            "annotations": {
-                "forge.openshift.io/model-cache-key": spec.cache_key,
-                "forge.openshift.io/model-source-uri": spec.source_uri,
-            },
-        },
-        "spec": {
-            "accessModes": [spec.access_mode],
-            "resources": {"requests": {"storage": spec.pvc_size}},
-        },
-    }
-    if spec.storage_class_name:
-        manifest["spec"]["storageClassName"] = spec.storage_class_name
-    return manifest
-
-
 def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict[str, Any]:
     common_env = [
         {"name": "MODEL_SOURCE", "value": spec.source_uri},
@@ -797,7 +493,6 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
         {"name": "cache", "persistentVolumeClaim": {"claimName": spec.pvc_name}}
     ]
 
-    container: dict[str, Any]
     if spec.source_scheme == "hf":
         command = """
 set -euo pipefail
@@ -828,10 +523,7 @@ EOF
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
         if spec.hf_token_secret_name:
             volumes.append(
-                {
-                    "name": "hf-token",
-                    "secret": {"secretName": spec.hf_token_secret_name},
-                }
+                {"name": "hf-token", "secret": {"secretName": spec.hf_token_secret_name}}
             )
             volume_mounts.append(
                 {
@@ -880,10 +572,7 @@ EOF
         common_env.append({"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"})
         if registry_auth_secret_name:
             volumes.append(
-                {
-                    "name": "registry-auth",
-                    "secret": {"secretName": registry_auth_secret_name},
-                }
+                {"name": "registry-auth", "secret": {"secretName": registry_auth_secret_name}}
             )
             volume_mounts.append(
                 {
@@ -974,269 +663,3 @@ def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
         f"forge.openshift.io/model-source-uri={spec.source_uri}",
         f"forge.openshift.io/model-uri={spec.model_uri}",
     )
-
-
-def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
-    template_path = config.config_dir / config.platform["inference_service"]["template"]
-    manifest = load_yaml(template_path)
-
-    name = config.platform["inference_service"]["name"]
-    manifest["metadata"]["name"] = name
-    manifest["metadata"]["namespace"] = config.namespace
-    manifest["metadata"].setdefault("labels", {})
-    manifest["metadata"]["labels"].update(
-        {
-            "app.kubernetes.io/managed-by": "forge",
-            "forge.openshift.io/project": "llm_d",
-        }
-    )
-
-    cache_spec = resolve_model_cache(config)
-    manifest["spec"]["model"]["uri"] = cache_spec.model_uri if cache_spec else config.model["uri"]
-    manifest["spec"]["model"]["name"] = config.model["served_model_name"]
-    manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(
-        config.model["resources"]
-    )
-
-    if config.scheduler_profile_key == "default":
-        manifest["spec"]["router"]["scheduler"] = {}
-        return manifest
-
-    if config.scheduler_profile is None:
-        raise ValueError(f"Missing scheduler profile config for {config.scheduler_profile_key}")
-
-    scheduler_profile_path = config.config_dir / config.scheduler_profile["config_path"]
-    scheduler_profile_config = scheduler_profile_path.read_text(encoding="utf-8")
-    router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
-    if not router_args or router_args[-1] != "--config-text":
-        raise ValueError("Expected llm-d router args to end with --config-text")
-    router_args.append(scheduler_profile_config)
-
-    return manifest
-
-
-def render_smoke_request_job(
-    config: ResolvedConfig, endpoint_url: str, payload: dict[str, Any]
-) -> dict[str, Any]:
-    smoke = config.platform["smoke"]
-    command = """
-set -eu
-attempt=1
-while [ "${attempt}" -le "${REQUEST_RETRIES}" ]; do
-  if curl -k -sSf --max-time "${REQUEST_TIMEOUT_SECONDS}" \
-    "${ENDPOINT_URL}${ENDPOINT_PATH}" \
-    -H "Content-Type: application/json" \
-    -d "${REQUEST_PAYLOAD}" \
-    -o /tmp/smoke-response.json \
-    2>/tmp/smoke-error.log; then
-    cat /tmp/smoke-response.json
-    exit 0
-  fi
-  attempt=$((attempt + 1))
-  sleep "${REQUEST_RETRY_DELAY_SECONDS}"
-done
-cat /tmp/smoke-error.log >&2 || true
-exit 1
-"""
-
-    return {
-        "apiVersion": "batch/v1",
-        "kind": "Job",
-        "metadata": {
-            "name": smoke["job_name"],
-            "namespace": config.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "forge",
-                "forge.openshift.io/project": "llm_d",
-                "forge.openshift.io/component": "smoke",
-            },
-        },
-        "spec": {
-            "backoffLimit": 0,
-            "activeDeadlineSeconds": (
-                smoke["request_retries"]
-                * (smoke["request_timeout_seconds"] + smoke["request_retry_delay_seconds"])
-            ),
-            "template": {
-                "metadata": {
-                    "labels": {
-                        "app.kubernetes.io/managed-by": "forge",
-                        "forge.openshift.io/project": "llm_d",
-                        "forge.openshift.io/component": "smoke",
-                    }
-                },
-                "spec": {
-                    "restartPolicy": "Never",
-                    "containers": [
-                        {
-                            "name": "smoke",
-                            "image": smoke["client_image"],
-                            "command": ["/bin/sh", "-ceu", command],
-                            "env": [
-                                {"name": "ENDPOINT_URL", "value": endpoint_url},
-                                {"name": "ENDPOINT_PATH", "value": smoke["endpoint_path"]},
-                                {"name": "REQUEST_PAYLOAD", "value": json.dumps(payload)},
-                                {"name": "REQUEST_RETRIES", "value": str(smoke["request_retries"])},
-                                {
-                                    "name": "REQUEST_RETRY_DELAY_SECONDS",
-                                    "value": str(smoke["request_retry_delay_seconds"]),
-                                },
-                                {
-                                    "name": "REQUEST_TIMEOUT_SECONDS",
-                                    "value": str(smoke["request_timeout_seconds"]),
-                                },
-                            ],
-                        }
-                    ],
-                },
-            },
-        },
-    }
-
-
-def render_guidellm_pvc(config: ResolvedConfig) -> dict[str, Any]:
-    if not config.benchmark:
-        raise ValueError("Benchmark configuration is not enabled for this preset")
-
-    return {
-        "apiVersion": "v1",
-        "kind": "PersistentVolumeClaim",
-        "metadata": {
-            "name": config.benchmark["job_name"],
-            "namespace": config.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "forge",
-                "forge.openshift.io/project": "llm_d",
-            },
-        },
-        "spec": {
-            "accessModes": ["ReadWriteOnce"],
-            "resources": {"requests": {"storage": config.benchmark["pvc_size"]}},
-        },
-    }
-
-
-def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, Any]:
-    if not config.benchmark:
-        raise ValueError("Benchmark configuration is not enabled for this preset")
-
-    args = [
-        "benchmark",
-        "run",
-        f"--target={endpoint_url}",
-        f"--rate={config.benchmark['rate']}",
-    ]
-    for key, value in config.benchmark["args"].items():
-        if value is None:
-            continue
-        args.append(f"--{key.replace('_', '-')}={value}")
-    args.append("--outputs=json")
-
-    return {
-        "apiVersion": "batch/v1",
-        "kind": "Job",
-        "metadata": {
-            "name": config.benchmark["job_name"],
-            "namespace": config.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "forge",
-                "forge.openshift.io/project": "llm_d",
-            },
-        },
-        "spec": {
-            "backoffLimit": 0,
-            "template": {
-                "metadata": {
-                    "labels": {
-                        "app.kubernetes.io/managed-by": "forge",
-                        "forge.openshift.io/project": "llm_d",
-                    }
-                },
-                "spec": {
-                    "serviceAccountName": "default",
-                    "restartPolicy": "Never",
-                    "containers": [
-                        {
-                            "name": "guidellm",
-                            "image": config.benchmark["image"],
-                            "command": ["/opt/app-root/bin/guidellm"],
-                            "args": args,
-                            "env": [{"name": "USER", "value": "guidellm"}],
-                            "volumeMounts": [
-                                {"name": "home", "mountPath": "/home/guidellm"},
-                                {"name": "results", "mountPath": "/results"},
-                            ],
-                        }
-                    ],
-                    "volumes": [
-                        {"name": "home", "emptyDir": {}},
-                        {
-                            "name": "results",
-                            "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
-                        },
-                    ],
-                },
-            },
-        },
-    }
-
-
-def render_guidellm_copy_pod(
-    config: ResolvedConfig, node_name: str | None = None
-) -> dict[str, Any]:
-    if not config.benchmark:
-        raise ValueError("Benchmark configuration is not enabled for this preset")
-
-    pod = {
-        "apiVersion": "v1",
-        "kind": "Pod",
-        "metadata": {
-            "name": f"{config.benchmark['job_name']}-copy",
-            "namespace": config.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "forge",
-                "forge.openshift.io/project": "llm_d",
-            },
-        },
-        "spec": {
-            "restartPolicy": "Never",
-            "initContainers": [
-                {
-                    "name": "permission-fixer",
-                    "image": config.benchmark["image"],
-                    "command": [
-                        "/bin/sh",
-                        "-c",
-                        "chmod 755 /results && chown -R 1001:1001 /results || true",
-                    ],
-                    "securityContext": {
-                        "runAsUser": 0,
-                        "allowPrivilegeEscalation": True,
-                    },
-                    "volumeMounts": [{"name": "results", "mountPath": "/results"}],
-                }
-            ],
-            "containers": [
-                {
-                    "name": "copy-helper",
-                    "image": config.benchmark["image"],
-                    "command": ["/bin/sleep", "300"],
-                    "securityContext": {
-                        "runAsUser": 1001,
-                        "runAsNonRoot": True,
-                        "allowPrivilegeEscalation": False,
-                    },
-                    "volumeMounts": [{"name": "results", "mountPath": "/results"}],
-                }
-            ],
-            "volumes": [
-                {
-                    "name": "results",
-                    "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
-                }
-            ],
-        },
-    }
-    if node_name:
-        pod["spec"]["nodeName"] = node_name
-    return pod
