@@ -25,6 +25,7 @@ dependencies = [
     "plotly>=5.17.0",
     "dash>=2.14.0",
     "dash-bootstrap-components>=1.5.0",
+    "jinja2",
     "pyyaml>=6.0",
     "jsonschema>=4.19.0",
     "structlog>=23.1.0",
