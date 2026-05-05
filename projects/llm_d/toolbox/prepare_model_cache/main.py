@@ -148,8 +148,10 @@ def run_model_cache_download_job(
         f"job/{cache_spec.download_job_name} deletion in {cache_spec.namespace}",
         timeout_seconds=120,
         interval_seconds=5,
-        predicate=lambda: not llmd_runtime.resource_exists(
-            "job", cache_spec.download_job_name, namespace=cache_spec.namespace
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "job", cache_spec.download_job_name, namespace=cache_spec.namespace
+            )
         ),
     )
 

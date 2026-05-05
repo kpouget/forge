@@ -78,8 +78,10 @@ def delete_leftovers(args, ctx):
         f"llminferenceservice/{inference_service_name} deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
-        predicate=lambda: not llmd_runtime.resource_exists(
-            "llminferenceservice", inference_service_name, namespace=namespace
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "llminferenceservice", inference_service_name, namespace=namespace
+            )
         ),
     )
 
@@ -141,8 +143,10 @@ def delete_run_leftovers(inputs: phase_inputs.CleanupInputs) -> None:
         f"llminferenceservice/{inference_service_name} deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
-        predicate=lambda: not llmd_runtime.resource_exists(
-            "llminferenceservice", inference_service_name, namespace=namespace
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "llminferenceservice", inference_service_name, namespace=namespace
+            )
         ),
     )
 

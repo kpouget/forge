@@ -328,8 +328,10 @@ def cleanup_previous_run_task(args, ctx):
         f"llminferenceservice/{inference_service_name} deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
-        predicate=lambda: not llmd_runtime.resource_exists(
-            "llminferenceservice", inference_service_name, namespace=namespace
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "llminferenceservice", inference_service_name, namespace=namespace
+            )
         ),
     )
 
@@ -337,15 +339,17 @@ def cleanup_previous_run_task(args, ctx):
         f"llm-d workload pods deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
-        predicate=lambda: not (
-            pods := llmd_runtime.oc_get_json(
-                "pods",
-                namespace=namespace,
-                selector=f"app.kubernetes.io/name={inference_service_name}",
-                ignore_not_found=True,
+        predicate=lambda: (
+            not (
+                pods := llmd_runtime.oc_get_json(
+                    "pods",
+                    namespace=namespace,
+                    selector=f"app.kubernetes.io/name={inference_service_name}",
+                    ignore_not_found=True,
+                )
             )
-        )
-        or not pods.get("items"),
+            or not pods.get("items")
+        ),
     )
     return f"Previous llm_d leftovers deleted from {ctx.config.namespace}"
 
