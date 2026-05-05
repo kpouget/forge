@@ -13,6 +13,7 @@ import test_skeleton
 
 from projects.core.library import config
 from projects.core.library.cli import safe_cli_command
+from projects.core.library.postprocess import postprocess_command
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,9 @@ def cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     exit_code = prepare_skeleton.cleanup()
     sys.exit(exit_code)
+
+
+main.add_command(postprocess_command)
 
 
 if __name__ == "__main__":

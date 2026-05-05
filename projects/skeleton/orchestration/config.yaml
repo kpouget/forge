@@ -12,7 +12,7 @@ skeleton:
   extra_properties: {} # for the preset to give any extra property
   deep_testing: false
   test:
-    duration_seconds: 30  # Default test duration in seconds
+    duration_seconds: 0  # Default test duration in seconds
 
 caliper:
   export:
@@ -38,3 +38,30 @@ caliper:
           tags: {}
           parameters: {}
           metrics: {}
+
+  postprocess:
+    enabled: true
+    artifacts_dir: null
+    plugin_module: projects.skeleton.postprocess.default.plugin
+    postprocess_config: null
+    parse:
+      enabled: true
+      no_cache: false
+    visualize:
+      enabled: true
+      output_dir: null
+      reports: [summary_table, throughput_chart]
+      report_group: null
+
+    kpi:
+      enabled: false
+      generate:
+        enabled: false
+        output: kpis.jsonl
+      export:
+        enabled: false
+
+    analyze:
+      enabled: false
+      baseline: null
+      output: kpi_analyze.json
