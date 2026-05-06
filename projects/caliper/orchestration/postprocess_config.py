@@ -16,10 +16,6 @@ class CaliperOrchestrationParseSection(BaseModel):
 
     enabled: bool = False
     no_cache: bool = False
-    cache_dir: str | None = Field(
-        default=None,
-        description="Optional override path for parse cache JSON.",
-    )
 
 
 class CaliperOrchestrationVisualizeSection(BaseModel):
