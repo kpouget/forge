@@ -8,6 +8,7 @@ variable processing and configuration transformation.
 
 import logging
 import os
+import shutil
 from pathlib import Path
 
 import yaml
@@ -136,10 +137,16 @@ def parse_and_save_pr_arguments_fournos():
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
     # Load FournosJob YAML
-    fjob, fjob_spec = load_fjob_yaml(metadata_dir.parent / "fournos_fjob.yaml")
+    fournos_fjob = metadata_dir.parent / "fournos_fjob.yaml"
+    fjob, fjob_spec = load_fjob_yaml(fournos_fjob)
 
     if not fjob_spec:
         raise ValueError("FournosJob YAML not found, cannot parse FOURNOS PR arguments")
+
+    # Move fournos_fjob to metadata_dir
+    fournos_fjob_dest = metadata_dir / "fournos_fjob.yaml"
+    shutil.move(str(fournos_fjob), str(fournos_fjob_dest))
+    logger.info(f"Moved FournosJob YAML from {fournos_fjob} to {fournos_fjob_dest}")
 
     try:
         prepare_vault(fjob_spec)
