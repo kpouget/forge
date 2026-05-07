@@ -52,11 +52,13 @@ def _update_fjob_export_status(status: dict):
             fjob_data["status"] = {}
         if "engineStatus" not in fjob_data["status"]:
             fjob_data["status"]["engineStatus"] = {}
-        if "status" not in fjob_data["status"]["engineStatus"]:
-            fjob_data["status"]["engineStatus"]["status"] = {}
+        if "forge" not in fjob_data["status"]["engineStatus"]:
+            fjob_data["status"]["engineStatus"]["forge"] = {}
+        if "status" not in fjob_data["status"]["engineStatus"]["forge"]:
+            fjob_data["status"]["engineStatus"]["forge"]["status"] = {}
 
         # Update with export-artifacts status
-        fjob_data["status"]["engineStatus"]["export-artifacts"] = status
+        fjob_data["status"]["engineStatus"]["forge"]["exportArtifacts"] = status
 
         # Patch the fjob
         patch_data = {"status": fjob_data["status"]}

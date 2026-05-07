@@ -1,1 +1,1 @@
-"""Caliper engine: file export to MLflow, and orchestration helpers."""
+"""Post-processing engine (models, parse, cache, KPIs, file export)."""

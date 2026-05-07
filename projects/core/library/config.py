@@ -10,6 +10,8 @@ import types
 import jsonpath_ng
 import yaml
 
+from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
+
 from . import env
 
 logger = logging.getLogger(__name__)
@@ -203,6 +205,9 @@ class Config:
             raise ValueError(f"No preset found with name '{name}'")
 
         logger.info(f"Applying preset '{name}' ==> {values}")
+        dest_txt = env.ARTIFACT_DIR / CI_METADATA_DIRNAME / "presets_applied.txt"
+        dest_txt.parent.mkdir(parents=True, exist_ok=True)
+
         for key, value in values.items():
             if key == "extends":
                 for extend_name in value:
@@ -211,7 +216,8 @@ class Config:
 
             msg = f"preset[{name}] {key} --> {value}"
             logger.info(msg)
-            with open(env.ARTIFACT_DIR / "presets_applied", "a") as f:
+
+            with open(dest_txt, "a") as f:
                 print(msg, file=f)
 
             self.set_config(key, value, print=False)

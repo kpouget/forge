@@ -1,0 +1,4 @@
+version: "1"
+labels:
+  model: stub-model
+  facet: team-a

@@ -165,13 +165,48 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
     message += f"""
 • Link to the {get_link("test results", "", is_dir=True)}.
 """
-    if (pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "reports_index.html").exists():
-        message += f"""
+    # Check for Caliper postprocess status and generated reports
+    artifact_dir = pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
+    caliper_status_path = None
+
+    # Search for caliper_postprocess_status.yaml in artifact directory and subdirectories
+    for status_file in artifact_dir.glob("**/caliper_postprocess_status.yaml"):
+        caliper_status_path = status_file
+        break
+
+    if caliper_status_path and caliper_status_path.exists():
+        try:
+            with open(caliper_status_path) as f:
+                caliper_status = yaml.safe_load(f)
+
+            visualize_step = caliper_status.get("steps", {}).get("visualize", {})
+            if visualize_step.get("status") == "ok" and visualize_step.get("paths"):
+                paths = visualize_step["paths"]
+                message += f"""
+• Generated {len(paths)} Caliper report(s):
+"""
+                for path in paths:
+                    # Just list the path, no link
+                    message += f"  - {path}\n"
+
+                # Also link to the reports index if it exists
+                reports_index_path = artifact_dir / "reports_index.html"
+                if reports_index_path.exists():
+                    message += f"""
 • Link to the {get_link("reports index", "reports_index.html")}.
+"""
+            else:
+                message += """
+• Caliper postprocess completed but no reports generated.
+"""
+        except Exception as e:
+            logger.warning("Failed to parse caliper_postprocess_status.yaml: %s", e)
+            message += """
+• No reports generated...
 """
     else:
         message += """
-• No reports index generated...
+• No reports generated...
 """
 
     if (
@@ -525,11 +560,14 @@ def get_slack_cpt_message(summary):
 
     status_icon = ":no-red-circle:" if summary.get("failures") else ":done-circle-check:"
 
+    reports_index_link = ""
+    if (pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "reports_index.html").exists():
+        reports_index_link = f"• Link to the {get_link('reports index', 'reports_index.html')}.\n"
+
     return f"""{status_icon} {get_bold(summary["message"])}
 
 • Link to the {get_link("test results", "", is_dir=True)}.
-• Link to the {get_link("reports index", "reports_index.html")}.
-
+{reports_index_link}
 - `{summary["entries_count"]}` entries were tested against `{summary["kpis_count"]}` KPIs
 - `{summary["failures"]}` failed
 - `{summary["no_history"]}` had no history

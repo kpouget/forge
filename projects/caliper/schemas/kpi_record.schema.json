@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kpi_id",
+    "value",
+    "unit",
+    "run_id",
+    "timestamp",
+    "labels",
+    "source"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "kpi_id": { "type": "string" },
+    "value": {},
+    "unit": { "type": "string" },
+    "run_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "labels": { "type": "object" },
+    "source": {
+      "type": "object",
+      "properties": {
+        "test_base_path": { "type": "string" },
+        "plugin_module": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": true
+}
