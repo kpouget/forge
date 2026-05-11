@@ -31,12 +31,12 @@ def fetch_fournos_job() -> tuple[str, str, dict]:
     """
     # Get environment variables
     job_name = os.environ.get("FJOB_NAME")
-    namespace = os.environ.get("FOURNOS_NAMESPACE")
+    namespace = os.environ.get("FOURNOS_WORKLOAD_NAMESPACE")
 
     if not job_name:
         raise ValueError("FJOB_NAME environment variable is required")
     if not namespace:
-        raise ValueError("FOURNOS_NAMESPACE environment variable is required")
+        raise ValueError("FOURNOS_WORKLOAD_NAMESPACE environment variable is required")
 
     logger.info(f"Fetching FournosJob: {job_name} in namespace: {namespace}")
 
@@ -202,8 +202,8 @@ def create_fournos_resolve_command(
     )
     @click.option(
         "--namespace",
-        help="Namespace for the FournosJob (sets FOURNOS_NAMESPACE if provided)",
-        envvar="FOURNOS_NAMESPACE",
+        help="Namespace for the FournosJob (sets FOURNOS_WORKLOAD_NAMESPACE if provided)",
+        envvar="FOURNOS_WORKLOAD_NAMESPACE",
     )
     @click.option(
         "--dry-run",
@@ -218,7 +218,7 @@ def create_fournos_resolve_command(
         if fjob_name:
             os.environ["FJOB_NAME"] = fjob_name
         if namespace:
-            os.environ["FOURNOS_NAMESPACE"] = namespace
+            os.environ["FOURNOS_WORKLOAD_NAMESPACE"] = namespace
 
         # Get vault list from the provided function
         try:

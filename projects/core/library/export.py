@@ -35,7 +35,7 @@ def _update_fjob_export_status(status: dict):
         import json
 
         fjob_name = os.environ["FJOB_NAME"]
-        namespace = os.environ["FOURNOS_NAMESPACE"]
+        namespace = os.environ["FOURNOS_WORKLOAD_NAMESPACE"]
 
         # Get current fjob status
         get_cmd = f"oc get fjob/{fjob_name} -n {namespace} -ojson"
