@@ -1,0 +1,44 @@
+name: Image Push
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  image-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tags
+        id: tags
+        run: |
+          TAGS="$(git rev-parse --short HEAD)"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAGS="latest ${TAGS}"
+          fi
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAGS="stable ${TAGS} ${{ github.event.release.tag_name }}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Forge Image
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: forge
+          context: .
+          tags: ${{ steps.tags.outputs.tags }}
+          containerfiles: |
+            ./projects/core/image/Containerfile
+
+      - name: Push Forge Image
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: quay.io/rh_perfscale
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
