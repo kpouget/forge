@@ -12,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Remove GitHub credentials from git config
+        run: |
+          # Remove the GitHub token from git config to prevent secret leakage in container
+          git config --unset-all http.https://github.com/.extraheader || true
+          # Reconfigure for anonymous access (public repo)
+          git remote set-url origin https://github.com/openshift-psap/forge
+
       - name: Determine tags
         id: tags
         run: |
