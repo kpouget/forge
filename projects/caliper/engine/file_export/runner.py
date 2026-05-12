@@ -85,29 +85,29 @@ def run_file_export(
         try:
             if verbose:
                 print(f"caliper: starting backend {b!r} …", file=sys.stderr)
-                detail, ml_meta = mlflow_backend.log_artifacts(
-                    artifact_root=source,
-                    paths=paths,
-                    tracking_uri=mlflow_tracking_uri,
-                    experiment=mlflow_experiment,
-                    run_id=mlflow_run_id,
-                    run_name=mlflow_run_name,
-                    insecure_tls=mlflow_insecure_tls,
-                    connection=mlflow_connection,
-                    verbose=verbose,
-                    upload_workers=upload_workers,
-                    run_metadata=mlflow_run_metadata,
+            detail, ml_meta = mlflow_backend.log_artifacts(
+                artifact_root=source,
+                paths=paths,
+                tracking_uri=mlflow_tracking_uri,
+                experiment=mlflow_experiment,
+                run_id=mlflow_run_id,
+                run_name=mlflow_run_name,
+                insecure_tls=mlflow_insecure_tls,
+                connection=mlflow_connection,
+                verbose=verbose,
+                upload_workers=upload_workers,
+                run_metadata=mlflow_run_metadata,
+            )
+            results.append(
+                FileExportBackendResult(
+                    backend="mlflow",
+                    status="success",
+                    detail=detail,
+                    metadata=ml_meta,
                 )
-                results.append(
-                    FileExportBackendResult(
-                        backend="mlflow",
-                        status="success",
-                        detail=detail,
-                        metadata=ml_meta,
-                    )
-                )
-                if verbose:
-                    print(f"caliper: backend {b!r} finished ({detail})", file=sys.stderr)
+            )
+            if verbose:
+                print(f"caliper: backend {b!r} finished ({detail})", file=sys.stderr)
         except Exception as e:  # noqa: BLE001
             # Full chain on stderr; stdout line stays a short message for automation.
             traceback.print_exception(e, file=sys.stderr)
