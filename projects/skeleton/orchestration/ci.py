@@ -19,7 +19,7 @@ from projects.core.library import config
 from projects.core.library.export import caliper_export_command
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):

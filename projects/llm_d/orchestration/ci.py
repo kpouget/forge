@@ -103,7 +103,7 @@ def init_vaults_for_phase(phase: str) -> None:
     vault.init(mandatory_vaults=mandatory_vaults, optional_vaults=optional_vaults)
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):

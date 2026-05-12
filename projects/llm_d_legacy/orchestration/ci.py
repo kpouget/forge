@@ -44,7 +44,7 @@ def log(message: str, level: str = "info"):
     click.echo(f"{icon} [{project_name}] {message}")
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):

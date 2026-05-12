@@ -11,11 +11,29 @@ import logging
 import sys
 import traceback
 
+import click
+
 from projects.core.dsl import toolbox as dsl_toolbox
 from projects.core.dsl.runtime import TaskExecutionError
 from projects.core.library import env
 
 logger = logging.getLogger(__name__)
+
+
+class HelpfulGroup(click.Group):
+    """
+    A Click group that automatically shows help when a command is not found.
+    """
+
+    def get_command(self, ctx, cmd_name):
+        rv = click.Group.get_command(self, ctx, cmd_name)
+        if rv is not None:
+            return rv
+
+        # Command not found - show help
+        print(f"Error: No such command '{cmd_name}'.\n", file=sys.stderr)
+        print(ctx.get_help(), file=sys.stderr)
+        ctx.exit(2)
 
 
 def handle_ci_exception(e: Exception) -> None:
