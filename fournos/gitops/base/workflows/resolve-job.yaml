@@ -18,6 +18,7 @@ metadata:
     description: "Template for FORGE resolve jobs"
 spec:
   backoffLimit: 0
+  suspend: true
   template:
     spec:
       serviceAccountName: fournos
