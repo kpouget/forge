@@ -21,7 +21,6 @@ spec:
     - name: forge
       image: image-registry.openshift-image-registry.svc:5000/$(context.taskRun.namespace)/forge-core:latest
       imagePullPolicy: Always
-      computeResources: {}
       env:
       - name: TARGET_KUBECONFIG
         value: /var/run/secrets/fournos-kubeconfig/kubeconfig
@@ -101,6 +100,3 @@ spec:
     - name: kubeconfig
       secret:
         secretName: $(params.kubeconfig-secret)
-    - name: vault-secrets
-      secret:
-        secretName: fournos-vault
