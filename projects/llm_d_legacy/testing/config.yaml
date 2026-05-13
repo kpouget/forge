@@ -343,3 +343,34 @@ caliper:
           tags: {}
           parameters: {}
           metrics: {}
+
+  replot:
+    url: null  # Set via /replot.url directive
+    keep: false  # Set to true to keep download directory after replotting
+
+  postprocess:
+    enabled: true
+    artifacts_dir: null
+    plugin_module: projects.caliper.postprocess.guidellm.plugin
+    postprocess_config: null
+    parse:
+      enabled: true
+      no_cache: false
+    visualize:
+      enabled: true
+      output_dir: null
+      reports: [benchmark_summary, latency_breakdown]
+      report_group: null
+
+    kpi:
+      enabled: false
+      generate:
+        enabled: false
+        output: kpis.jsonl
+      export:
+        enabled: false
+
+    analyze:
+      enabled: false
+      baseline: null
+      output: kpi_analyze.json
