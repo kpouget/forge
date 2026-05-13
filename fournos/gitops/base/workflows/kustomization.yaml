@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - resolve-job.yaml
+  - task-forge-step.yaml
+  - pipeline-full.yaml
+  - pipeline-test-only.yaml
+  - pipeline-replot.yaml
+
+commonLabels:
+  app.kubernetes.io/name: forge-on-fournos
+  app.kubernetes.io/component: workflows
+  app.kubernetes.io/part-of: fournos
