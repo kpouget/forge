@@ -11,9 +11,9 @@ import click
 
 from projects.core.library import ci as ci_lib
 from projects.llm_d.orchestration import configuration as llmd_configuration
+from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
-from projects.llm_d.toolbox.prepare.main import run as prepare_toolbox_run
 from projects.llm_d.toolbox.test.main import run as test_toolbox_run
 
 
@@ -36,8 +36,7 @@ def load_runtime_configuration(*, cwd=None, artifact_dir=None):
 
 def run_prepare_phase() -> int:
     config = load_runtime_configuration()
-    inputs_file = phase_inputs.write_prepare_inputs(config)
-    return prepare_toolbox_run(inputs_file=str(inputs_file))
+    return run_prepare_sequence(config)
 
 
 def run_test_phase() -> int:

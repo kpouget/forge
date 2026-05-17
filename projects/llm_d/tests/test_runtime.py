@@ -2,18 +2,32 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
+from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
 from projects.core.library import config as forge_config
 from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import cli as llmd_cli
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import test_flow as llmd_test_flow
+from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_toolbox
+from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
+from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
 from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
+from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc_toolbox
+from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_toolbox
 from projects.llm_d.toolbox.prepare import main as prepare_toolbox
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache_toolbox
+from projects.llm_d.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_toolbox
+from projects.llm_d.toolbox.run_smoke_request import main as run_smoke_request_toolbox
 from projects.llm_d.toolbox.test import main as test_toolbox
+from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
+    main as wait_datasciencecluster_ready_toolbox,
+)
 
 
 def _load_runtime_configuration(
@@ -185,11 +199,11 @@ def test_write_test_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
-def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
+def test_orchestration_prepare_runs_sequence(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         orchestration,
@@ -198,15 +212,14 @@ def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
     )
     monkeypatch.setattr(
         orchestration,
-        "prepare_toolbox_run",
-        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 17,
+        "run_prepare_sequence",
+        lambda cfg: captured.setdefault("config", cfg) or 17,
     )
 
     result = orchestration.run_prepare_phase()
-    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
 
-    assert result == captured["inputs_file"]
-    assert loaded.namespace == config.namespace
+    assert result is config
+    assert captured["config"] is config
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -460,6 +473,26 @@ def test_prepare_model_cache_skips_ready_pvc(
     assert calls == ["ensure-pvc", "capture"]
 
 
+def test_prepare_model_cache_task_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        prepare_model_cache_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    ctx = SimpleNamespace(config=config)
+    prepare_toolbox.prepare_model_cache_task(SimpleNamespace(), ctx)
+
+    loaded = phase_inputs.load_prepare_model_cache_inputs(captured["inputs_file"])
+    assert loaded.namespace == config.namespace
+    assert loaded.model == config.model
+
+
 def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -490,12 +523,33 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
     ) in shell_calls
 
 
-def test_prepare_gpu_operator_skips_existing_clusterpolicy(
+def test_cleanup_previous_run_task_delegates_to_cleanup_toolbox(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    captured: dict[str, object] = {}
 
+    monkeypatch.setattr(
+        cleanup_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    ctx = SimpleNamespace(config=config)
+    result = prepare_toolbox.cleanup_previous_run_task(SimpleNamespace(), ctx)
+
+    loaded = phase_inputs.load_cleanup_inputs(captured["inputs_file"])
+    assert result == f"Previous llm_d leftovers deleted from {config.namespace}"
+    assert loaded.namespace == config.namespace
+    assert loaded.platform == config.platform
+
+
+def test_prepare_gpu_operator_delegates_to_bootstrap_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     calls: list[str] = []
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         prepare_toolbox,
@@ -508,25 +562,9 @@ def test_prepare_gpu_operator_skips_existing_clusterpolicy(
         lambda crd_name, *, timeout_seconds: calls.append(f"crd:{crd_name}"),
     )
     monkeypatch.setattr(
-        llmd_runtime,
-        "load_manifest_template",
-        lambda _config, _path: {
-            "apiVersion": "nvidia.com/v1",
-            "kind": "ClusterPolicy",
-            "metadata": {"name": "gpu-cluster-policy"},
-            "spec": {},
-        },
-    )
-    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda kind, name: True)
-
-    def fail_apply(*_: object, **__: object) -> None:
-        raise AssertionError("existing ClusterPolicy must not be reapplied")
-
-    monkeypatch.setattr(llmd_runtime, "apply_manifest", fail_apply)
-    monkeypatch.setattr(
-        llmd_runtime,
-        "oc_get_json",
-        lambda kind, name: {"status": {"state": "ready"}},
+        bootstrap_gpu_clusterpolicy,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
     )
 
     prepare_toolbox.prepare_gpu_operator(config)
@@ -535,52 +573,16 @@ def test_prepare_gpu_operator_skips_existing_clusterpolicy(
         "subscription:gpu-operator-certified",
         "crd:clusterpolicies.nvidia.com",
     ]
+    assert captured == {"timeout_seconds": 1800}
 
 
-def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config, artifact_dir = _load_runtime_configuration(tmp_path)
-
-    applied: list[Path] = []
-    manifest = {
-        "apiVersion": "nvidia.com/v1",
-        "kind": "ClusterPolicy",
-        "metadata": {"name": "gpu-cluster-policy"},
-        "spec": {},
-    }
-
-    monkeypatch.setattr(prepare_toolbox, "ensure_operator_subscription", lambda _: None)
-    monkeypatch.setattr(llmd_runtime, "wait_for_crd", lambda *_, **__: None)
-    monkeypatch.setattr(llmd_runtime, "load_manifest_template", lambda _config, _path: manifest)
-    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda kind, name: False)
-    monkeypatch.setattr(
-        llmd_runtime,
-        "apply_manifest",
-        lambda artifact_path, _manifest: applied.append(artifact_path),
-    )
-    monkeypatch.setattr(
-        llmd_runtime,
-        "oc_get_json",
-        lambda kind, name: {"status": {"state": "ready"}},
-    )
-
-    prepare_toolbox.prepare_gpu_operator(config)
-
-    assert applied == [artifact_dir / "src" / "gpu-clusterpolicy.yaml"]
-
-
-def test_prepare_nfd_skips_existing_nodefeaturediscovery(
+def test_prepare_nfd_delegates_to_bootstrap_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     calls: list[str] = []
-    manifest = {
-        "apiVersion": "nfd.openshift.io/v1",
-        "kind": "NodeFeatureDiscovery",
-        "metadata": {"name": "nfd-instance", "namespace": "openshift-nfd"},
-    }
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         prepare_toolbox,
@@ -592,32 +594,172 @@ def test_prepare_nfd_skips_existing_nodefeaturediscovery(
         "wait_for_crd",
         lambda crd_name, *, timeout_seconds: calls.append(f"crd:{crd_name}"),
     )
-    monkeypatch.setattr(llmd_runtime, "load_manifest_template", lambda _config, _path: manifest)
-    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda *args, **kwargs: True)
     monkeypatch.setattr(
-        llmd_runtime,
-        "wait_until",
-        lambda *args, **kwargs: calls.append("wait-nfd"),
+        bootstrap_nfd_instance,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
     )
-    monkeypatch.setattr(
-        prepare_toolbox,
-        "wait_for_nfd_gpu_labels",
-        lambda _config, *, timeout_seconds: calls.append("wait-labels"),
-    )
-
-    def fail_apply(*_: object, **__: object) -> None:
-        raise AssertionError("existing NodeFeatureDiscovery must not be reapplied")
-
-    monkeypatch.setattr(llmd_runtime, "apply_manifest", fail_apply)
 
     prepare_toolbox.prepare_nfd(config)
 
     assert calls == [
         "subscription:nfd",
         "crd:nodefeaturediscoveries.nfd.openshift.io",
-        "wait-nfd",
-        "wait-labels",
     ]
+    assert captured == {
+        "gpu_label_selectors": ",".join(config.platform["cluster"]["nfd_gpu_detection_labels"]),
+        "timeout_seconds": 900,
+    }
+
+
+def test_apply_datasciencecluster_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        apply_datasciencecluster_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    prepare_toolbox.apply_datasciencecluster(config)
+
+    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
+    assert loaded.namespace == config.namespace
+    assert loaded.platform == config.platform
+
+
+def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        wait_datasciencecluster_ready_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    prepare_toolbox.wait_for_datasciencecluster_ready(config)
+
+    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
+    assert loaded.namespace == config.namespace
+
+
+def test_ensure_gateway_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ensure_gateway_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    prepare_toolbox.ensure_gateway(config)
+
+    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
+    assert loaded.namespace == config.namespace
+
+
+def test_ensure_operator_subscription_delegates_to_cluster_toolbox(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    operator_spec = llmd_runtime.operator_spec_by_package(
+        config.platform,
+        "gpu-operator-certified",
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cluster_deploy_operator,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    prepare_toolbox.ensure_operator_subscription(operator_spec)
+
+    assert captured == {
+        "package_name": "gpu-operator-certified",
+        "target_namespace": "nvidia-gpu-operator",
+        "source_name": "certified-operators",
+        "channel": "stable",
+        "source_namespace": "openshift-marketplace",
+        "wait_timeout_seconds": 1800,
+        "display_name": "NVIDIA GPU Operator",
+    }
+
+
+def test_rhoai_custom_catalog_deploy_is_skipped_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+
+    monkeypatch.setattr(
+        deploy_custom_catalog,
+        "run",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not deploy custom catalog")),
+    )
+
+    assert prepare_toolbox.deploy_rhoai_custom_catalog(config) == 0
+
+
+def test_rhoai_custom_catalog_deploys_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        config_overrides={
+            "platform.rhoai.custom_catalog.enabled": True,
+            "platform.rhoai.custom_catalog.name": "rhods-rc",
+            "platform.rhoai.custom_catalog.namespace": "openshift-marketplace",
+            "platform.rhoai.custom_catalog.image": "quay.io/example/rhoai-index:rc",
+            "platform.rhoai.custom_catalog.display_name": "RHOAI RC Catalog",
+            "platform.rhoai.custom_catalog.wait_timeout_seconds": 600,
+        },
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        deploy_custom_catalog,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    assert prepare_toolbox.deploy_rhoai_custom_catalog(config) == 0
+    assert captured == {
+        "catalog_source_name": "rhods-rc",
+        "catalog_namespace": "openshift-marketplace",
+        "catalog_image": "quay.io/example/rhoai-index:rc",
+        "display_name": "RHOAI RC Catalog",
+        "wait_timeout_seconds": 600,
+    }
+
+
+def test_rhoai_operator_spec_uses_custom_catalog_when_enabled(
+    tmp_path: Path,
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        config_overrides={
+            "platform.rhoai.custom_catalog.enabled": True,
+            "platform.rhoai.custom_catalog.name": "rhods-rc",
+            "platform.rhoai.custom_catalog.namespace": "openshift-marketplace",
+            "platform.rhoai.custom_catalog.image": "quay.io/example/rhoai-index:rc",
+        },
+    )
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
+
+    resolved = prepare_toolbox.rhoai_operator_spec(config, operator_spec)
+
+    assert resolved["source"] == "rhods-rc"
+    assert resolved["source_namespace"] == "openshift-marketplace"
 
 
 def test_gpu_clusterpolicy_manifest_has_required_default_sections() -> None:
@@ -652,7 +794,7 @@ def test_resolve_endpoint_url_requires_gateway_address(
     monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
 
     with pytest.raises(RuntimeError, match="Gateway address"):
-        test_toolbox.resolve_endpoint_url(config)
+        llmd_test_flow.resolve_endpoint_url(config)
 
 
 def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -680,13 +822,87 @@ def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.M
         "apply_manifest",
         lambda artifact_path, _manifest: applied.append(artifact_path),
     )
-    monkeypatch.setattr(test_toolbox, "capture_smoke_state", lambda _config: None)
+    monkeypatch.setattr(llmd_test_flow, "capture_smoke_state", lambda _config: None)
 
-    response = test_toolbox.run_smoke_request(config, "https://example.test")
+    response = llmd_test_flow.run_smoke_request(config, "https://example.test")
 
     assert response["choices"][0]["text"] == "ok"
     assert applied == [artifact_dir / "src" / "smoke-job.yaml"]
     assert not any(call and call[0] == "exec" for call in oc_calls)
+
+
+def test_test_phase_deploy_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    inputs_file = str(phase_inputs.write_test_inputs(config))
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        deploy_llmisvc_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or "https://example.test",
+    )
+
+    ctx = SimpleNamespace(config=config)
+    args = SimpleNamespace(inputs_file=inputs_file)
+    result = test_toolbox.deploy_inference_service_task(args, ctx)
+
+    assert result == "Endpoint resolved: https://example.test"
+    assert ctx.endpoint_url == "https://example.test"
+    assert captured == {"inputs_file": inputs_file}
+
+
+def test_test_phase_smoke_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    inputs_file = str(phase_inputs.write_test_inputs(config))
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        run_smoke_request_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or {"choices": [{"text": "ok"}]},
+    )
+
+    ctx = SimpleNamespace(config=config, endpoint_url="https://example.test")
+    args = SimpleNamespace(inputs_file=inputs_file)
+    response = test_toolbox.run_smoke_request_task(args, ctx)
+
+    assert response == "Smoke request completed"
+    assert ctx.smoke_response["choices"][0]["text"] == "ok"
+    assert captured == {
+        "inputs_file": inputs_file,
+        "endpoint_url": "https://example.test",
+    }
+
+
+def test_test_phase_guidellm_delegates_to_toolbox_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+    )
+    inputs_file = str(phase_inputs.write_test_inputs(config))
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        run_guidellm_benchmark_toolbox,
+        "run",
+        lambda **kwargs: captured.update(kwargs) or 0,
+    )
+
+    ctx = SimpleNamespace(config=config, endpoint_url="https://example.test")
+    args = SimpleNamespace(inputs_file=inputs_file)
+    result = test_toolbox.run_guidellm_benchmark_task(args, ctx)
+
+    assert result == f"GuideLLM benchmark {config.benchmark['job_name']} completed"
+    assert captured == {
+        "inputs_file": inputs_file,
+        "endpoint_url": "https://example.test",
+    }
 
 
 def test_wait_until_reraises_runtime_error() -> None:

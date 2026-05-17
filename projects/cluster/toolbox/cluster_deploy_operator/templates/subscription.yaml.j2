@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: {{ args.package_name }}
+  namespace: {{ args.target_namespace }}
+spec:
+  channel: {{ args.channel }}
+  installPlanApproval: {{ args.installplan_approval }}
+  name: {{ args.package_name }}
+  source: {{ args.source_name }}
+  sourceNamespace: {{ args.source_namespace }}

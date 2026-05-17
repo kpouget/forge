@@ -6,9 +6,19 @@ import json
 import logging
 from pathlib import Path
 
-from projects.core.dsl import execute_tasks, shell, task, toolbox
+from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
+from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
+from projects.core.dsl import execute_tasks, task, toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
+from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
+from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
+from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
+from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache
+from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
+    main as wait_datasciencecluster_ready_command,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,34 +106,10 @@ def prepare_nfd_task(args, ctx):
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
-
-    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
-    nfd_name = manifest["metadata"]["name"]
-    nfd_namespace = manifest["metadata"]["namespace"]
-    if llmd_runtime.resource_exists("nodefeaturediscovery", nfd_name, namespace=nfd_namespace):
-        LOGGER.info(
-            "NodeFeatureDiscovery/%s already exists in %s; verifying GPU discovery labels",
-            nfd_name,
-            nfd_namespace,
-        )
-    else:
-        llmd_runtime.apply_manifest(
-            config.artifact_dir / "src" / "nfd-nodefeaturediscovery.yaml",
-            manifest,
-        )
-
-    llmd_runtime.wait_until(
-        "NodeFeatureDiscovery bootstrap resource",
+    bootstrap_nfd_instance.run(
+        gpu_label_selectors=",".join(config.platform["cluster"]["nfd_gpu_detection_labels"]),
         timeout_seconds=operator_spec["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=lambda: llmd_runtime.resource_exists(
-            "nodefeaturediscovery",
-            nfd_name,
-            namespace=nfd_namespace,
-        ),
     )
-
-    wait_for_nfd_gpu_labels(config, timeout_seconds=operator_spec["wait_timeout_seconds"])
     return "Node Feature Discovery ready"
 
 
@@ -138,22 +124,7 @@ def prepare_gpu_operator_task(args, ctx):
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
-
-    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
-    clusterpolicy_name = manifest["metadata"]["name"]
-    if llmd_runtime.resource_exists("clusterpolicy", clusterpolicy_name):
-        LOGGER.info(
-            "ClusterPolicy/%s already exists; verifying readiness instead of applying bootstrap manifest",
-            clusterpolicy_name,
-        )
-    else:
-        llmd_runtime.apply_manifest(
-            config.artifact_dir / "src" / "gpu-clusterpolicy.yaml",
-            manifest,
-        )
-
-    wait_for_gpu_clusterpolicy_ready(
-        clusterpolicy_name,
+    bootstrap_gpu_clusterpolicy.run(
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
     return "GPU operator ready"
@@ -164,7 +135,9 @@ def prepare_rhoai_operator_task(args, ctx):
     """Ensure the RHOAI operator is installed"""
 
     config = ctx.config
+    deploy_rhoai_custom_catalog(config)
     operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
+    operator_spec = rhoai_operator_spec(config, operator_spec)
     ensure_operator_subscription(operator_spec)
     for crd_name in config.platform["rhoai"]["required_crds_before_dsc"]:
         llmd_runtime.wait_for_crd(
@@ -178,19 +151,7 @@ def prepare_rhoai_operator_task(args, ctx):
 def apply_datasciencecluster_task(args, ctx):
     """Apply the DataScienceCluster manifest"""
 
-    config = ctx.config
-    manifest = llmd_runtime.render_datasciencecluster(config)
-    llmd_runtime.apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
-    llmd_runtime.oc(
-        "get",
-        "datasciencecluster",
-        config.platform["rhoai"]["datasciencecluster_name"],
-        "-n",
-        config.platform["rhoai"]["namespace"],
-        "-o",
-        "yaml",
-        capture_output=True,
-    )
+    apply_datasciencecluster_command.run(inputs_file=args.inputs_file)
     return "DataScienceCluster applied"
 
 
@@ -198,27 +159,7 @@ def apply_datasciencecluster_task(args, ctx):
 def wait_for_datasciencecluster_ready_task(args, ctx):
     """Wait for the DataScienceCluster to become ready"""
 
-    rhoai = ctx.config.platform["rhoai"]
-
-    def _dsc_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
-            "datasciencecluster",
-            name=rhoai["datasciencecluster_name"],
-            namespace=rhoai["namespace"],
-        )
-        phase = payload.get("status", {}).get("phase")
-        if phase == "Ready":
-            return True
-        if phase in {"Failed", "Error"}:
-            raise RuntimeError(f"DataScienceCluster entered terminal phase {phase}")
-        return False
-
-    llmd_runtime.wait_until(
-        f"datasciencecluster/{rhoai['datasciencecluster_name']} ready",
-        timeout_seconds=rhoai["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=_dsc_ready,
-    )
+    wait_datasciencecluster_ready_command.run(inputs_file=args.inputs_file)
     return "DataScienceCluster ready"
 
 
@@ -238,30 +179,7 @@ def ensure_required_crds_task(args, ctx):
 def ensure_gateway_task(args, ctx):
     """Ensure the gateway exists and is programmed"""
 
-    config = ctx.config
-    gateway = config.platform["gateway"]
-    if not llmd_runtime.resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
-        if not gateway["create_if_missing"]:
-            raise RuntimeError(
-                f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
-            )
-        manifest = llmd_runtime.render_gateway(config)
-        llmd_runtime.apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
-
-    def _gateway_programmed() -> bool:
-        resource = llmd_runtime.oc_get_json(
-            "gateway",
-            name=gateway["name"],
-            namespace=gateway["namespace"],
-        )
-        return llmd_runtime.condition_status(resource, "Programmed") == "True"
-
-    llmd_runtime.wait_until(
-        f"gateway/{gateway['name']} programmed",
-        timeout_seconds=gateway["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=_gateway_programmed,
-    )
+    ensure_gateway_command.run(inputs_file=args.inputs_file)
     return "Gateway ready"
 
 
@@ -283,74 +201,7 @@ def ensure_test_namespace_task(args, ctx):
 def cleanup_previous_run_task(args, ctx):
     """Delete leftover llm_d resources from the namespace"""
 
-    config = ctx.config
-    inference_service_name = config.platform["inference_service"]["name"]
-    namespace = config.namespace
-    cleanup_timeout_seconds = config.platform["cluster"]["cleanup_timeout_seconds"]
-    benchmark_names = {"guidellm-benchmark"}
-    if config.benchmark:
-        benchmark_names.add(config.benchmark["job_name"])
-
-    shell.run(
-        f"oc delete llminferenceservice {inference_service_name} "
-        f"-n {namespace} --ignore-not-found=true",
-        check=False,
-    )
-
-    for benchmark_name in sorted(benchmark_names):
-        shell.run(
-            f"oc delete job,pvc {benchmark_name} -n {namespace} --ignore-not-found=true",
-            check=False,
-        )
-        shell.run(
-            f"oc delete pod {benchmark_name}-copy -n {namespace} --ignore-not-found=true",
-            check=False,
-        )
-
-    shell.run(
-        f'oc delete job -n {namespace} -l "forge.openshift.io/project=llm_d" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-    shell.run(
-        f'oc delete pod -n {namespace} -l "forge.openshift.io/project=llm_d" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-    shell.run(
-        f"oc delete pvc -n {namespace} "
-        '-l "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-
-    llmd_runtime.wait_until(
-        f"llminferenceservice/{inference_service_name} deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: (
-            not llmd_runtime.resource_exists(
-                "llminferenceservice", inference_service_name, namespace=namespace
-            )
-        ),
-    )
-
-    llmd_runtime.wait_until(
-        f"llm-d workload pods deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: (
-            not (
-                pods := llmd_runtime.oc_get_json(
-                    "pods",
-                    namespace=namespace,
-                    selector=f"app.kubernetes.io/name={inference_service_name}",
-                    ignore_not_found=True,
-                )
-            )
-            or not pods.get("items")
-        ),
-    )
+    cleanup_toolbox.run(inputs_file=str(phase_inputs.write_cleanup_inputs_from_prepare(ctx.config)))
     return f"Previous llm_d leftovers deleted from {ctx.config.namespace}"
 
 
@@ -358,32 +209,9 @@ def cleanup_previous_run_task(args, ctx):
 def prepare_model_cache_task(args, ctx):
     """Prepare the shared model cache if enabled"""
 
-    cache_inputs = phase_inputs.prepare_model_cache_inputs_from_prepare(ctx.config)
-    cache_spec = llmd_runtime.resolve_model_cache(cache_inputs)
-    if not cache_spec:
-        LOGGER.info("Model cache disabled for preset=%s", cache_inputs.preset_name)
-        return "Model cache disabled"
-
-    if cache_inputs.namespace_is_managed:
-        LOGGER.warning(
-            "Model cache PVC %s lives in managed namespace %s. Namespace cleanup will remove it; cache reuse requires a stable namespace override.",
-            cache_spec.pvc_name,
-            cache_spec.namespace,
-        )
-
-    prepare_model_cache.ensure_model_cache_pvc(cache_inputs, cache_spec)
-    if llmd_runtime.model_cache_pvc_ready(cache_spec):
-        LOGGER.info(
-            "Model cache PVC %s already contains %s; skipping download",
-            cache_spec.pvc_name,
-            cache_spec.source_uri,
-        )
-        prepare_model_cache.capture_model_cache_state(cache_inputs, cache_spec)
-        return "Model cache already populated"
-
-    prepare_model_cache.run_model_cache_download_job(cache_inputs, cache_spec)
-    llmd_runtime.annotate_model_cache_pvc(cache_spec)
-    prepare_model_cache.capture_model_cache_state(cache_inputs, cache_spec)
+    prepare_model_cache.run(
+        inputs_file=str(phase_inputs.write_prepare_model_cache_inputs_from_prepare(ctx.config))
+    )
     return "Model cache prepared"
 
 
@@ -464,12 +292,47 @@ def verify_cluster_version(config: phase_inputs.PrepareInputs) -> None:
 
 
 def ensure_operator_subscription(operator_spec: dict[str, str]) -> dict[str, object]:
-    llmd_runtime.ensure_subscription(operator_spec)
-    return llmd_runtime.wait_for_operator_csv(
-        operator_spec["package"],
-        operator_spec["namespace"],
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
+    return cluster_deploy_operator.run(
+        package_name=operator_spec["package"],
+        target_namespace=operator_spec["namespace"],
+        source_name=operator_spec["source"],
+        channel=operator_spec["channel"],
+        source_namespace=operator_spec.get("source_namespace", "openshift-marketplace"),
+        wait_timeout_seconds=operator_spec["wait_timeout_seconds"],
+        display_name=operator_spec.get("display_name", operator_spec["package"]),
     )
+
+
+def deploy_rhoai_custom_catalog(config: phase_inputs.PrepareInputs) -> int:
+    custom_catalog = config.platform["rhoai"]["custom_catalog"]
+    if not custom_catalog["enabled"]:
+        LOGGER.info("RHOAI custom catalog disabled; using default catalog source")
+        return 0
+
+    if not custom_catalog.get("image"):
+        raise RuntimeError("RHOAI custom catalog is enabled but no image was configured")
+
+    return deploy_custom_catalog.run(
+        catalog_source_name=custom_catalog["name"],
+        catalog_namespace=custom_catalog["namespace"],
+        catalog_image=custom_catalog["image"],
+        display_name=custom_catalog.get("display_name", custom_catalog["name"]),
+        wait_timeout_seconds=custom_catalog["wait_timeout_seconds"],
+    )
+
+
+def rhoai_operator_spec(
+    config: phase_inputs.PrepareInputs,
+    operator_spec: dict[str, str],
+) -> dict[str, str]:
+    custom_catalog = config.platform["rhoai"]["custom_catalog"]
+    if not custom_catalog["enabled"]:
+        return operator_spec
+
+    updated_spec = dict(operator_spec)
+    updated_spec["source"] = custom_catalog["name"]
+    updated_spec["source_namespace"] = custom_catalog["namespace"]
+    return updated_spec
 
 
 def prepare_cert_manager(config: phase_inputs.PrepareInputs) -> None:
@@ -491,34 +354,10 @@ def prepare_nfd(config: phase_inputs.PrepareInputs) -> None:
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
-
-    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
-    nfd_name = manifest["metadata"]["name"]
-    nfd_namespace = manifest["metadata"]["namespace"]
-    if llmd_runtime.resource_exists("nodefeaturediscovery", nfd_name, namespace=nfd_namespace):
-        LOGGER.info(
-            "NodeFeatureDiscovery/%s already exists in %s; verifying GPU discovery labels",
-            nfd_name,
-            nfd_namespace,
-        )
-    else:
-        llmd_runtime.apply_manifest(
-            config.artifact_dir / "src" / "nfd-nodefeaturediscovery.yaml",
-            manifest,
-        )
-
-    llmd_runtime.wait_until(
-        "NodeFeatureDiscovery bootstrap resource",
+    bootstrap_nfd_instance.run(
+        gpu_label_selectors=",".join(config.platform["cluster"]["nfd_gpu_detection_labels"]),
         timeout_seconds=operator_spec["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=lambda: llmd_runtime.resource_exists(
-            "nodefeaturediscovery",
-            nfd_name,
-            namespace=nfd_namespace,
-        ),
     )
-
-    wait_for_nfd_gpu_labels(config, timeout_seconds=operator_spec["wait_timeout_seconds"])
 
 
 def prepare_gpu_operator(config: phase_inputs.PrepareInputs) -> None:
@@ -528,50 +367,15 @@ def prepare_gpu_operator(config: phase_inputs.PrepareInputs) -> None:
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
-
-    manifest = llmd_runtime.load_manifest_template(config, operator_spec["bootstrap_manifest"])
-    clusterpolicy_name = manifest["metadata"]["name"]
-    if llmd_runtime.resource_exists("clusterpolicy", clusterpolicy_name):
-        LOGGER.info(
-            "ClusterPolicy/%s already exists; verifying readiness instead of applying bootstrap manifest",
-            clusterpolicy_name,
-        )
-        wait_for_gpu_clusterpolicy_ready(
-            clusterpolicy_name,
-            timeout_seconds=operator_spec["wait_timeout_seconds"],
-        )
-        return
-
-    llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "gpu-clusterpolicy.yaml",
-        manifest,
-    )
-
-    wait_for_gpu_clusterpolicy_ready(
-        clusterpolicy_name,
+    bootstrap_gpu_clusterpolicy.run(
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
 
 
-def wait_for_gpu_clusterpolicy_ready(clusterpolicy_name: str, *, timeout_seconds: int) -> None:
-    def _clusterpolicy_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
-            "clusterpolicy",
-            name=clusterpolicy_name,
-        )
-        state = payload.get("status", {}).get("state", "")
-        return state.lower() == "ready"
-
-    llmd_runtime.wait_until(
-        f"clusterpolicy/{clusterpolicy_name} ready",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=15,
-        predicate=_clusterpolicy_ready,
-    )
-
-
 def prepare_rhoai_operator(config: phase_inputs.PrepareInputs) -> None:
+    deploy_rhoai_custom_catalog(config)
     operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
+    operator_spec = rhoai_operator_spec(config, operator_spec)
     ensure_operator_subscription(operator_spec)
     ensure_required_crds(config.platform["rhoai"]["required_crds_before_dsc"], config)
 
@@ -585,67 +389,20 @@ def ensure_required_crds(crd_names: list[str], config: phase_inputs.PrepareInput
 
 
 def apply_datasciencecluster(config: phase_inputs.PrepareInputs) -> None:
-    manifest = llmd_runtime.render_datasciencecluster(config)
-    llmd_runtime.apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
-    llmd_runtime.oc(
-        "get",
-        "datasciencecluster",
-        config.platform["rhoai"]["datasciencecluster_name"],
-        "-n",
-        config.platform["rhoai"]["namespace"],
-        "-o",
-        "yaml",
-        capture_output=True,
+    apply_datasciencecluster_command.run(
+        inputs_file=str(phase_inputs.write_prepare_inputs_from_prepare(config))
     )
 
 
 def wait_for_datasciencecluster_ready(config: phase_inputs.PrepareInputs) -> None:
-    rhoai = config.platform["rhoai"]
-
-    def _dsc_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
-            "datasciencecluster",
-            name=rhoai["datasciencecluster_name"],
-            namespace=rhoai["namespace"],
-        )
-        phase = payload.get("status", {}).get("phase")
-        if phase == "Ready":
-            return True
-        if phase in {"Failed", "Error"}:
-            raise RuntimeError(f"DataScienceCluster entered terminal phase {phase}")
-        return False
-
-    llmd_runtime.wait_until(
-        f"datasciencecluster/{rhoai['datasciencecluster_name']} ready",
-        timeout_seconds=rhoai["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=_dsc_ready,
+    wait_datasciencecluster_ready_command.run(
+        inputs_file=str(phase_inputs.write_prepare_inputs_from_prepare(config))
     )
 
 
 def ensure_gateway(config: phase_inputs.PrepareInputs) -> None:
-    gateway = config.platform["gateway"]
-    if not llmd_runtime.resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
-        if not gateway["create_if_missing"]:
-            raise RuntimeError(
-                f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
-            )
-        manifest = llmd_runtime.render_gateway(config)
-        llmd_runtime.apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
-
-    def _gateway_programmed() -> bool:
-        resource = llmd_runtime.oc_get_json(
-            "gateway",
-            name=gateway["name"],
-            namespace=gateway["namespace"],
-        )
-        return llmd_runtime.condition_status(resource, "Programmed") == "True"
-
-    llmd_runtime.wait_until(
-        f"gateway/{gateway['name']} programmed",
-        timeout_seconds=gateway["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=_gateway_programmed,
+    ensure_gateway_command.run(
+        inputs_file=str(phase_inputs.write_prepare_inputs_from_prepare(config))
     )
 
 
@@ -667,24 +424,6 @@ def verify_gpu_nodes(config: phase_inputs.PrepareInputs) -> None:
         raise RuntimeError(
             f"No GPU nodes found with selector {selector}. The llm_d smoke path requires GPUs."
         )
-
-
-def wait_for_nfd_gpu_labels(config: phase_inputs.PrepareInputs, *, timeout_seconds: int) -> None:
-    selectors = config.platform["cluster"]["nfd_gpu_detection_labels"]
-
-    def _labels_present() -> bool:
-        for selector in selectors:
-            data = llmd_runtime.oc_get_json("nodes", selector=selector, ignore_not_found=True)
-            if data and data.get("items"):
-                return True
-        return False
-
-    llmd_runtime.wait_until(
-        "NFD GPU discovery labels on cluster nodes",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=15,
-        predicate=_labels_present,
-    )
 
 
 def capture_prepare_state(config: phase_inputs.PrepareInputs) -> None:

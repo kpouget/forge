@@ -107,6 +107,26 @@ def write_prepare_inputs(config: ResolvedConfig) -> Path:
     return path
 
 
+def write_prepare_inputs_from_prepare(inputs: PrepareInputs) -> Path:
+    path = inputs.artifact_dir / "_meta" / "prepare.inputs.yaml"
+    write_yaml(
+        path,
+        {
+            "artifact_dir": str(inputs.artifact_dir),
+            "config_dir": str(inputs.config_dir),
+            "preset_name": inputs.preset_name,
+            "namespace": inputs.namespace,
+            "namespace_is_managed": inputs.namespace_is_managed,
+            "platform": inputs.platform,
+            "model_key": inputs.model_key,
+            "model": inputs.model,
+            "model_cache": inputs.model_cache,
+            "benchmark": inputs.benchmark,
+        },
+    )
+    return path
+
+
 def write_test_inputs(config: ResolvedConfig) -> Path:
     path = config.artifact_dir / "_meta" / "test.inputs.yaml"
     write_yaml(
@@ -195,6 +215,21 @@ def cleanup_inputs_from_prepare(inputs: PrepareInputs) -> CleanupInputs:
     )
 
 
+def write_cleanup_inputs_from_prepare(inputs: PrepareInputs) -> Path:
+    path = inputs.artifact_dir / "_meta" / "cleanup.inputs.yaml"
+    cleanup_inputs = cleanup_inputs_from_prepare(inputs)
+    write_yaml(
+        path,
+        {
+            "artifact_dir": str(cleanup_inputs.artifact_dir),
+            "namespace": cleanup_inputs.namespace,
+            "platform": cleanup_inputs.platform,
+            "benchmark": cleanup_inputs.benchmark,
+        },
+    )
+    return path
+
+
 def prepare_model_cache_inputs_from_prepare(inputs: PrepareInputs) -> PrepareModelCacheInputs:
     return PrepareModelCacheInputs(
         artifact_dir=inputs.artifact_dir,
@@ -205,3 +240,21 @@ def prepare_model_cache_inputs_from_prepare(inputs: PrepareInputs) -> PrepareMod
         model=inputs.model,
         model_cache=inputs.model_cache,
     )
+
+
+def write_prepare_model_cache_inputs_from_prepare(inputs: PrepareInputs) -> Path:
+    path = inputs.artifact_dir / "_meta" / "prepare_model_cache.inputs.yaml"
+    cache_inputs = prepare_model_cache_inputs_from_prepare(inputs)
+    write_yaml(
+        path,
+        {
+            "artifact_dir": str(cache_inputs.artifact_dir),
+            "preset_name": cache_inputs.preset_name,
+            "namespace": cache_inputs.namespace,
+            "namespace_is_managed": cache_inputs.namespace_is_managed,
+            "model_key": cache_inputs.model_key,
+            "model": cache_inputs.model,
+            "model_cache": cache_inputs.model_cache,
+        },
+    )
+    return path
