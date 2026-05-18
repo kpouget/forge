@@ -229,7 +229,7 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         orchestration,
@@ -239,15 +239,13 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
     monkeypatch.setattr(
         orchestration,
         "test_toolbox_run",
-        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 23,
+        lambda **kwargs: captured.update(kwargs) or 23,
     )
 
     result = orchestration.run_test_phase()
-    loaded = phase_inputs.load_test_inputs(captured["inputs_file"])
 
-    assert result == captured["inputs_file"]
-    assert loaded.namespace == config.namespace
-    assert loaded.model == config.model
+    assert result == 23
+    assert captured == phase_inputs.test_kwargs(config)
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -255,7 +253,7 @@ def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         orchestration,
@@ -265,15 +263,13 @@ def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     monkeypatch.setattr(
         orchestration,
         "cleanup_toolbox_run",
-        lambda *, inputs_file: captured.setdefault("inputs_file", inputs_file) or 29,
+        lambda **kwargs: captured.update(kwargs) or 29,
     )
 
     result = orchestration.run_cleanup_phase()
-    loaded = phase_inputs.load_cleanup_inputs(captured["inputs_file"])
 
-    assert result == captured["inputs_file"]
-    assert loaded.namespace == config.namespace
-    assert loaded.platform == config.platform
+    assert result == 29
+    assert captured == phase_inputs.cleanup_kwargs(config)
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -537,12 +533,15 @@ def test_prepare_model_cache_task_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    ctx = SimpleNamespace(config=config)
-    prepare_toolbox.prepare_model_cache_task(SimpleNamespace(), ctx)
+    prepare_toolbox.prepare_model_cache_task(
+        SimpleNamespace(
+            artifact_dir=config.artifact_dir,
+            **phase_inputs.prepare_kwargs(config),
+        ),
+        SimpleNamespace(),
+    )
 
-    loaded = phase_inputs.load_prepare_model_cache_inputs(captured["inputs_file"])
-    assert loaded.namespace == config.namespace
-    assert loaded.model == config.model
+    assert captured == phase_inputs.prepare_model_cache_kwargs(config)
 
 
 def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
@@ -587,13 +586,14 @@ def test_cleanup_previous_run_task_delegates_to_cleanup_toolbox(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    ctx = SimpleNamespace(config=config)
-    result = prepare_toolbox.cleanup_previous_run_task(SimpleNamespace(), ctx)
+    args = SimpleNamespace(
+        artifact_dir=config.artifact_dir,
+        **phase_inputs.prepare_kwargs(config),
+    )
+    result = prepare_toolbox.cleanup_previous_run_task(args, SimpleNamespace())
 
-    loaded = phase_inputs.load_cleanup_inputs(captured["inputs_file"])
     assert result == f"Previous llm_d leftovers deleted from {config.namespace}"
-    assert loaded.namespace == config.namespace
-    assert loaded.platform == config.platform
+    assert captured == phase_inputs.cleanup_kwargs(config)
 
 
 def test_prepare_gpu_operator_delegates_to_bootstrap_command(
@@ -678,9 +678,7 @@ def test_apply_datasciencecluster_delegates_to_toolbox_command(
 
     prepare_toolbox.apply_datasciencecluster(config)
 
-    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
-    assert loaded.namespace == config.namespace
-    assert loaded.platform == config.platform
+    assert captured == phase_inputs.prepare_kwargs(config)
 
 
 def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
@@ -697,8 +695,7 @@ def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
 
     prepare_toolbox.wait_for_datasciencecluster_ready(config)
 
-    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
-    assert loaded.namespace == config.namespace
+    assert captured == phase_inputs.prepare_kwargs(config)
 
 
 def test_ensure_gateway_delegates_to_toolbox_command(
@@ -715,8 +712,7 @@ def test_ensure_gateway_delegates_to_toolbox_command(
 
     prepare_toolbox.ensure_gateway(config)
 
-    loaded = phase_inputs.load_prepare_inputs(captured["inputs_file"])
-    assert loaded.namespace == config.namespace
+    assert captured == phase_inputs.prepare_kwargs(config)
 
 
 def test_ensure_operator_subscription_delegates_to_cluster_toolbox(
@@ -989,8 +985,12 @@ def test_guidellm_toolbox_runs_benchmark_steps(
         lambda artifact_path, _manifest: applied.append(artifact_path),
     )
 
-    args = SimpleNamespace(endpoint_url="https://example.test")
-    ctx = SimpleNamespace(config=config)
+    args = SimpleNamespace(
+        artifact_dir=config.artifact_dir,
+        endpoint_url="https://example.test",
+        **phase_inputs.test_kwargs(config),
+    )
+    ctx = SimpleNamespace()
 
     run_guidellm_benchmark_toolbox.cleanup_previous_guidellm_resources_task(args, ctx)
     run_guidellm_benchmark_toolbox.create_guidellm_resources_task(args, ctx)
@@ -1032,7 +1032,6 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    inputs_file = str(phase_inputs.write_test_inputs(config))
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
@@ -1041,20 +1040,19 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or "https://example.test",
     )
 
-    ctx = SimpleNamespace(config=config)
-    args = SimpleNamespace(inputs_file=inputs_file)
+    ctx = SimpleNamespace()
+    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
     result = test_toolbox.deploy_inference_service_task(args, ctx)
 
     assert result == "Endpoint resolved: https://example.test"
     assert ctx.endpoint_url == "https://example.test"
-    assert captured == {"inputs_file": inputs_file}
+    assert captured == phase_inputs.test_kwargs(config)
 
 
 def test_test_phase_smoke_delegates_to_toolbox_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    inputs_file = str(phase_inputs.write_test_inputs(config))
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
@@ -1063,14 +1061,14 @@ def test_test_phase_smoke_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or {"choices": [{"text": "ok"}]},
     )
 
-    ctx = SimpleNamespace(config=config, endpoint_url="https://example.test")
-    args = SimpleNamespace(inputs_file=inputs_file)
+    ctx = SimpleNamespace(endpoint_url="https://example.test")
+    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
     response = test_toolbox.run_smoke_request_task(args, ctx)
 
     assert response == "Smoke request completed"
     assert ctx.smoke_response["choices"][0]["text"] == "ok"
     assert captured == {
-        "inputs_file": inputs_file,
+        **phase_inputs.test_kwargs(config),
         "endpoint_url": "https://example.test",
     }
 
@@ -1082,7 +1080,6 @@ def test_test_phase_guidellm_delegates_to_toolbox_command(
         tmp_path,
         requested_preset="benchmark-short",
     )
-    inputs_file = str(phase_inputs.write_test_inputs(config))
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
@@ -1091,13 +1088,13 @@ def test_test_phase_guidellm_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    ctx = SimpleNamespace(config=config, endpoint_url="https://example.test")
-    args = SimpleNamespace(inputs_file=inputs_file)
+    ctx = SimpleNamespace(endpoint_url="https://example.test")
+    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
     result = test_toolbox.run_guidellm_benchmark_task(args, ctx)
 
     assert result == f"GuideLLM benchmark {config.benchmark['job_name']} completed"
     assert captured == {
-        "inputs_file": inputs_file,
+        **phase_inputs.test_kwargs(config),
         "endpoint_url": "https://example.test",
     }
 

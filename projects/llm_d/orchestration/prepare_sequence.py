@@ -7,8 +7,10 @@ from projects.llm_d.toolbox.prepare_model_cache.main import run as prepare_model
 
 
 def run_prepare_sequence(config: runtime_config.ResolvedConfig) -> int:
-    prepare_inputs_file = phase_inputs.write_prepare_inputs(config)
-    prepare_inputs = phase_inputs.load_prepare_inputs(str(prepare_inputs_file))
+    prepare_inputs = phase_inputs.build_prepare_inputs(
+        artifact_dir=config.artifact_dir,
+        **phase_inputs.prepare_kwargs(config),
+    )
 
     prepare_toolbox.verify_oc_access()
     prepare_toolbox.verify_cluster_version(prepare_inputs)
@@ -27,12 +29,8 @@ def run_prepare_sequence(config: runtime_config.ResolvedConfig) -> int:
     prepare_toolbox.ensure_gateway(prepare_inputs)
     prepare_toolbox.ensure_test_namespace(prepare_inputs)
 
-    cleanup_toolbox_run(
-        inputs_file=str(phase_inputs.write_cleanup_inputs_from_prepare(prepare_inputs))
-    )
-    prepare_model_cache_toolbox_run(
-        inputs_file=str(phase_inputs.write_prepare_model_cache_inputs_from_prepare(prepare_inputs))
-    )
+    cleanup_toolbox_run(**phase_inputs.cleanup_kwargs(prepare_inputs))
+    prepare_model_cache_toolbox_run(**phase_inputs.prepare_model_cache_kwargs(prepare_inputs))
 
     prepare_toolbox.verify_gpu_nodes(prepare_inputs)
     prepare_toolbox.capture_prepare_state(prepare_inputs)

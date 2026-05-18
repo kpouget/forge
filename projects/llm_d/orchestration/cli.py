@@ -40,14 +40,12 @@ def run_prepare_phase() -> int:
 
 def run_test_phase() -> int:
     config = load_runtime_configuration()
-    inputs_file = phase_inputs.write_test_inputs(config)
-    return test_toolbox_run(inputs_file=str(inputs_file))
+    return test_toolbox_run(**phase_inputs.test_kwargs(config))
 
 
 def run_cleanup_phase() -> int:
     config = load_runtime_configuration()
-    inputs_file = phase_inputs.write_cleanup_inputs(config)
-    return cleanup_toolbox_run(inputs_file=str(inputs_file))
+    return cleanup_toolbox_run(**phase_inputs.cleanup_kwargs(config))
 
 
 @click.group()

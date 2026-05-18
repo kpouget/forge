@@ -159,6 +159,21 @@ def load_cleanup_inputs(path: str | Path) -> CleanupInputs:
     )
 
 
+def build_cleanup_inputs(
+    *,
+    artifact_dir: str | Path,
+    namespace: str,
+    platform: dict[str, Any],
+    benchmark: dict[str, Any] | None,
+) -> CleanupInputs:
+    return CleanupInputs(
+        artifact_dir=Path(artifact_dir),
+        namespace=namespace,
+        platform=platform,
+        benchmark=benchmark,
+    )
+
+
 def load_prepare_model_cache_inputs(path: str | Path) -> PrepareModelCacheInputs:
     payload = load_yaml(Path(path))
     return PrepareModelCacheInputs(
@@ -169,6 +184,27 @@ def load_prepare_model_cache_inputs(path: str | Path) -> PrepareModelCacheInputs
         model_key=payload["model_key"],
         model=payload["model"],
         model_cache=payload["model_cache"],
+    )
+
+
+def build_prepare_model_cache_inputs(
+    *,
+    artifact_dir: str | Path,
+    preset_name: str,
+    namespace: str,
+    namespace_is_managed: bool,
+    model_key: str,
+    model: dict[str, Any],
+    model_cache: dict[str, Any],
+) -> PrepareModelCacheInputs:
+    return PrepareModelCacheInputs(
+        artifact_dir=Path(artifact_dir),
+        preset_name=preset_name,
+        namespace=namespace,
+        namespace_is_managed=namespace_is_managed,
+        model_key=model_key,
+        model=model,
+        model_cache=model_cache,
     )
 
 
@@ -188,6 +224,33 @@ def load_prepare_inputs(path: str | Path) -> PrepareInputs:
     )
 
 
+def build_prepare_inputs(
+    *,
+    artifact_dir: str | Path,
+    config_dir: str | Path,
+    preset_name: str,
+    namespace: str,
+    namespace_is_managed: bool,
+    platform: dict[str, Any],
+    model_key: str,
+    model: dict[str, Any],
+    model_cache: dict[str, Any],
+    benchmark: dict[str, Any] | None,
+) -> PrepareInputs:
+    return PrepareInputs(
+        artifact_dir=Path(artifact_dir),
+        config_dir=Path(config_dir),
+        preset_name=preset_name,
+        namespace=namespace,
+        namespace_is_managed=namespace_is_managed,
+        platform=platform,
+        model_key=model_key,
+        model=model,
+        model_cache=model_cache,
+        benchmark=benchmark,
+    )
+
+
 def load_test_inputs(path: str | Path) -> TestInputs:
     payload = load_yaml(Path(path))
     return TestInputs(
@@ -204,6 +267,88 @@ def load_test_inputs(path: str | Path) -> TestInputs:
         smoke_request=payload["smoke_request"],
         benchmark=payload["benchmark"],
     )
+
+
+def build_test_inputs(
+    *,
+    artifact_dir: str | Path,
+    config_dir: str | Path,
+    preset_name: str,
+    namespace: str,
+    platform: dict[str, Any],
+    model_key: str,
+    model: dict[str, Any],
+    scheduler_profile_key: str,
+    scheduler_profile: dict[str, Any] | None,
+    model_cache: dict[str, Any],
+    smoke_request: dict[str, Any],
+    benchmark: dict[str, Any] | None,
+) -> TestInputs:
+    return TestInputs(
+        artifact_dir=Path(artifact_dir),
+        config_dir=Path(config_dir),
+        preset_name=preset_name,
+        namespace=namespace,
+        platform=platform,
+        model_key=model_key,
+        model=model,
+        scheduler_profile_key=scheduler_profile_key,
+        scheduler_profile=scheduler_profile,
+        model_cache=model_cache,
+        smoke_request=smoke_request,
+        benchmark=benchmark,
+    )
+
+
+def cleanup_kwargs(config: ResolvedConfig | CleanupInputs | PrepareInputs) -> dict[str, Any]:
+    return {
+        "namespace": config.namespace,
+        "platform": config.platform,
+        "benchmark": config.benchmark,
+    }
+
+
+def prepare_model_cache_kwargs(
+    config: ResolvedConfig | PrepareInputs | PrepareModelCacheInputs,
+) -> dict[str, Any]:
+    return {
+        "preset_name": config.preset_name,
+        "namespace": config.namespace,
+        "namespace_is_managed": config.namespace_is_managed,
+        "model_key": config.model_key,
+        "model": config.model,
+        "model_cache": config.model_cache,
+    }
+
+
+def prepare_kwargs(config: ResolvedConfig | PrepareInputs) -> dict[str, Any]:
+    return {
+        "config_dir": str(config.config_dir),
+        "preset_name": config.preset_name,
+        "namespace": config.namespace,
+        "namespace_is_managed": config.namespace_is_managed,
+        "platform": config.platform,
+        "model_key": config.model_key,
+        "model": config.model,
+        "model_cache": config.model_cache,
+        "benchmark": config.benchmark,
+    }
+
+
+def test_kwargs(config: ResolvedConfig | TestInputs) -> dict[str, Any]:
+    return {
+        "config_dir": str(config.config_dir),
+        "preset_name": config.preset_name,
+        "namespace": config.namespace,
+        "platform": config.platform,
+        "model_key": config.model_key,
+        "model": config.model,
+        "scheduler_profile_key": config.scheduler_profile_key,
+        "scheduler_profile": config.scheduler_profile,
+        "model_cache": config.model_cache,
+        "smoke_request": config.smoke_request,
+        "benchmark": config.benchmark,
+    }
 
 
 def cleanup_inputs_from_prepare(inputs: PrepareInputs) -> CleanupInputs:
