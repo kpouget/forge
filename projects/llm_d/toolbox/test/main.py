@@ -154,19 +154,15 @@ def capture_namespace_events_task(args, ctx):
     if not config:
         return "Test inputs unavailable; skipping namespace events capture"
 
-    events = llmd_runtime.oc(
+    llmd_runtime.oc(
         "get",
         "events",
         "-n",
         config.namespace,
         "--sort-by=.metadata.creationTimestamp",
         check=False,
-        capture_output=True,
+        stdout_dest=config.artifact_dir / "artifacts" / "namespace.events.txt",
     )
-    if events.returncode == 0 and events.stdout:
-        llmd_runtime.write_text(
-            config.artifact_dir / "artifacts" / "namespace.events.txt", events.stdout
-        )
     return "Namespace events captured"
 
 

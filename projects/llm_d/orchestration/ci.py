@@ -12,6 +12,7 @@ import click
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
 from projects.core.library import config
+from projects.core.library.export import caliper_export_command
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
@@ -92,6 +93,7 @@ def pre_cleanup(ctx) -> int:
 
 
 main.add_command(create_fournos_resolve_command(vault_list_func=list_vaults))
+main.add_command(caliper_export_command)
 
 
 if __name__ == "__main__":
