@@ -1,3 +1,26 @@
 vaults:
   - psap-forge-notifications
   - psap-forge-mlflow-export
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: aws.credentials
+        config:
+          experiment: forge-llm_d
+          run_name:
+          description: >
+            Caliper export from FORGE
+          source_script: llm_d project
+          tags: {}
+          parameters: {}
+          metrics: {}
