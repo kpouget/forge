@@ -17,31 +17,33 @@ LOGGER = logging.getLogger(__name__)
 def run(
     *,
     config_dir: str,
-    preset_name: str,
     namespace: str,
-    platform: dict,
-    model_key: str,
+    inference_service: dict,
+    gateway: dict,
     model: dict,
     scheduler_profile_key: str,
     scheduler_profile: dict | None,
     model_cache: dict,
+    smoke: dict,
     smoke_request: dict,
     benchmark: dict | None = None,
+    capture_namespace_events: bool = True,
 ) -> int:
     """Deploy llm_d, run the smoke request, and optionally execute GuideLLM.
 
     Args:
         config_dir: Configuration directory
-        preset_name: Selected preset name
         namespace: Namespace used by llm_d
-        platform: Platform configuration
-        model_key: Selected model key
+        inference_service: Inference-service configuration block
+        gateway: Gateway configuration block
         model: Selected model configuration
         scheduler_profile_key: Scheduler profile key
         scheduler_profile: Scheduler profile configuration
         model_cache: Model-cache configuration
+        smoke: Smoke configuration block
         smoke_request: Smoke-request configuration
         benchmark: Optional benchmark configuration
+        capture_namespace_events: Whether namespace events should be captured
     """
 
     llmd_runtime.init()
@@ -55,10 +57,11 @@ def load_inputs(args, ctx):
 
     ctx.artifact_dir = args.artifact_dir
     ctx.namespace = args.namespace
-    ctx.platform = args.platform
+    ctx.inference_service = args.inference_service
+    ctx.smoke = args.smoke
     ctx.benchmark = args.benchmark
-    ctx.preset_name = args.preset_name
-    return f"Loaded test inputs for preset {ctx.preset_name}"
+    ctx.capture_namespace_events = args.capture_namespace_events
+    return f"Loaded test inputs for namespace {ctx.namespace}"
 
 
 @task
@@ -67,16 +70,13 @@ def deploy_inference_service_task(args, ctx):
 
     ctx.endpoint_url = deploy_llmisvc.run(
         config_dir=args.config_dir,
-        preset_name=args.preset_name,
         namespace=args.namespace,
-        platform=args.platform,
-        model_key=args.model_key,
+        inference_service=args.inference_service,
+        gateway=args.gateway,
         model=args.model,
         scheduler_profile_key=args.scheduler_profile_key,
         scheduler_profile=args.scheduler_profile,
         model_cache=args.model_cache,
-        smoke_request=args.smoke_request,
-        benchmark=args.benchmark,
     )
     return f"Endpoint resolved: {ctx.endpoint_url}"
 
@@ -86,17 +86,10 @@ def run_smoke_request_task(args, ctx):
     """Run the smoke request against the deployed service"""
 
     ctx.smoke_response = run_smoke_request_command.run(
-        config_dir=args.config_dir,
-        preset_name=args.preset_name,
         namespace=args.namespace,
-        platform=args.platform,
-        model_key=args.model_key,
+        smoke=args.smoke,
         model=args.model,
-        scheduler_profile_key=args.scheduler_profile_key,
-        scheduler_profile=args.scheduler_profile,
-        model_cache=args.model_cache,
         smoke_request=args.smoke_request,
-        benchmark=args.benchmark,
         endpoint_url=ctx.endpoint_url,
     )
     return "Smoke request completed"
@@ -110,16 +103,7 @@ def run_guidellm_benchmark_task(args, ctx):
         return "GuideLLM benchmark disabled"
 
     run_guidellm_benchmark_command.run(
-        config_dir=args.config_dir,
-        preset_name=args.preset_name,
         namespace=args.namespace,
-        platform=args.platform,
-        model_key=args.model_key,
-        model=args.model,
-        scheduler_profile_key=args.scheduler_profile_key,
-        scheduler_profile=args.scheduler_profile,
-        model_cache=args.model_cache,
-        smoke_request=args.smoke_request,
         benchmark=args.benchmark,
         endpoint_url=ctx.endpoint_url,
     )
@@ -132,12 +116,12 @@ def capture_inference_service_state_task(args, ctx):
     """Capture the LLMInferenceService state and related resources"""
 
     namespace = getattr(ctx, "namespace", None)
-    platform = getattr(ctx, "platform", None)
-    if not namespace or not platform:
+    inference_service = getattr(ctx, "inference_service", None)
+    if not namespace or not inference_service:
         return "Test inputs unavailable; skipping state capture"
 
     capture_llmisvc_state.run(
-        llmisvc_name=platform["inference_service"]["name"],
+        llmisvc_name=inference_service["name"],
         namespace=namespace,
     )
     return "Inference-service artifacts captured"
@@ -166,13 +150,14 @@ def cleanup_runtime_resources_task(args, ctx):
     """Delete smoke and benchmark helper resources"""
 
     namespace = getattr(ctx, "namespace", None)
-    platform = getattr(ctx, "platform", None)
+    inference_service = getattr(ctx, "inference_service", None)
+    smoke = getattr(ctx, "smoke", None)
     benchmark = getattr(ctx, "benchmark", None)
-    if not namespace or not platform:
+    if not namespace or not inference_service or not smoke:
         return "Test inputs unavailable; skipping cleanup"
 
     benchmark_name = benchmark["job_name"] if benchmark else "guidellm-benchmark"
-    smoke_job_name = platform["smoke"]["job_name"]
+    smoke_job_name = smoke["job_name"]
 
     llmd_runtime.oc(
         "delete",
@@ -211,7 +196,8 @@ def capture_namespace_events_task(args, ctx):
 
     artifact_dir = getattr(ctx, "artifact_dir", None)
     namespace = getattr(ctx, "namespace", None)
-    if not artifact_dir or not namespace:
+    capture_namespace_events = getattr(ctx, "capture_namespace_events", False)
+    if not artifact_dir or not namespace or not capture_namespace_events:
         return "Test inputs unavailable; skipping namespace events capture"
 
     shell.run(

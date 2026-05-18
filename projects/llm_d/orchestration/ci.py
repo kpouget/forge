@@ -15,7 +15,7 @@ from projects.core.library import config, vault
 from projects.core.library.export import caliper_export_command
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
 from projects.llm_d.toolbox.test.main import run as test_toolbox_run
 
@@ -44,12 +44,30 @@ def run_prepare_phase() -> int:
 
 def run_test_phase() -> int:
     config = load_runtime_configuration()
-    return test_toolbox_run(**phase_inputs.test_kwargs(config))
+    return test_toolbox_run(
+        config_dir=str(config.config_dir),
+        namespace=config.namespace,
+        inference_service=config.platform["inference_service"],
+        gateway=config.platform["gateway"],
+        model=config.model,
+        scheduler_profile_key=config.scheduler_profile_key,
+        scheduler_profile=config.scheduler_profile,
+        model_cache=config.model_cache,
+        smoke=config.platform["smoke"],
+        smoke_request=config.smoke_request,
+        benchmark=config.benchmark,
+        capture_namespace_events=config.platform["artifacts"]["capture_namespace_events"],
+    )
 
 
 def run_cleanup_phase() -> int:
     config = load_runtime_configuration()
-    return cleanup_toolbox_run(**phase_inputs.cleanup_kwargs(config))
+    return cleanup_toolbox_run(
+        namespace=config.namespace,
+        inference_service_name=config.platform["inference_service"]["name"],
+        cleanup_timeout_seconds=config.platform["cluster"]["cleanup_timeout_seconds"],
+        benchmark_name=config.benchmark["job_name"] if config.benchmark else None,
+    )
 
 
 def list_vaults() -> list[str]:

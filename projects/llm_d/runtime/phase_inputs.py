@@ -300,57 +300,6 @@ def build_test_inputs(
     )
 
 
-def cleanup_kwargs(config: ResolvedConfig | CleanupInputs | PrepareInputs) -> dict[str, Any]:
-    return {
-        "namespace": config.namespace,
-        "platform": config.platform,
-        "benchmark": config.benchmark,
-    }
-
-
-def prepare_model_cache_kwargs(
-    config: ResolvedConfig | PrepareInputs | PrepareModelCacheInputs,
-) -> dict[str, Any]:
-    return {
-        "preset_name": config.preset_name,
-        "namespace": config.namespace,
-        "namespace_is_managed": config.namespace_is_managed,
-        "model_key": config.model_key,
-        "model": config.model,
-        "model_cache": config.model_cache,
-    }
-
-
-def prepare_kwargs(config: ResolvedConfig | PrepareInputs) -> dict[str, Any]:
-    return {
-        "config_dir": str(config.config_dir),
-        "preset_name": config.preset_name,
-        "namespace": config.namespace,
-        "namespace_is_managed": config.namespace_is_managed,
-        "platform": config.platform,
-        "model_key": config.model_key,
-        "model": config.model,
-        "model_cache": config.model_cache,
-        "benchmark": config.benchmark,
-    }
-
-
-def test_kwargs(config: ResolvedConfig | TestInputs) -> dict[str, Any]:
-    return {
-        "config_dir": str(config.config_dir),
-        "preset_name": config.preset_name,
-        "namespace": config.namespace,
-        "platform": config.platform,
-        "model_key": config.model_key,
-        "model": config.model,
-        "scheduler_profile_key": config.scheduler_profile_key,
-        "scheduler_profile": config.scheduler_profile,
-        "model_cache": config.model_cache,
-        "smoke_request": config.smoke_request,
-        "benchmark": config.benchmark,
-    }
-
-
 def cleanup_inputs_from_prepare(inputs: PrepareInputs) -> CleanupInputs:
     return CleanupInputs(
         artifact_dir=inputs.artifact_dir,

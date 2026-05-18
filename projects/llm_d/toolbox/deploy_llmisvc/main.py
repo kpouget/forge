@@ -9,32 +9,26 @@ from projects.llm_d.runtime import llmd_runtime, phase_inputs
 def run(
     *,
     config_dir: str,
-    preset_name: str,
     namespace: str,
-    platform: dict,
-    model_key: str,
+    inference_service: dict,
+    gateway: dict,
     model: dict,
     scheduler_profile_key: str,
     scheduler_profile: dict | None,
     model_cache: dict,
-    smoke_request: dict,
-    benchmark: dict | None = None,
 ) -> str:
     """
     Deploy the llm_d LLMInferenceService and wait for its endpoint.
 
     Args:
         config_dir: Configuration directory
-        preset_name: Selected preset name
         namespace: Namespace used by llm_d
-        platform: Platform configuration
-        model_key: Selected model key
+        inference_service: Inference-service configuration block
+        gateway: Gateway configuration block
         model: Selected model configuration
         scheduler_profile_key: Scheduler profile key
         scheduler_profile: Scheduler profile configuration
         model_cache: Model-cache configuration
-        smoke_request: Smoke-request configuration
-        benchmark: Optional benchmark configuration
     """
 
     llmd_runtime.init()
@@ -49,16 +43,19 @@ def deploy_llmisvc_task(args, ctx):
     config = phase_inputs.build_test_inputs(
         artifact_dir=args.artifact_dir,
         config_dir=args.config_dir,
-        preset_name=args.preset_name,
+        preset_name="deploy-llmisvc",
         namespace=args.namespace,
-        platform=args.platform,
-        model_key=args.model_key,
+        platform={
+            "inference_service": args.inference_service,
+            "gateway": args.gateway,
+        },
+        model_key="unused",
         model=args.model,
         scheduler_profile_key=args.scheduler_profile_key,
         scheduler_profile=args.scheduler_profile,
         model_cache=args.model_cache,
-        smoke_request=args.smoke_request,
-        benchmark=args.benchmark,
+        smoke_request={},
+        benchmark=None,
     )
     ctx.endpoint_url = deploy_llmisvc(config)
     return f"Endpoint resolved: {ctx.endpoint_url}"

@@ -26,7 +26,6 @@ LOGGER = logging.getLogger(__name__)
 def run(
     *,
     config_dir: str,
-    preset_name: str,
     namespace: str,
     namespace_is_managed: bool,
     platform: dict,
@@ -39,7 +38,6 @@ def run(
 
     Args:
         config_dir: Configuration directory
-        preset_name: Selected preset name
         namespace: Namespace used by llm_d
         namespace_is_managed: Whether namespace lifecycle is managed by llm_d
         platform: Platform configuration
@@ -58,7 +56,7 @@ def _prepare_inputs(args) -> phase_inputs.PrepareInputs:
     return phase_inputs.build_prepare_inputs(
         artifact_dir=args.artifact_dir,
         config_dir=args.config_dir,
-        preset_name=args.preset_name,
+        preset_name="prepare",
         namespace=args.namespace,
         namespace_is_managed=args.namespace_is_managed,
         platform=args.platform,
@@ -73,9 +71,8 @@ def _prepare_inputs(args) -> phase_inputs.PrepareInputs:
 def load_inputs(args, ctx):
     """Record the prepare inputs"""
 
-    ctx.preset_name = args.preset_name
     ctx.namespace = args.namespace
-    return f"Loaded prepare inputs for preset {ctx.preset_name}"
+    return f"Loaded prepare inputs for namespace {ctx.namespace}"
 
 
 @task
@@ -187,7 +184,10 @@ def prepare_rhoai_operator_task(args, ctx):
 def apply_datasciencecluster_task(args, ctx):
     """Apply the DataScienceCluster manifest"""
 
-    apply_datasciencecluster_command.run(**phase_inputs.prepare_kwargs(_prepare_inputs(args)))
+    apply_datasciencecluster_command.run(
+        config_dir=args.config_dir,
+        rhoai=args.platform["rhoai"],
+    )
     return "DataScienceCluster applied"
 
 
@@ -195,7 +195,7 @@ def apply_datasciencecluster_task(args, ctx):
 def wait_for_datasciencecluster_ready_task(args, ctx):
     """Wait for the DataScienceCluster to become ready"""
 
-    wait_datasciencecluster_ready_command.run(**phase_inputs.prepare_kwargs(_prepare_inputs(args)))
+    wait_datasciencecluster_ready_command.run(rhoai=args.platform["rhoai"])
     return "DataScienceCluster ready"
 
 
@@ -215,7 +215,10 @@ def ensure_required_crds_task(args, ctx):
 def ensure_gateway_task(args, ctx):
     """Ensure the gateway exists and is programmed"""
 
-    ensure_gateway_command.run(**phase_inputs.prepare_kwargs(_prepare_inputs(args)))
+    ensure_gateway_command.run(
+        config_dir=args.config_dir,
+        gateway=args.platform["gateway"],
+    )
     return "Gateway ready"
 
 
@@ -238,7 +241,12 @@ def cleanup_previous_run_task(args, ctx):
     """Delete leftover llm_d resources from the namespace"""
 
     config = _prepare_inputs(args)
-    cleanup_toolbox.run(**phase_inputs.cleanup_kwargs(config))
+    cleanup_toolbox.run(
+        namespace=config.namespace,
+        inference_service_name=config.platform["inference_service"]["name"],
+        cleanup_timeout_seconds=config.platform["cluster"]["cleanup_timeout_seconds"],
+        benchmark_name=config.benchmark["job_name"] if config.benchmark else None,
+    )
     return f"Previous llm_d leftovers deleted from {config.namespace}"
 
 
@@ -247,7 +255,13 @@ def prepare_model_cache_task(args, ctx):
     """Prepare the shared model cache if enabled"""
 
     config = _prepare_inputs(args)
-    prepare_model_cache.run(**phase_inputs.prepare_model_cache_kwargs(config))
+    prepare_model_cache.run(
+        namespace=config.namespace,
+        namespace_is_managed=config.namespace_is_managed,
+        model_key=config.model_key,
+        model=config.model,
+        model_cache=config.model_cache,
+    )
     return "Model cache prepared"
 
 
@@ -475,15 +489,21 @@ def ensure_required_crds(crd_names: list[str], config: phase_inputs.PrepareInput
 
 
 def apply_datasciencecluster(config: phase_inputs.PrepareInputs) -> None:
-    apply_datasciencecluster_command.run(**phase_inputs.prepare_kwargs(config))
+    apply_datasciencecluster_command.run(
+        config_dir=str(config.config_dir),
+        rhoai=config.platform["rhoai"],
+    )
 
 
 def wait_for_datasciencecluster_ready(config: phase_inputs.PrepareInputs) -> None:
-    wait_datasciencecluster_ready_command.run(**phase_inputs.prepare_kwargs(config))
+    wait_datasciencecluster_ready_command.run(rhoai=config.platform["rhoai"])
 
 
 def ensure_gateway(config: phase_inputs.PrepareInputs) -> None:
-    ensure_gateway_command.run(**phase_inputs.prepare_kwargs(config))
+    ensure_gateway_command.run(
+        config_dir=str(config.config_dir),
+        gateway=config.platform["gateway"],
+    )
 
 
 def ensure_test_namespace(config: phase_inputs.PrepareInputs) -> None:

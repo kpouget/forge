@@ -9,15 +9,17 @@ from projects.llm_d.runtime import llmd_runtime, phase_inputs
 def run(
     *,
     namespace: str,
-    platform: dict,
-    benchmark: dict | None = None,
+    inference_service_name: str,
+    cleanup_timeout_seconds: int,
+    benchmark_name: str | None = None,
 ) -> int:
     """Delete llm_d runtime leftovers from a namespace.
 
     Args:
         namespace: Namespace to clean
-        platform: llm_d platform configuration
-        benchmark: Optional benchmark configuration
+        inference_service_name: Inference-service resource name
+        cleanup_timeout_seconds: Cleanup timeout in seconds
+        benchmark_name: Optional GuideLLM benchmark job name
     """
 
     llmd_runtime.init()
@@ -29,21 +31,15 @@ def run(
 def delete_leftovers(args, ctx):
     """Delete llm_d runtime leftovers"""
 
-    inputs = phase_inputs.build_cleanup_inputs(
-        artifact_dir=args.artifact_dir,
-        namespace=args.namespace,
-        platform=args.platform,
-        benchmark=args.benchmark,
-    )
-    if not llmd_runtime.resource_exists("namespace", inputs.namespace):
-        return f"Namespace {inputs.namespace} does not exist; nothing to clean"
+    if not llmd_runtime.resource_exists("namespace", args.namespace):
+        return f"Namespace {args.namespace} does not exist; nothing to clean"
 
-    inference_service_name = inputs.platform["inference_service"]["name"]
-    namespace = inputs.namespace
-    cleanup_timeout_seconds = inputs.platform["cluster"]["cleanup_timeout_seconds"]
+    inference_service_name = args.inference_service_name
+    namespace = args.namespace
+    cleanup_timeout_seconds = args.cleanup_timeout_seconds
     benchmark_names = {"guidellm-benchmark"}
-    if inputs.benchmark:
-        benchmark_names.add(inputs.benchmark["job_name"])
+    if args.benchmark_name:
+        benchmark_names.add(args.benchmark_name)
 
     shell.run(
         f"oc delete llminferenceservice {inference_service_name} "

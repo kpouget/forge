@@ -9,28 +9,14 @@ from projects.llm_d.runtime import llmd_runtime, phase_inputs
 def run(
     *,
     config_dir: str,
-    preset_name: str,
-    namespace: str,
-    namespace_is_managed: bool,
-    platform: dict,
-    model_key: str,
-    model: dict,
-    model_cache: dict,
-    benchmark: dict | None = None,
+    gateway: dict,
 ) -> int:
     """
     Ensure the llm_d gateway exists and is programmed.
 
     Args:
         config_dir: Configuration directory
-        preset_name: Selected preset name
-        namespace: Namespace used by llm_d
-        namespace_is_managed: Whether namespace lifecycle is managed by llm_d
-        platform: Platform configuration
-        model_key: Selected model key
-        model: Selected model configuration
-        model_cache: Model-cache configuration
-        benchmark: Optional benchmark configuration
+        gateway: Gateway configuration block
     """
 
     llmd_runtime.init()
@@ -45,14 +31,14 @@ def ensure_gateway(args, ctx):
     config = phase_inputs.build_prepare_inputs(
         artifact_dir=args.artifact_dir,
         config_dir=args.config_dir,
-        preset_name=args.preset_name,
-        namespace=args.namespace,
-        namespace_is_managed=args.namespace_is_managed,
-        platform=args.platform,
-        model_key=args.model_key,
-        model=args.model,
-        model_cache=args.model_cache,
-        benchmark=args.benchmark,
+        preset_name="ensure-gateway",
+        namespace="unused",
+        namespace_is_managed=False,
+        platform={"gateway": args.gateway},
+        model_key="unused",
+        model={},
+        model_cache={},
+        benchmark=None,
     )
     gateway = config.platform["gateway"]
     if not llmd_runtime.resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):

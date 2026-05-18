@@ -12,34 +12,20 @@ from projects.llm_d.runtime import llmd_runtime, phase_inputs
 
 def run(
     *,
-    config_dir: str,
-    preset_name: str,
     namespace: str,
-    platform: dict,
-    model_key: str,
+    smoke: dict,
     model: dict,
-    scheduler_profile_key: str,
-    scheduler_profile: dict | None,
-    model_cache: dict,
     smoke_request: dict,
-    benchmark: dict | None = None,
     endpoint_url: str,
 ) -> dict[str, object]:
     """
     Run the llm_d smoke request job against a resolved endpoint.
 
     Args:
-        config_dir: Configuration directory
-        preset_name: Selected preset name
         namespace: Namespace used by llm_d
-        platform: Platform configuration
-        model_key: Selected model key
+        smoke: Smoke configuration block
         model: Selected model configuration
-        scheduler_profile_key: Scheduler profile key
-        scheduler_profile: Scheduler profile configuration
-        model_cache: Model-cache configuration
         smoke_request: Smoke-request configuration
-        benchmark: Optional benchmark configuration
         endpoint_url: Gateway endpoint URL returned by the deploy command
     """
 
@@ -54,17 +40,17 @@ def run_smoke_request_task(args, ctx):
 
     config = phase_inputs.build_test_inputs(
         artifact_dir=args.artifact_dir,
-        config_dir=args.config_dir,
-        preset_name=args.preset_name,
+        config_dir=".",
+        preset_name="run-smoke-request",
         namespace=args.namespace,
-        platform=args.platform,
-        model_key=args.model_key,
+        platform={"smoke": args.smoke},
+        model_key="unused",
         model=args.model,
-        scheduler_profile_key=args.scheduler_profile_key,
-        scheduler_profile=args.scheduler_profile,
-        model_cache=args.model_cache,
+        scheduler_profile_key="default",
+        scheduler_profile=None,
+        model_cache={},
         smoke_request=args.smoke_request,
-        benchmark=args.benchmark,
+        benchmark=None,
     )
     ctx.response = run_smoke_request(config, args.endpoint_url)
     return "Smoke request completed"

@@ -12,7 +12,6 @@ LOGGER = logging.getLogger(__name__)
 
 def run(
     *,
-    preset_name: str,
     namespace: str,
     namespace_is_managed: bool,
     model_key: str,
@@ -22,7 +21,6 @@ def run(
     """Prepare the shared model cache PVC and populate it when needed.
 
     Args:
-        preset_name: Selected preset name
         namespace: Namespace where the workload runs
         namespace_is_managed: Whether namespace lifecycle is managed by llm_d
         model_key: Selected model key
@@ -41,7 +39,7 @@ def prepare_model_cache(args, ctx):
 
     config = phase_inputs.build_prepare_model_cache_inputs(
         artifact_dir=args.artifact_dir,
-        preset_name=args.preset_name,
+        preset_name="prepare-model-cache",
         namespace=args.namespace,
         namespace_is_managed=args.namespace_is_managed,
         model_key=args.model_key,
@@ -50,7 +48,7 @@ def prepare_model_cache(args, ctx):
     )
     cache_spec = llmd_runtime.resolve_model_cache(config)
     if not cache_spec:
-        LOGGER.info("Model cache disabled for preset=%s", config.preset_name)
+        LOGGER.info("Model cache disabled for namespace=%s", config.namespace)
         return "Model cache disabled"
 
     if config.namespace_is_managed:

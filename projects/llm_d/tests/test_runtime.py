@@ -248,7 +248,20 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
     result = orchestration.run_test_phase()
 
     assert result == 23
-    assert captured == phase_inputs.test_kwargs(config)
+    assert captured == {
+        "config_dir": str(config.config_dir),
+        "namespace": config.namespace,
+        "inference_service": config.platform["inference_service"],
+        "gateway": config.platform["gateway"],
+        "model": config.model,
+        "scheduler_profile_key": config.scheduler_profile_key,
+        "scheduler_profile": config.scheduler_profile,
+        "model_cache": config.model_cache,
+        "smoke": config.platform["smoke"],
+        "smoke_request": config.smoke_request,
+        "benchmark": config.benchmark,
+        "capture_namespace_events": config.platform["artifacts"]["capture_namespace_events"],
+    }
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -272,7 +285,12 @@ def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     result = orchestration.run_cleanup_phase()
 
     assert result == 29
-    assert captured == phase_inputs.cleanup_kwargs(config)
+    assert captured == {
+        "namespace": config.namespace,
+        "inference_service_name": config.platform["inference_service"]["name"],
+        "cleanup_timeout_seconds": config.platform["cluster"]["cleanup_timeout_seconds"],
+        "benchmark_name": config.benchmark["job_name"] if config.benchmark else None,
+    }
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -539,12 +557,25 @@ def test_prepare_model_cache_task_delegates_to_toolbox_command(
     prepare_toolbox.prepare_model_cache_task(
         SimpleNamespace(
             artifact_dir=config.artifact_dir,
-            **phase_inputs.prepare_kwargs(config),
+            config_dir=str(config.config_dir),
+            namespace=config.namespace,
+            namespace_is_managed=config.namespace_is_managed,
+            platform=config.platform,
+            model_key=config.model_key,
+            model=config.model,
+            model_cache=config.model_cache,
+            benchmark=config.benchmark,
         ),
         SimpleNamespace(),
     )
 
-    assert captured == phase_inputs.prepare_model_cache_kwargs(config)
+    assert captured == {
+        "namespace": config.namespace,
+        "namespace_is_managed": config.namespace_is_managed,
+        "model_key": config.model_key,
+        "model": config.model,
+        "model_cache": config.model_cache,
+    }
 
 
 def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
@@ -591,12 +622,24 @@ def test_cleanup_previous_run_task_delegates_to_cleanup_toolbox(
 
     args = SimpleNamespace(
         artifact_dir=config.artifact_dir,
-        **phase_inputs.prepare_kwargs(config),
+        config_dir=str(config.config_dir),
+        namespace=config.namespace,
+        namespace_is_managed=config.namespace_is_managed,
+        platform=config.platform,
+        model_key=config.model_key,
+        model=config.model,
+        model_cache=config.model_cache,
+        benchmark=config.benchmark,
     )
     result = prepare_toolbox.cleanup_previous_run_task(args, SimpleNamespace())
 
     assert result == f"Previous llm_d leftovers deleted from {config.namespace}"
-    assert captured == phase_inputs.cleanup_kwargs(config)
+    assert captured == {
+        "namespace": config.namespace,
+        "inference_service_name": config.platform["inference_service"]["name"],
+        "cleanup_timeout_seconds": config.platform["cluster"]["cleanup_timeout_seconds"],
+        "benchmark_name": config.benchmark["job_name"] if config.benchmark else None,
+    }
 
 
 def test_prepare_gpu_operator_delegates_to_bootstrap_command(
@@ -681,7 +724,10 @@ def test_apply_datasciencecluster_delegates_to_toolbox_command(
 
     prepare_toolbox.apply_datasciencecluster(config)
 
-    assert captured == phase_inputs.prepare_kwargs(config)
+    assert captured == {
+        "config_dir": str(config.config_dir),
+        "rhoai": config.platform["rhoai"],
+    }
 
 
 def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
@@ -698,7 +744,7 @@ def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
 
     prepare_toolbox.wait_for_datasciencecluster_ready(config)
 
-    assert captured == phase_inputs.prepare_kwargs(config)
+    assert captured == {"rhoai": config.platform["rhoai"]}
 
 
 def test_ensure_gateway_delegates_to_toolbox_command(
@@ -715,7 +761,10 @@ def test_ensure_gateway_delegates_to_toolbox_command(
 
     prepare_toolbox.ensure_gateway(config)
 
-    assert captured == phase_inputs.prepare_kwargs(config)
+    assert captured == {
+        "config_dir": str(config.config_dir),
+        "gateway": config.platform["gateway"],
+    }
 
 
 def test_ensure_operator_subscription_delegates_to_cluster_toolbox(
@@ -991,7 +1040,8 @@ def test_guidellm_toolbox_runs_benchmark_steps(
     args = SimpleNamespace(
         artifact_dir=config.artifact_dir,
         endpoint_url="https://example.test",
-        **phase_inputs.test_kwargs(config),
+        namespace=config.namespace,
+        benchmark=config.benchmark,
     )
     ctx = SimpleNamespace()
 
@@ -1044,12 +1094,30 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
     )
 
     ctx = SimpleNamespace()
-    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
+    args = SimpleNamespace(
+        config_dir=str(config.config_dir),
+        namespace=config.namespace,
+        inference_service=config.platform["inference_service"],
+        gateway=config.platform["gateway"],
+        model=config.model,
+        scheduler_profile_key=config.scheduler_profile_key,
+        scheduler_profile=config.scheduler_profile,
+        model_cache=config.model_cache,
+    )
     result = test_toolbox.deploy_inference_service_task(args, ctx)
 
     assert result == "Endpoint resolved: https://example.test"
     assert ctx.endpoint_url == "https://example.test"
-    assert captured == phase_inputs.test_kwargs(config)
+    assert captured == {
+        "config_dir": str(config.config_dir),
+        "namespace": config.namespace,
+        "inference_service": config.platform["inference_service"],
+        "gateway": config.platform["gateway"],
+        "model": config.model,
+        "scheduler_profile_key": config.scheduler_profile_key,
+        "scheduler_profile": config.scheduler_profile,
+        "model_cache": config.model_cache,
+    }
 
 
 def test_test_phase_smoke_delegates_to_toolbox_command(
@@ -1065,13 +1133,21 @@ def test_test_phase_smoke_delegates_to_toolbox_command(
     )
 
     ctx = SimpleNamespace(endpoint_url="https://example.test")
-    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
+    args = SimpleNamespace(
+        namespace=config.namespace,
+        smoke=config.platform["smoke"],
+        model=config.model,
+        smoke_request=config.smoke_request,
+    )
     response = test_toolbox.run_smoke_request_task(args, ctx)
 
     assert response == "Smoke request completed"
     assert ctx.smoke_response["choices"][0]["text"] == "ok"
     assert captured == {
-        **phase_inputs.test_kwargs(config),
+        "namespace": config.namespace,
+        "smoke": config.platform["smoke"],
+        "model": config.model,
+        "smoke_request": config.smoke_request,
         "endpoint_url": "https://example.test",
     }
 
@@ -1092,12 +1168,16 @@ def test_test_phase_guidellm_delegates_to_toolbox_command(
     )
 
     ctx = SimpleNamespace(endpoint_url="https://example.test")
-    args = SimpleNamespace(**phase_inputs.test_kwargs(config))
+    args = SimpleNamespace(
+        namespace=config.namespace,
+        benchmark=config.benchmark,
+    )
     result = test_toolbox.run_guidellm_benchmark_task(args, ctx)
 
     assert result == f"GuideLLM benchmark {config.benchmark['job_name']} completed"
     assert captured == {
-        **phase_inputs.test_kwargs(config),
+        "namespace": config.namespace,
+        "benchmark": config.benchmark,
         "endpoint_url": "https://example.test",
     }
 

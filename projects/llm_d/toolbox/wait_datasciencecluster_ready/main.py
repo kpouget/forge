@@ -8,29 +8,13 @@ from projects.llm_d.runtime import llmd_runtime
 
 def run(
     *,
-    config_dir: str,
-    preset_name: str,
-    namespace: str,
-    namespace_is_managed: bool,
-    platform: dict,
-    model_key: str,
-    model: dict,
-    model_cache: dict,
-    benchmark: dict | None = None,
+    rhoai: dict,
 ) -> int:
     """
     Wait for the llm_d DataScienceCluster to become ready.
 
     Args:
-        config_dir: Configuration directory
-        preset_name: Selected preset name
-        namespace: Namespace used by llm_d
-        namespace_is_managed: Whether namespace lifecycle is managed by llm_d
-        platform: Platform configuration
-        model_key: Selected model key
-        model: Selected model configuration
-        model_cache: Model-cache configuration
-        benchmark: Optional benchmark configuration
+        rhoai: RHOAI configuration block
     """
 
     llmd_runtime.init()
@@ -42,7 +26,7 @@ def run(
 def wait_for_datasciencecluster_ready(args, ctx):
     """Wait for the DataScienceCluster phase to become Ready"""
 
-    rhoai = args.platform["rhoai"]
+    rhoai = args.rhoai
 
     def _dsc_ready() -> bool:
         payload = llmd_runtime.oc_get_json(
