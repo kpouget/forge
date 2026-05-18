@@ -18,7 +18,7 @@ from projects.core.dsl import (
     task,
     template,
 )
-from projects.core.dsl.utils.k8s import sanitize_k8s_name
+from projects.core.dsl.utils.k8s import is_valid_k8s_name, sanitize_k8s_name
 from projects.core.library import env as env_mod
 
 logger = logging.getLogger(__name__)
@@ -133,14 +133,19 @@ def generate_job_name(args, ctx):
     """Generate job name if not provided and ensure K8s compatibility"""
 
     if args.job_name:
-        # Sanitize user-provided job name
-        raw_name = args.job_name
+        # Validate that user-provided job name is already normalized
+        if not is_valid_k8s_name(args.job_name):
+            normalized_name = sanitize_k8s_name(args.job_name)
+            raise ValueError(
+                f"Job name '{args.job_name}' is not valid for Kubernetes. "
+                f"Please use the normalized name: '{normalized_name}'"
+            )
+        ctx.final_job_name = args.job_name
     else:
         # Generate and sanitize auto job name
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         raw_name = f"forge-{args.project}-{timestamp}"
-
-    ctx.final_job_name = sanitize_k8s_name(raw_name)
+        ctx.final_job_name = sanitize_k8s_name(raw_name)
 
     return f"Job name: {ctx.final_job_name}"
 

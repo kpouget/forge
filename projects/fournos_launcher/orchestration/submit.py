@@ -7,6 +7,7 @@ import threading
 import traceback
 from datetime import datetime
 
+from projects.core.dsl.utils.k8s import sanitize_k8s_name
 from projects.core.library import config, env, run, vault
 from projects.core.library.run_parallel import Parallel
 from projects.fournos_launcher.orchestration import job_management, pr_args
@@ -159,6 +160,7 @@ def submit_job():
         # Generate timestamp for parallel job names (shared across all parallel jobs)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         raw_name = f"forge-{project_name}-{timestamp}"
+        raw_name = sanitize_k8s_name(raw_name)
 
         # Track failures and job names across parallel jobs
         failure_lock = threading.Lock()
@@ -179,7 +181,7 @@ def submit_job():
             parallel_display_name = f"{project_name} {args_str} (job {job_index})".strip()
 
             # Create unique job name with timestamp and index
-            unique_job_name = f"{raw_name}-{job_index}"
+            unique_job_name = sanitize_k8s_name(f"{raw_name}-{job_index}")
 
             try:
                 # Track the job name for cleanup (job gets submitted even if waiting fails)
@@ -240,7 +242,7 @@ def submit_job():
 
         # Generate unique job name for single job
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        single_job_name = f"forge-{project_name}-{timestamp}"
+        single_job_name = sanitize_k8s_name(f"forge-{project_name}-{timestamp}")
 
         try:
             submit_and_wait(
