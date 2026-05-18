@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from projects.core.dsl import always, execute_tasks, task, toolbox
+from projects.core.dsl import always, execute_tasks, shell, task, toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
@@ -154,12 +154,8 @@ def capture_namespace_events_task(args, ctx):
     if not config:
         return "Test inputs unavailable; skipping namespace events capture"
 
-    llmd_runtime.oc(
-        "get",
-        "events",
-        "-n",
-        config.namespace,
-        "--sort-by=.metadata.creationTimestamp",
+    shell.run(
+        f"oc get events -n {config.namespace} --sort-by=.metadata.creationTimestamp",
         check=False,
         stdout_dest=config.artifact_dir / "artifacts" / "namespace.events.txt",
     )
