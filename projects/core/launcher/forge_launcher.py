@@ -187,18 +187,22 @@ class ForgeLauncher:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    def _run_toolbox_command(self, command: str, working_dir: str | None = None) -> int:
+    def _run_toolbox_command(self, command: list[str], working_dir: str | None = None) -> int:
         """Run a command in the toolbox environment."""
+        import shlex
+
+        command_str = " ".join(shlex.quote(arg) for arg in command)
+
         if self.verbose:
-            click.echo(f"🔧 Running in container: {command}")
+            click.echo(f"🔧 Running in container: {command_str}")
 
         env_vars = self._get_container_env()
         env_setup = "; ".join(f'export {k}="{v}"' for k, v in env_vars.items() if v)
 
         if working_dir:
-            full_command = f"cd {working_dir} && {env_setup}; {command}"
+            full_command = f"cd {working_dir} && {env_setup}; {command_str}"
         else:
-            full_command = f"{env_setup}; {command}"
+            full_command = f"{env_setup}; {command_str}"
 
         if self._has_toolbox():
             cmd = [
@@ -431,18 +435,16 @@ def enter(ctx, command, args, here):
     launcher = ctx.obj["launcher"]
 
     if command:
-        full_command = f"{command} {' '.join(args)}"
-    elif here:
-        full_command = launcher.config["forge_toolbox_command"]
-        working_dir = os.getcwd()
+        full_command = [command] + list(args)
     else:
-        full_command = launcher.config["forge_toolbox_command"]
-        working_dir = launcher.config["forge_home"]
+        full_command = [launcher.config["forge_toolbox_command"]]
 
     if not here and not command:
         working_dir = launcher.config["forge_home"]
+    elif here:
+        working_dir = os.getcwd()
     else:
-        working_dir = os.getcwd() if here else None
+        working_dir = None
 
     sys.exit(launcher._run_toolbox_command(full_command, working_dir))
 
@@ -450,10 +452,10 @@ def enter(ctx, command, args, here):
 @cli.command()
 @click.argument("args", nargs=-1)
 @click.pass_context
-def run(ctx, args):
+def run_ci(ctx, args):
     """Run FORGE's main run command in the container."""
     launcher = ctx.obj["launcher"]
-    command = f"./run {' '.join(args)}"
+    command = ["./bin/run_ci"] + list(args)
     working_dir = launcher.config["forge_home"]
     sys.exit(launcher._run_toolbox_command(command, working_dir))
 
@@ -461,10 +463,21 @@ def run(ctx, args):
 @cli.command()
 @click.argument("args", nargs=-1)
 @click.pass_context
-def run_cmd(ctx, args):
+def run_cli(ctx, args):
+    """Run FORGE's CLI command in the container."""
+    launcher = ctx.obj["launcher"]
+    command = ["./bin/run_cli"] + list(args)
+    working_dir = launcher.config["forge_home"]
+    sys.exit(launcher._run_toolbox_command(command, working_dir))
+
+
+@cli.command()
+@click.argument("args", nargs=-1)
+@click.pass_context
+def run_toolbox(ctx, args):
     """Run FORGE's run_toolbox.py command in the container."""
     launcher = ctx.obj["launcher"]
-    command = f"./run_toolbox.py {' '.join(args)}"
+    command = ["./bin/run_toolbox"] + list(args)
     working_dir = launcher.config["forge_home"]
     sys.exit(launcher._run_toolbox_command(command, working_dir))
 
