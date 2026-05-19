@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
-from projects.core.dsl import execute_tasks, shell, task, toolbox
+from projects.core.dsl import execute_tasks, shell, task
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 
 
@@ -166,10 +164,3 @@ def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
         ignore_not_found=True,
     )
     return not payload or not payload.get("items")
-
-
-main = toolbox.create_toolbox_main(run)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import logging
 
-from projects.core.dsl import always, execute_tasks, shell, task, toolbox
+from projects.core.dsl import always, execute_tasks, shell, task
 from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
@@ -209,10 +207,3 @@ def capture_namespace_events_task(args, ctx):
         stdout_dest=artifact_dir / "artifacts" / "namespace.events.txt",
     )
     return "Namespace events captured"
-
-
-main = toolbox.create_toolbox_main(run)
-
-
-if __name__ == "__main__":
-    main()

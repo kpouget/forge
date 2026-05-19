@@ -14,10 +14,10 @@ from projects.core.library import ci as ci_lib
 from projects.core.library import config, vault
 from projects.core.library.export import caliper_export_command
 from projects.llm_d.orchestration import configuration as llmd_configuration
+from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
+from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
 from projects.llm_d.runtime import llmd_runtime
-from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
-from projects.llm_d.toolbox.test.main import run as test_toolbox_run
 
 
 def init_runtime() -> None:

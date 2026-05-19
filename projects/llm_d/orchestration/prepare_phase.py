@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
 import json
@@ -8,12 +6,12 @@ from pathlib import Path
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import execute_tasks, task
+from projects.llm_d.orchestration import cleanup_phase as cleanup_toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
 from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
 from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
 from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache
 from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
@@ -595,10 +593,3 @@ def capture_namespace_events(namespace: str, destination: Path) -> None:
     )
     if result.returncode == 0 and result.stdout:
         llmd_runtime.write_text(destination, result.stdout)
-
-
-main = toolbox.create_toolbox_main(run)
-
-
-if __name__ == "__main__":
-    main()

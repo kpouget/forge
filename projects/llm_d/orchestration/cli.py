@@ -8,10 +8,10 @@ import click
 
 from projects.core.library.cli import safe_cli_command
 from projects.llm_d.orchestration import configuration as llmd_configuration
+from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
+from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
 from projects.llm_d.runtime import llmd_runtime
-from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
-from projects.llm_d.toolbox.test.main import run as test_toolbox_run
 
 logger = logging.getLogger(__name__)
 

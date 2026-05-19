@@ -11,20 +11,20 @@ from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_dep
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
 from projects.core.library import config as forge_config
 from projects.llm_d.orchestration import ci as llmd_ci
+from projects.llm_d.orchestration import cleanup_phase as cleanup_toolbox
 from projects.llm_d.orchestration import cli as llmd_cli
 from projects.llm_d.orchestration import configuration as llmd_configuration
+from projects.llm_d.orchestration import prepare_phase as prepare_toolbox
+from projects.llm_d.orchestration import test_phase as test_toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_toolbox
 from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
 from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
 from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc_toolbox
 from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_toolbox
-from projects.llm_d.toolbox.prepare import main as prepare_toolbox
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache_toolbox
 from projects.llm_d.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_toolbox
 from projects.llm_d.toolbox.run_smoke_request import main as run_smoke_request_toolbox
-from projects.llm_d.toolbox.test import main as test_toolbox
 from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_toolbox,
 )
