@@ -25,4 +25,4 @@ jobs:
       - uses: ./.github/steps/prepare_minimal_ubuntu_image
 
       - name: Check that no symlink is broken
-        run: bin/run_toolbox.py repo validate_no_broken_link
+        run: bin/run_ansible_toolbox.py repo validate_no_broken_link

@@ -89,7 +89,7 @@ def run_toolbox_from_config(
     cmd_env = " ".join(env_vals)
 
     return run(
-        f"{cmd_env} bin/run_toolbox.py from_config {group} {command} {_dict_to_run_toolbox_args(kwargs)}",
+        f"{cmd_env} bin/run_ansible_toolbox.py from_config {group} {command} {_dict_to_run_toolbox_args(kwargs)}",
         **run_kwargs,
     )
 
