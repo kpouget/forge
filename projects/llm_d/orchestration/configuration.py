@@ -53,6 +53,8 @@ def prepare_runtime_configuration(
 
     config.project.set_config("runtime.requested_preset", resolved_preset, print=False)
     config.project.apply_preset(resolved_preset)
+    # CI/PR variable overrides must win over any values introduced by the preset.
+    config.project.apply_config_overrides(log=False)
 
     selected_preset = config.project.get_config("runtime.selected_preset")
     resolved_job_name = job_name or fournos_config.get("job-name") or f"local-{selected_preset}"

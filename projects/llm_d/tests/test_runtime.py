@@ -149,6 +149,25 @@ def test_load_run_configuration_ignores_runtime_env_vars(
     assert config.job_name == "local-smoke"
 
 
+def test_runtime_overrides_win_over_preset_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+        config_overrides={
+            "runtime.model_key": "qwen3-0-6b",
+            "runtime.scheduler_profile_key": "default",
+        },
+    )
+
+    assert config.preset_name == "benchmark-short"
+    assert config.model_key == "qwen3-0-6b"
+    assert config.scheduler_profile_key == "default"
+    assert config.model["served_model_name"] == "Qwen/Qwen3-0.6B"
+    assert config.benchmark["job_name"] == "guidellm-benchmark"
+
+
 def test_write_prepare_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
