@@ -1135,6 +1135,35 @@ def test_guidellm_toolbox_runs_benchmark_steps(
     ) == "state\n"
 
 
+def test_guidellm_cleanup_ignores_delete_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    resolved_config, artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+    )
+    config = phase_inputs.load_test_inputs(phase_inputs.write_test_inputs(resolved_config))
+
+    def fake_oc(*args, **kwargs):
+        if args[:2] == ("delete", "job,pvc"):
+            raise subprocess.TimeoutExpired(["oc", *args], timeout=60)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(llmd_runtime, "oc", fake_oc)
+
+    args = SimpleNamespace(
+        artifact_dir=artifact_dir,
+        endpoint_url="https://example.test",
+        namespace=config.namespace,
+        benchmark=config.benchmark,
+    )
+    ctx = SimpleNamespace()
+
+    result = run_guidellm_benchmark_toolbox.cleanup_previous_guidellm_resources_task(args, ctx)
+
+    assert result == f"Deleted previous GuideLLM resources for {config.benchmark['job_name']}"
+
+
 def test_test_phase_deploy_delegates_to_toolbox_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

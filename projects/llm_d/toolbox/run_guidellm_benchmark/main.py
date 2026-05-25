@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from projects.core.dsl import execute_tasks, task, toolbox
@@ -37,25 +38,32 @@ def cleanup_previous_guidellm_resources_task(args, ctx):
 
     benchmark_name = args.benchmark["job_name"]
     namespace = args.namespace
-    llmd_runtime.oc(
+    _best_effort_delete(
+        "GuideLLM benchmark job and pvc",
         "delete",
         "job,pvc",
         benchmark_name,
         "-n",
         namespace,
         "--ignore-not-found=true",
-        check=False,
     )
-    llmd_runtime.oc(
+    _best_effort_delete(
+        "GuideLLM benchmark copy pod",
         "delete",
         "pod",
         f"{benchmark_name}-copy",
         "-n",
         namespace,
         "--ignore-not-found=true",
-        check=False,
     )
     return f"Deleted previous GuideLLM resources for {benchmark_name}"
+
+
+def _best_effort_delete(description: str, *oc_args: str) -> None:
+    try:
+        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+    except subprocess.TimeoutExpired:
+        llmd_runtime.logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 @task
