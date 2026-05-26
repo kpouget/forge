@@ -181,11 +181,17 @@ def main(
     default=None,
     help="Override cache file path.",
 )
+@click.option(
+    "--show-matrix/--no-show-matrix",
+    default=True,
+    help="Display parameter matrix summary after parsing (default: enabled).",
+)
 @click.pass_context
 def parse_cmd(
     ctx: click.Context,
     no_cache: bool,
     cache_dir: Path | None,
+    show_matrix: bool,
     artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module_override: str | None,
@@ -204,6 +210,7 @@ def parse_cmd(
             plugin_module=mod,
             plugin=plugin,
             use_cache=not no_cache,
+            show_parameter_matrix=show_matrix,
         )
     except Exception as e:  # noqa: BLE001
         click.echo(f"parse failed: {e}", err=True)
