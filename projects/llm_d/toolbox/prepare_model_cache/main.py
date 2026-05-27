@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import logging
+
+from projects.core.dsl import execute_tasks, task, toolbox
+from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.toolbox import toolbox_helper
+
+LOGGER = logging.getLogger(__name__)
+
+
+def run(
+    *,
+    namespace: str,
+    namespace_is_managed: bool,
+    model_key: str,
+    model: dict,
+    model_cache: dict,
+) -> int:
+    """Prepare the shared model cache PVC and populate it when needed.
+
+    Args:
+        namespace: Namespace where the workload runs
+        namespace_is_managed: Whether namespace lifecycle is managed by llm_d
+        model_key: Selected model key
+        model: Selected model configuration
+        model_cache: Model-cache configuration
+    """
+
+    llmd_runtime.init()
+    execute_tasks(locals())
+    return 0
+
+
+@task
+def prepare_model_cache(args, ctx):
+    """Ensure the model cache PVC exists and is populated"""
+
+    config = phase_inputs.build_prepare_model_cache_inputs(
+        artifact_dir=args.artifact_dir,
+        preset_name="prepare-model-cache",
+        namespace=args.namespace,
+        namespace_is_managed=args.namespace_is_managed,
+        model_key=args.model_key,
+        model=args.model,
+        model_cache=args.model_cache,
+    )
+    cache_spec = llmd_runtime.resolve_model_cache(config)
+    if not cache_spec:
+        LOGGER.info("Model cache disabled for namespace=%s", config.namespace)
+        return "Model cache disabled"
+
+    if config.namespace_is_managed:
+        LOGGER.warning(
+            "Model cache PVC %s lives in managed namespace %s. Namespace cleanup will remove it; cache reuse requires a stable namespace override.",
+            cache_spec.pvc_name,
+            cache_spec.namespace,
+        )
+
+    ensure_model_cache_pvc(config, cache_spec)
+    if llmd_runtime.model_cache_pvc_ready(cache_spec):
+        LOGGER.info(
+            "Model cache PVC %s already contains %s; skipping download",
+            cache_spec.pvc_name,
+            cache_spec.source_uri,
+        )
+        capture_model_cache_state(config, cache_spec)
+        return f"Model cache already populated in {cache_spec.pvc_name}"
+
+    run_model_cache_download_job(config, cache_spec)
+    llmd_runtime.annotate_model_cache_pvc(cache_spec)
+    capture_model_cache_state(config, cache_spec)
+    return f"Model cache step finished for namespace {config.namespace}"
+
+
+def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int:
+    cache_spec = llmd_runtime.resolve_model_cache(config)
+    if not cache_spec:
+        LOGGER.info("Model cache disabled for preset=%s", config.preset_name)
+        return 0
+
+    if config.namespace_is_managed:
+        LOGGER.warning(
+            "Model cache PVC %s lives in managed namespace %s. Namespace cleanup will remove it; cache reuse requires a stable namespace override.",
+            cache_spec.pvc_name,
+            cache_spec.namespace,
+        )
+
+    ensure_model_cache_pvc(config, cache_spec)
+    if llmd_runtime.model_cache_pvc_ready(cache_spec):
+        LOGGER.info(
+            "Model cache PVC %s already contains %s; skipping download",
+            cache_spec.pvc_name,
+            cache_spec.source_uri,
+        )
+        capture_model_cache_state(config, cache_spec)
+        return 0
+
+    run_model_cache_download_job(config, cache_spec)
+    llmd_runtime.annotate_model_cache_pvc(cache_spec)
+    capture_model_cache_state(config, cache_spec)
+    return 0
+
+
+def ensure_model_cache_pvc(
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+) -> None:
+    existing = llmd_runtime.oc_get_json(
+        "persistentvolumeclaim",
+        name=cache_spec.pvc_name,
+        namespace=cache_spec.namespace,
+        ignore_not_found=True,
+    )
+    if existing:
+        actual_modes = existing.get("spec", {}).get("accessModes", [])
+        if not llmd_runtime.pvc_access_mode_matches(actual_modes, cache_spec.access_mode):
+            raise RuntimeError(
+                f"PVC {cache_spec.pvc_name} exists with access modes {actual_modes}, expected {cache_spec.access_mode}"
+            )
+
+        actual_storage_class = existing.get("spec", {}).get("storageClassName")
+        if cache_spec.storage_class_name and actual_storage_class != cache_spec.storage_class_name:
+            raise RuntimeError(
+                f"PVC {cache_spec.pvc_name} exists with storageClassName={actual_storage_class}, expected {cache_spec.storage_class_name}"
+            )
+
+        return
+
+    llmd_runtime.apply_manifest(
+        config.artifact_dir / "src" / "model-cache-pvc.yaml",
+        llmd_runtime.render_model_cache_pvc(cache_spec),
+    )
+
+
+def run_model_cache_download_job(
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+) -> None:
+    llmd_runtime.oc(
+        "delete",
+        "job",
+        cache_spec.download_job_name,
+        "-n",
+        cache_spec.namespace,
+        "--ignore-not-found=true",
+        check=False,
+    )
+    llmd_runtime.wait_until(
+        f"job/{cache_spec.download_job_name} deletion in {cache_spec.namespace}",
+        timeout_seconds=120,
+        interval_seconds=5,
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "job", cache_spec.download_job_name, namespace=cache_spec.namespace
+            )
+        ),
+    )
+
+    llmd_runtime.apply_manifest(
+        config.artifact_dir / "src" / "model-cache-job.yaml",
+        llmd_runtime.render_model_cache_job(config, cache_spec),
+    )
+
+    try:
+        llmd_runtime.wait_for_job_completion(
+            cache_spec.download_job_name,
+            cache_spec.namespace,
+            timeout_seconds=config.model_cache["download"]["wait_timeout_seconds"],
+            interval_seconds=config.model_cache["download"]["poll_interval_seconds"],
+        )
+    finally:
+        capture_model_cache_state(config, cache_spec)
+
+
+def capture_model_cache_state(
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+) -> None:
+    artifact_dir = config.artifact_dir / "artifacts" / "model-cache"
+    toolbox_helper.write_json(
+        artifact_dir / "spec.json",
+        {
+            "pvc_name": cache_spec.pvc_name,
+            "model_uri": cache_spec.model_uri,
+            "source_uri": cache_spec.source_uri,
+            "source_scheme": cache_spec.source_scheme,
+        },
+    )
+
+    capture_resource_yaml(
+        "persistentvolumeclaim",
+        cache_spec.pvc_name,
+        cache_spec.namespace,
+        artifact_dir / "pvc.yaml",
+    )
+    capture_resource_yaml(
+        "job",
+        cache_spec.download_job_name,
+        cache_spec.namespace,
+        artifact_dir / "job.yaml",
+        check=False,
+    )
+
+    for pod_name in llmd_runtime.job_pod_names(cache_spec.download_job_name, cache_spec.namespace):
+        capture_resource_yaml(
+            "pod",
+            pod_name,
+            cache_spec.namespace,
+            artifact_dir / f"{pod_name}.yaml",
+            check=False,
+        )
+        log_result = llmd_runtime.oc(
+            "logs",
+            pod_name,
+            "-n",
+            cache_spec.namespace,
+            check=False,
+            capture_output=True,
+        )
+        if log_result.returncode == 0 and log_result.stdout:
+            toolbox_helper.write_text(artifact_dir / f"{pod_name}.log", log_result.stdout)
+
+
+def capture_resource_yaml(
+    kind: str,
+    name: str,
+    namespace: str,
+    destination,
+    *,
+    check: bool = True,
+) -> None:
+    result = llmd_runtime.oc(
+        "get",
+        kind,
+        name,
+        "-n",
+        namespace,
+        "-o",
+        "yaml",
+        check=check,
+        capture_output=True,
+    )
+    if result.returncode == 0 and result.stdout:
+        toolbox_helper.write_text(destination, result.stdout)
+
+
+main = toolbox.create_toolbox_main(run)
+
+
+if __name__ == "__main__":
+    main()

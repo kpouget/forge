@@ -16,20 +16,17 @@ def setup_clean_logger(name: str):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
-    # Only configure if not already configured
     if not logger.handlers:
-        # Create console handler with clean format
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(logging.Formatter("%(message)s"))
 
         logger.addHandler(console_handler)
 
-    logger.propagate = False  # Don't propagate to root logger
+    logger.propagate = False
     return logger
 
 
-# Configure clean logging for DSL operations
 logger = setup_clean_logger("DSL")
 
 
@@ -45,30 +42,23 @@ def log_task_header(task_name: str, task_doc: str, rel_filename: str, line_no: i
 
 def log_execution_banner(function_args: dict = None, log_file: str = None):
     """Log the execution banner with function info and arguments"""
-    # Get the caller's filename and function name for the header
     frame = inspect.currentframe()
-    caller_frame = (
-        frame.f_back.f_back
-    )  # Go back 2 frames (this func -> execute_tasks -> actual caller)
+    caller_frame = frame.f_back.f_back
     filename = caller_frame.f_code.co_filename
 
     rel_filename = _get_forge_relative_path(filename)
-
-    # Use parent directory name as function name for toolbox operations
     function_name = _get_toolbox_function_name(filename)
 
-    # Print execution header
     logger.info("")
     logger.info("===============================================================================")
     logger.info(f"| FILE: {rel_filename}")
     logger.info(f"| COMMAND: {function_name}")
 
     if function_args:
-        # Display arguments in YAML format
         logger.info("| ARGUMENTS:")
 
         for key, value in function_args.items():
-            if key == "function_args":  # Skip the function_args parameter itself
+            if key == "function_args":
                 continue
             if value is None:
                 continue
@@ -83,19 +73,13 @@ def log_execution_banner(function_args: dict = None, log_file: str = None):
 
 def log_completion_banner(function_args: dict = None, status: str = "SUCCESS"):
     """Log the completion banner with function info and completion status"""
-    # Get the caller's filename and function name for the header
     frame = inspect.currentframe()
-    caller_frame = (
-        frame.f_back.f_back
-    )  # Go back 2 frames (this func -> execute_tasks -> actual caller)
+    caller_frame = frame.f_back.f_back
     filename = caller_frame.f_code.co_filename
 
     rel_filename = _get_forge_relative_path(filename)
-
-    # Use parent directory name as function name for toolbox operations
     function_name = _get_toolbox_function_name(filename)
 
-    # Print completion header
     logger.info("")
     logger.info("===============================================================================")
     logger.info(f"| {rel_filename}")
@@ -115,8 +99,4 @@ def _get_forge_relative_path(filename):
 
 def _get_toolbox_function_name(filename):
     """Extract toolbox function name from file path (parent directory name)"""
-    filename_path = Path(filename)
-
-    # For paths like projects/llm_d/toolbox/capture_isvc_state/main.py
-    # Return the parent directory name: capture_isvc_state
-    return filename_path.parent.name
+    return Path(filename).parent.name

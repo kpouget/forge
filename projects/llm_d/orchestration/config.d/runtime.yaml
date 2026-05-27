@@ -1,0 +1,11 @@
+default_preset: smoke
+requested_preset: null
+selected_preset: smoke
+model_key: qwen3-0-6b
+scheduler_profile_key: approximate
+smoke_request_key: default
+benchmark_key: null
+job_name: null
+namespace_override: null
+gpu_count: null
+fournos_config: {}

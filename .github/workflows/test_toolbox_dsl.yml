@@ -1,5 +1,5 @@
-# Unit tests for projects/core/dsl (task decorators, execute_tasks, failure/always/skip).
-name: Toolbox DSL tests
+# Python tests for repo-managed suites discovered via pyproject testpaths.
+name: Python test suites
 
 on:
   pull_request:
@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[testing]
 
-      - name: Run projects/core/tests
+      - name: Run pytest suites
         run: |
           set -o errexit
           # Tree + docstrings (what is being tested), then execute with one line per test + result.

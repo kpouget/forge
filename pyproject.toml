@@ -25,6 +25,7 @@ dependencies = [
     "plotly>=5.17.0",
     "dash>=2.14.0",
     "dash-bootstrap-components>=1.5.0",
+    "jinja2",
     "pyyaml>=6.0",
     "jsonschema>=4.19.0",
     "structlog>=23.1.0",
@@ -133,7 +134,7 @@ ignore = [
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --strict-markers --strict-config"
-testpaths = ["projects/core/tests"]
+testpaths = ["projects/core/tests", "projects/llm_d/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

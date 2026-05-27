@@ -1,0 +1,99 @@
+cluster:
+  minimum_openshift_version: "4.19.9"
+  namespace:
+    name: forge-llm-d
+    prefix: llm-d
+    max_length: 63
+  cleanup_timeout_seconds: 900
+  gpu_node_label_selector: nvidia.com/gpu.present=true
+  nfd_gpu_detection_labels:
+    - feature.node.kubernetes.io/pci-10de.present
+    - feature.node.kubernetes.io/pci-0302_10de.present
+    - feature.node.kubernetes.io/pci-0300_10de.present
+
+operators:
+  openshift-cert-manager-operator:
+    display_name: OpenShift Cert Manager
+    namespace: openshift-cert-manager-operator
+    channel: stable-v1.18
+    source: redhat-operators
+    wait_timeout_seconds: 900
+  leader-worker-set:
+    display_name: Leader Worker Set
+    namespace: openshift-lws
+    channel: stable
+    source: redhat-operators
+    wait_timeout_seconds: 900
+  nfd:
+    display_name: Node Feature Discovery
+    namespace: openshift-nfd
+    channel: stable
+    source: redhat-operators
+    wait_timeout_seconds: 900
+    bootstrap_crd: nodefeaturediscoveries.nfd.openshift.io
+    bootstrap_manifest: manifests/nfd-nodefeaturediscovery.yaml
+  gpu-operator-certified:
+    display_name: NVIDIA GPU Operator
+    namespace: nvidia-gpu-operator
+    channel: stable
+    source: certified-operators
+    wait_timeout_seconds: 1800
+    bootstrap_crd: clusterpolicies.nvidia.com
+    bootstrap_manifest: manifests/gpu-clusterpolicy.yaml
+  rhcl-operator:
+    display_name: Red Hat Connectivity Link
+    namespace: openshift-operators
+    channel: stable
+    source: redhat-operators
+    wait_timeout_seconds: 1800
+  rhods-operator:
+    display_name: Red Hat OpenShift AI
+    namespace: redhat-ods-operator
+    channel: stable-3.x
+    source: redhat-operators
+    wait_timeout_seconds: 1800
+
+rhoai:
+  custom_catalog:
+    enabled: false
+    name: rhoai-custom
+    namespace: openshift-marketplace
+    image: null
+    display_name: Red Hat OpenShift AI Custom Catalog
+    wait_timeout_seconds: 900
+  namespace: redhat-ods-applications
+  datasciencecluster_name: default-dsc
+  datasciencecluster_template: manifests/datasciencecluster.yaml
+  wait_timeout_seconds: 1800
+  required_crds_before_dsc:
+    - datascienceclusters.datasciencecluster.opendatahub.io
+  required_crds_after_dsc:
+    - llminferenceservices.serving.kserve.io
+
+gateway:
+  namespace: openshift-ingress
+  name: openshift-ai-inference
+  gateway_class_name: data-science-gateway-class
+  status_address_name: gateway-external
+  create_if_missing: true
+  manifest_template: manifests/gateway.yaml
+  wait_timeout_seconds: 600
+
+inference_service:
+  name: llm-d
+  template: manifests/llminferenceservice.yaml
+  workload_deployment_name_suffix: -kserve
+  pod_appearance_timeout_seconds: 600
+  ready_timeout_seconds: 1800
+  delete_timeout_seconds: 900
+
+artifacts:
+  capture_namespace_events: true
+
+smoke:
+  job_name: llm-d-smoke
+  client_image: curlimages/curl:8.11.1
+  endpoint_path: /v1/completions
+  request_retries: 30
+  request_retry_delay_seconds: 10
+  request_timeout_seconds: 60

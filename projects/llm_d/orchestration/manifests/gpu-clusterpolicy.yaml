@@ -1,0 +1,37 @@
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  daemonsets:
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+    updateStrategy: RollingUpdate
+  dcgm:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  devicePlugin:
+    enabled: true
+  driver:
+    enabled: true
+    kernelModuleType: auto
+  gfd:
+    enabled: true
+  mig:
+    strategy: single
+  nodeStatusExporter:
+    enabled: true
+  operator:
+    defaultRuntime: crio
+    runtimeClass: nvidia
+  toolkit:
+    enabled: true
+    installDir: /usr/local/nvidia
+  validator:
+    plugin:
+      env:
+        - name: WITH_WORKLOAD
+          value: "false"

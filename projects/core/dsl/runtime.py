@@ -16,7 +16,13 @@ import projects.core.library.env as env
 from projects.core.library.run import SignalError
 
 from .context import create_task_parameters
-from .log import log_completion_banner, log_execution_banner, logger
+from .log import (
+    _get_forge_relative_path,
+    _get_toolbox_function_name,
+    log_completion_banner,
+    log_execution_banner,
+    logger,
+)
 from .script_manager import get_script_manager
 
 # Import from task.py to avoid circular imports
@@ -471,18 +477,3 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     os.chmod(restart_file, 0o755)
 
     logger.debug(f"Generated restart script: {restart_file}")
-
-
-def _get_forge_relative_path(filename):
-    """Get file path relative to FORGE home directory (forge root)"""
-
-    return Path(filename).relative_to(env.FORGE_HOME)
-
-
-def _get_toolbox_function_name(filename):
-    """Extract toolbox function name from file path (parent directory name)"""
-    filename_path = Path(filename)
-
-    # For paths like projects/llm_d/toolbox/capture_isvc_state/main.py
-    # Return the parent directory name: capture_isvc_state
-    return filename_path.parent.name

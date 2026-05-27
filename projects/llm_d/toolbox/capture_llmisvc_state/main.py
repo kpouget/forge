@@ -2,15 +2,10 @@
 
 """
 LLMInferenceService state capture using task-based DSL
-Replaces llmd_capture_isvc_state Ansible role
+Replaces llmd_capture_llmisvc_state Ansible role
 """
 
-from projects.core.dsl import (
-    execute_tasks,
-    shell,
-    task,
-    toolbox,
-)
+from projects.core.dsl import execute_tasks, shell, task, toolbox
 
 
 def run(llmisvc_name: str, *, namespace: str = ""):
@@ -22,7 +17,6 @@ def run(llmisvc_name: str, *, namespace: str = ""):
         namespace: Namespace of the LLMInferenceService (empty string auto-detects current namespace)
     """
 
-    # Execute all registered tasks in order, respecting conditions
     return execute_tasks(locals())
 
 
@@ -157,7 +151,6 @@ def capture_podmonitors(args, context):
 @task
 def capture_pod_logs(args, context):
     """Capture logs from LLMInferenceService pods"""
-    # Get list of pod names
     result = shell.run(
         f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
@@ -170,19 +163,16 @@ def capture_pod_logs(args, context):
 
     log_file = args.artifact_dir / "artifacts/llminferenceservice.pods.logs"
 
-    # Capture logs for each pod
-    with open(log_file, "w") as f:  # Start with empty file
+    with open(log_file, "w") as handle:
         for pod_name in pod_names:
-            f.write(f"=== Logs for pod: {pod_name} ===\n")
-
-            # Get logs for this pod
+            handle.write(f"=== Logs for pod: {pod_name} ===\n")
             log_result = shell.run(
                 f"oc logs {pod_name} -n {context.target_namespace} --all-containers=true",
                 check=False,
                 log_stdout=False,
             )
-            f.write(log_result.stdout)
-            f.write("\n")
+            handle.write(log_result.stdout)
+            handle.write("\n")
 
     return f"Pod logs captured for {len(pod_names)} pods"
 
@@ -190,7 +180,6 @@ def capture_pod_logs(args, context):
 @task
 def capture_pod_previous_logs(args, context):
     """Capture previous logs from LLMInferenceService pods if available"""
-    # Get list of pod names
     result = shell.run(
         f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
@@ -202,19 +191,16 @@ def capture_pod_previous_logs(args, context):
 
     log_file = args.artifact_dir / "artifacts/llminferenceservice.pods.previous.logs"
 
-    # Capture previous logs for each pod
-    with open(log_file, "w") as f:  # Start with empty file
+    with open(log_file, "w") as handle:
         for pod_name in pod_names:
-            f.write(f"=== Previous logs for pod: {pod_name} ===\n")
-
-            # Get previous logs for this pod
+            handle.write(f"=== Previous logs for pod: {pod_name} ===\n")
             log_result = shell.run(
                 f"oc logs {pod_name} -n {context.target_namespace} --previous --all-containers=true",
                 check=False,
                 log_stdout=False,
             )
-            f.write(log_result.stdout)
-            f.write("\n")
+            handle.write(log_result.stdout)
+            handle.write("\n")
 
     return f"Pod previous logs captured for {len(pod_names)} pods"
 
@@ -233,7 +219,6 @@ def capture_llminferenceservice_describe(args, context):
 @task
 def capture_pods_describe(args, context):
     """Capture describe output for related pods"""
-    # Get list of pod names
     result = shell.run(
         f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
@@ -245,24 +230,20 @@ def capture_pods_describe(args, context):
 
     describe_file = args.artifact_dir / "artifacts/llminferenceservice.pods.describe.txt"
 
-    # Capture describe output for each pod
-    with open(describe_file, "w") as f:  # Start with empty file
+    with open(describe_file, "w") as handle:
         for pod_name in pod_names:
-            f.write(f"=== Describe for pod: {pod_name} ===\n")
-
-            # Get describe output for this pod
+            handle.write(f"=== Describe for pod: {pod_name} ===\n")
             describe_result = shell.run(
                 f"oc describe pod {pod_name} -n {context.target_namespace}",
                 log_stdout=False,
                 check=False,
             )
-            f.write(describe_result.stdout)
-            f.write("\n")
+            handle.write(describe_result.stdout)
+            handle.write("\n")
 
     return f"Pod describe output captured for {len(pod_names)} pods"
 
 
-# Create the main function using the toolbox library
 main = toolbox.create_toolbox_main(run)
 
 
