@@ -72,6 +72,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
     retry_on_exc = retry_config.get("retry_on_exceptions", retry_on_exceptions)
 
     current_delay = retry_delay
+    start_time = time.time()  # Track when retry attempts started
 
     for attempt in range(retry_attempts):
         try:
@@ -80,13 +81,15 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
             # Check if result indicates we should retry (falsy values like False, None, [], etc.)
             if not result:
                 if attempt < retry_attempts - 1:  # Not the last attempt
+                    elapsed_time = time.time() - start_time
+                    elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
                     logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
                     logger.warning(
                         f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
                     )
-
+                    logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
                     logger.info(f"~~ RETRY in {current_delay:.0f}s")
                     logger.info("~" * LINE_WIDTH)
                     time.sleep(current_delay)
@@ -94,7 +97,11 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
 
                     current_delay *= retry_backoff
                 else:
-                    logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
+                    elapsed_time = time.time() - start_time
+                    elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
+                    logger.error(
+                        f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts} after {elapsed_mins:.0f}m {elapsed_secs:.0f}s"
+                    )
                     logger.info("")
                     raise RetryFailure(
                         f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})"
@@ -113,13 +120,19 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                 raise exc
 
             if attempt >= retry_attempts - 1:
-                logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
+                elapsed_time = time.time() - start_time
+                elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
+                logger.error(
+                    f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts} after {elapsed_mins:.0f}m {elapsed_secs:.0f}s"
+                )
                 logger.info("")
                 raise RetryFailure(
                     f"All {retry_attempts} attempts failed for task {func.__name__} : "
                     f"{func.__doc__ or 'No description'} (last error: {exc.__class__.__name__}: {exc})"
                 ) from exc
 
+            elapsed_time = time.time() - start_time
+            elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
             logger.info("")
             logger.info("~" * LINE_WIDTH)
             logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
@@ -127,6 +140,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                 f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} "
                 f"({exc.__class__.__name__}: {exc})"
             )
+            logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
             logger.info(f"~~ RETRY in {current_delay:.0f}s")
             logger.info("~" * LINE_WIDTH)
             time.sleep(current_delay)
