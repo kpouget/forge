@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    oc,
+)
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 def run(
@@ -19,7 +24,7 @@ def run(
         rhoai: RHOAI configuration block
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -41,8 +46,8 @@ def apply_datasciencecluster(args, ctx):
         benchmark=None,
     )
     manifest = llmd_runtime.render_datasciencecluster(config)
-    llmd_runtime.apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
-    llmd_runtime.oc(
+    apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
+    oc(
         "get",
         "datasciencecluster",
         config.platform["rhoai"]["datasciencecluster_name"],

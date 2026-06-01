@@ -11,13 +11,13 @@ from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
-from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 logger = logging.getLogger(__name__)
 
 
 def init_runtime() -> None:
-    llmd_runtime.init()
+    runtime_init()
 
 
 def load_runtime_configuration(*, cwd=None, artifact_dir=None):

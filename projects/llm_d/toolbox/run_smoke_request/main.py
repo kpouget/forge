@@ -7,7 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    oc,
+    resource_exists,
+    wait_for_job_completion,
+    wait_until,
+)
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
 
 
@@ -30,7 +38,7 @@ def run(
         endpoint_url: Gateway endpoint URL returned by the deploy command
     """
 
-    llmd_runtime.init()
+    runtime_init()
     context = execute_tasks(locals())
     return context.response
 
@@ -69,7 +77,7 @@ def run_smoke_request(
     }
     toolbox_helper.write_json(artifact_dir / "artifacts" / "smoke.request.json", payload)
 
-    llmd_runtime.oc(
+    oc(
         "delete",
         "job",
         job_name,
@@ -78,14 +86,14 @@ def run_smoke_request(
         "--ignore-not-found=true",
         check=False,
     )
-    llmd_runtime.wait_until(
+    wait_until(
         f"job/{job_name} deletion in {namespace}",
         timeout_seconds=120,
         interval_seconds=5,
-        predicate=lambda: not llmd_runtime.resource_exists("job", job_name, namespace=namespace),
+        predicate=lambda: not resource_exists("job", job_name, namespace=namespace),
     )
 
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         artifact_dir / "src" / "smoke-job.yaml",
         llmd_runtime.render_smoke_request_job_from_parts(
             namespace=namespace,
@@ -96,7 +104,7 @@ def run_smoke_request(
     )
 
     try:
-        llmd_runtime.wait_for_job_completion(
+        wait_for_job_completion(
             job_name,
             namespace,
             timeout_seconds=(
@@ -112,7 +120,7 @@ def run_smoke_request(
             smoke=smoke,
         )
 
-    result = llmd_runtime.oc(
+    result = oc(
         "logs",
         f"job/{job_name}",
         "-n",
@@ -147,7 +155,7 @@ def capture_smoke_state(*, artifact_dir: Path, namespace: str, smoke: dict) -> N
         artifacts_dir / "smoke_job.pods.yaml",
         selector=f"job-name={job_name}",
     )
-    result = llmd_runtime.oc(
+    result = oc(
         "logs",
         f"job/{job_name}",
         "-n",
@@ -175,7 +183,7 @@ def capture_get(
     if selector:
         args.extend(["-l", selector])
     args.extend(["-o", output])
-    result = llmd_runtime.oc(*args, check=False, capture_output=True)
+    result = oc(*args, check=False, capture_output=True)
     if result.returncode == 0 and result.stdout:
         toolbox_helper.write_text(destination, result.stdout)
 

@@ -1,6 +1,9 @@
 vaults:
+  resolve-only:
   - psap-forge-notifications
   - psap-forge-mlflow-export
+  test: []
+  prepare: []
 
 caliper:
   export:

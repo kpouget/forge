@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    condition_status,
+    oc_get_json,
+    resource_exists,
+    wait_until,
+)
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 def run(
@@ -19,7 +27,7 @@ def run(
         gateway: Gateway configuration block
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -41,23 +49,23 @@ def ensure_gateway(args, ctx):
         benchmark=None,
     )
     gateway = config.platform["gateway"]
-    if not llmd_runtime.resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
+    if not resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
         if not gateway["create_if_missing"]:
             raise RuntimeError(
                 f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
             )
         manifest = llmd_runtime.render_gateway(config)
-        llmd_runtime.apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
+        apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
 
     def _gateway_programmed() -> bool:
-        resource = llmd_runtime.oc_get_json(
+        resource = oc_get_json(
             "gateway",
             name=gateway["name"],
             namespace=gateway["namespace"],
         )
-        return llmd_runtime.condition_status(resource, "Programmed") == "True"
+        return condition_status(resource, "Programmed") == "True"
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"gateway/{gateway['name']} programmed",
         timeout_seconds=gateway["wait_timeout_seconds"],
         interval_seconds=10,

@@ -5,7 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    condition_status,
+    oc,
+    oc_get_json,
+    wait_until,
+)
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
 
 
@@ -36,7 +44,7 @@ def run(
         model_cache: Model-cache configuration
     """
 
-    llmd_runtime.init()
+    runtime_init()
     context = execute_tasks(locals())
     return context.endpoint_url
 
@@ -76,7 +84,7 @@ def deploy_llmisvc(
     name = inference_service["name"]
     selector = f"app.kubernetes.io/name={name}"
 
-    llmd_runtime.oc(
+    oc(
         "delete",
         "llminferenceservice",
         name,
@@ -87,12 +95,10 @@ def deploy_llmisvc(
     )
 
     def _old_pods_gone() -> bool:
-        pods = llmd_runtime.oc_get_json(
-            "pods", namespace=namespace, selector=selector, ignore_not_found=True
-        )
+        pods = oc_get_json("pods", namespace=namespace, selector=selector, ignore_not_found=True)
         return not pods or not pods.get("items")
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"old llm-d pods to disappear in {namespace}",
         timeout_seconds=inference_service["delete_timeout_seconds"],
         interval_seconds=10,
@@ -109,15 +115,13 @@ def deploy_llmisvc(
         scheduler_profile=scheduler_profile,
         model_cache=model_cache,
     )
-    llmd_runtime.apply_manifest(artifact_dir / "src" / "llminferenceservice.yaml", manifest)
+    apply_manifest(artifact_dir / "src" / "llminferenceservice.yaml", manifest)
 
     def _pods_present() -> bool:
-        pods = llmd_runtime.oc_get_json(
-            "pods", namespace=namespace, selector=selector, ignore_not_found=True
-        )
+        pods = oc_get_json("pods", namespace=namespace, selector=selector, ignore_not_found=True)
         return bool(pods and pods.get("items"))
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"llm-d pods to appear in {namespace}",
         timeout_seconds=inference_service["pod_appearance_timeout_seconds"],
         interval_seconds=5,
@@ -125,17 +129,17 @@ def deploy_llmisvc(
     )
 
     def _service_ready() -> bool:
-        payload = llmd_runtime.oc_get_json("llminferenceservice", name=name, namespace=namespace)
-        return llmd_runtime.condition_status(payload, "Ready") == "True"
+        payload = oc_get_json("llminferenceservice", name=name, namespace=namespace)
+        return condition_status(payload, "Ready") == "True"
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"llminferenceservice/{name} ready",
         timeout_seconds=inference_service["ready_timeout_seconds"],
         interval_seconds=10,
         predicate=_service_ready,
     )
 
-    endpoint_url = llmd_runtime.wait_until(
+    endpoint_url = wait_until(
         f"gateway address for llminferenceservice/{name}",
         timeout_seconds=inference_service["ready_timeout_seconds"],
         interval_seconds=10,
@@ -170,7 +174,7 @@ def try_resolve_endpoint_url(
 ) -> str | None:
     name = inference_service["name"]
     gateway_name = gateway["status_address_name"]
-    payload = llmd_runtime.oc_get_json("llminferenceservice", name=name, namespace=namespace)
+    payload = oc_get_json("llminferenceservice", name=name, namespace=namespace)
 
     for address in payload.get("status", {}).get("addresses", []):
         if address.get("name") == gateway_name and address.get("url"):

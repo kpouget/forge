@@ -6,6 +6,7 @@ from typing import Any
 
 from projects.core.library import config
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 def load_runtime_configuration(
@@ -35,7 +36,7 @@ def prepare_runtime_configuration(
     if artifact_dir is not None:
         os.environ["ARTIFACT_DIR"] = str(artifact_dir)
 
-    llmd_runtime.init()
+    runtime_init()
     config.reload(llmd_runtime.ORCHESTRATION_DIR)
 
     fournos_config = _load_fournos_config(cwd)

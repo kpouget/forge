@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from projects.core.dsl import always, execute_tasks, shell, task, template, toolbox
-from projects.llm_d.runtime import llmd_runtime
+from projects.core.dsl.utils.k8s import oc_get_json, resource_exists, wait_until
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 def run(*, clusterpolicy_name: str = "gpu-cluster-policy", timeout_seconds: int = 1800) -> int:
@@ -15,7 +16,7 @@ def run(*, clusterpolicy_name: str = "gpu-cluster-policy", timeout_seconds: int 
         timeout_seconds: Maximum time to wait for the ClusterPolicy to become ready
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -42,7 +43,7 @@ def render_manifest(args, ctx):
 def apply_manifest_if_missing(args, ctx):
     """Apply the ClusterPolicy manifest when missing"""
 
-    if llmd_runtime.resource_exists("clusterpolicy", args.clusterpolicy_name):
+    if resource_exists("clusterpolicy", args.clusterpolicy_name):
         return f"ClusterPolicy/{args.clusterpolicy_name} already exists"
 
     shell.run(f"oc apply -f {ctx.manifest_file}")
@@ -54,11 +55,11 @@ def wait_for_clusterpolicy_ready(args, ctx):
     """Wait for the ClusterPolicy to report ready"""
 
     def _clusterpolicy_ready() -> bool:
-        payload = llmd_runtime.oc_get_json("clusterpolicy", name=args.clusterpolicy_name)
+        payload = oc_get_json("clusterpolicy", name=args.clusterpolicy_name)
         state = payload.get("status", {}).get("state", "")
         return state.lower() == "ready"
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"clusterpolicy/{args.clusterpolicy_name} ready",
         timeout_seconds=args.timeout_seconds,
         interval_seconds=15,

@@ -6,7 +6,14 @@ import subprocess
 from pathlib import Path
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    oc,
+    oc_get_json,
+    wait_until,
+)
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
 
 
@@ -25,7 +32,7 @@ def run(
         endpoint_url: Gateway endpoint URL returned by the deploy command
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -62,7 +69,7 @@ def cleanup_previous_guidellm_resources_task(args, ctx):
 
 def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
-        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+        oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
         llmd_runtime.logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
@@ -74,14 +81,14 @@ def create_guidellm_resources_task(args, ctx):
     if not args.benchmark:
         return "GuideLLM benchmark disabled"
 
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         args.artifact_dir / "src" / "guidellm-pvc.yaml",
         llmd_runtime.render_guidellm_pvc_from_parts(
             namespace=args.namespace,
             benchmark=args.benchmark,
         ),
     )
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         args.artifact_dir / "src" / "guidellm-job.yaml",
         llmd_runtime.render_guidellm_job_from_parts(
             namespace=args.namespace,
@@ -103,7 +110,7 @@ def wait_guidellm_benchmark_task(args, ctx):
     namespace = args.namespace
 
     def _job_terminal() -> dict[str, object] | None:
-        payload = llmd_runtime.oc_get_json("job", name=benchmark_name, namespace=namespace)
+        payload = oc_get_json("job", name=benchmark_name, namespace=namespace)
         status = payload.get("status", {})
         if status.get("succeeded"):
             return payload
@@ -111,7 +118,7 @@ def wait_guidellm_benchmark_task(args, ctx):
             raise RuntimeError(f"GuideLLM job {benchmark_name} failed")
         return None
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"GuideLLM job/{benchmark_name}",
         timeout_seconds=args.benchmark["timeout_seconds"],
         interval_seconds=10,
@@ -155,7 +162,7 @@ def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict
         return
 
     benchmark_name = benchmark["job_name"]
-    pod_data = llmd_runtime.oc_get_json(
+    pod_data = oc_get_json(
         "pods",
         namespace=namespace,
         selector=f"job-name={benchmark_name}",
@@ -165,7 +172,7 @@ def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict
     if pod_data and pod_data.get("items"):
         node_name = pod_data["items"][0].get("spec", {}).get("nodeName")
 
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         artifact_dir / "src" / "guidellm-copy-pod.yaml",
         llmd_runtime.render_guidellm_copy_pod_from_parts(
             namespace=namespace,
@@ -175,7 +182,7 @@ def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict
     )
 
     def _helper_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
+        payload = oc_get_json(
             "pod",
             name=f"{benchmark_name}-copy",
             namespace=namespace,
@@ -186,14 +193,14 @@ def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict
             for condition in conditions
         )
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"GuideLLM copy helper pod/{benchmark_name}-copy",
         timeout_seconds=120,
         interval_seconds=5,
         predicate=_helper_ready,
     )
 
-    result = llmd_runtime.oc(
+    result = oc(
         "exec",
         "-n",
         namespace,
@@ -233,7 +240,7 @@ def capture_guidellm_state(*, artifact_dir: Path, namespace: str, benchmark: dic
         artifacts_dir / "guidellm_benchmark_job.pods.yaml",
         selector=f"job-name={benchmark_name}",
     )
-    result = llmd_runtime.oc(
+    result = oc(
         "logs",
         f"job/{benchmark_name}",
         "-n",
@@ -261,7 +268,7 @@ def capture_get(
     if selector:
         args.extend(["-l", selector])
     args.extend(["-o", output])
-    result = llmd_runtime.oc(*args, check=False, capture_output=True)
+    result = oc(*args, check=False, capture_output=True)
     if result.returncode == 0 and result.stdout:
         toolbox_helper.write_text(destination, result.stdout)
 

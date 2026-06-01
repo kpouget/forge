@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import shell
-from projects.llm_d.runtime import llmd_runtime
+from projects.core.dsl.utils.k8s import (
+    oc,
+    oc_get_json,
+    resource_exists,
+    wait_until,
+)
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
 from projects.llm_d.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
@@ -32,7 +38,7 @@ def run(
     benchmark: dict | None = None,
     capture_namespace_events: bool = True,
 ) -> int:
-    artifact_dir = llmd_runtime.init()
+    artifact_dir = runtime_init()
 
     endpoint_url: str | None = None
     primary_exc: tuple[type[BaseException], BaseException, Any] | None = None
@@ -173,7 +179,9 @@ def write_endpoint_url(*, artifact_dir: Path, endpoint_url: str | None) -> None:
     if not endpoint_url:
         return
 
-    llmd_runtime.write_text(artifact_dir / "artifacts" / "endpoint.url", f"{endpoint_url}\n")
+    endpoint_file = artifact_dir / "artifacts" / "endpoint.url"
+    endpoint_file.parent.mkdir(parents=True, exist_ok=True)
+    endpoint_file.write_text(f"{endpoint_url}\n", encoding="utf-8")
 
 
 def cleanup_runtime_resources(
@@ -225,17 +233,15 @@ def cleanup_runtime_resources(
         "--ignore-not-found=true",
     )
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"llminferenceservice/{inference_service_name} deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
         predicate=lambda: (
-            not llmd_runtime.resource_exists(
-                "llminferenceservice", inference_service_name, namespace=namespace
-            )
+            not resource_exists("llminferenceservice", inference_service_name, namespace=namespace)
         ),
     )
-    llmd_runtime.wait_until(
+    wait_until(
         f"llm-d workload pods deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
@@ -278,13 +284,13 @@ def _run_finalizer(
 
 def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
-        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+        oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
         logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
-    payload = llmd_runtime.oc_get_json(
+    payload = oc_get_json(
         "pods",
         namespace=namespace,
         selector=f"app.kubernetes.io/name={inference_service_name}",

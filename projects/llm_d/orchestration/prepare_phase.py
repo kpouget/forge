@@ -6,6 +6,13 @@ from pathlib import Path
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
+from projects.core.dsl.utils.k8s import (
+    ensure_namespace,
+    oc,
+    oc_get_json,
+    wait_for_crd,
+    wait_until,
+)
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
@@ -21,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 def verify_oc_access() -> None:
-    llmd_runtime.oc("whoami", capture_output=True)
+    oc("whoami", capture_output=True)
 
 
 def verify_cluster_version(*, platform: dict) -> None:
-    version_info = llmd_runtime.oc("version", "-o", "json", capture_output=True)
+    version_info = oc("version", "-o", "json", capture_output=True)
     payload = json.loads(version_info.stdout)
 
     openshift_version = (
@@ -97,8 +104,8 @@ def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
     namespace = operator_spec["namespace"]
     package = operator_spec["package"]
 
-    llmd_runtime.ensure_namespace(namespace)
-    operator_groups = llmd_runtime.oc_get_json(
+    ensure_namespace(namespace)
+    operator_groups = oc_get_json(
         "operatorgroup",
         namespace=namespace,
         ignore_not_found=True,
@@ -112,10 +119,10 @@ def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
         )
 
     subscription = llmd_runtime.desired_subscription(operator_spec)
-    llmd_runtime.oc("apply", "-f", "-", input_text=json.dumps(subscription))
+    oc("apply", "-f", "-", input_text=json.dumps(subscription))
 
     def _subscription_reconciled() -> dict[str, object] | None:
-        payload = llmd_runtime.oc_get_json(
+        payload = oc_get_json(
             "subscription.operators.coreos.com",
             name=package,
             namespace=namespace,
@@ -124,7 +131,7 @@ def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
             return payload
         return None
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"subscription/{package} reconciliation in {namespace}",
         timeout_seconds=60,
         interval_seconds=5,
@@ -152,7 +159,7 @@ def prepare_leader_worker_set(*, platform: dict) -> None:
 def prepare_nfd(*, platform: dict) -> None:
     operator_spec = llmd_runtime.operator_spec_by_package(platform, "nfd")
     ensure_operator_subscription(operator_spec)
-    llmd_runtime.wait_for_crd(
+    wait_for_crd(
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
@@ -165,7 +172,7 @@ def prepare_nfd(*, platform: dict) -> None:
 def prepare_gpu_operator(*, platform: dict) -> None:
     operator_spec = llmd_runtime.operator_spec_by_package(platform, "gpu-operator-certified")
     ensure_operator_subscription(operator_spec)
-    llmd_runtime.wait_for_crd(
+    wait_for_crd(
         operator_spec["bootstrap_crd"],
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
@@ -188,7 +195,7 @@ def prepare_rhoai_operator(*, platform: dict) -> None:
 
 def ensure_required_crds(*, crd_names: list[str], rhoai: dict) -> None:
     for crd_name in crd_names:
-        llmd_runtime.wait_for_crd(
+        wait_for_crd(
             crd_name,
             timeout_seconds=rhoai["wait_timeout_seconds"],
         )
@@ -213,7 +220,7 @@ def ensure_gateway(*, config_dir: str, gateway: dict) -> None:
 
 
 def ensure_test_namespace(*, namespace: str) -> None:
-    llmd_runtime.ensure_namespace(
+    ensure_namespace(
         namespace,
         labels={
             "app.kubernetes.io/managed-by": "forge",
@@ -256,7 +263,7 @@ def prepare_model_cache(
 
 def verify_gpu_nodes(*, platform: dict) -> None:
     selector = platform["cluster"]["gpu_node_label_selector"]
-    data = llmd_runtime.oc_get_json("nodes", selector=selector, ignore_not_found=True)
+    data = oc_get_json("nodes", selector=selector, ignore_not_found=True)
     items = data.get("items", []) if data else []
     if not items:
         raise RuntimeError(
@@ -281,7 +288,7 @@ def capture_prepare_state(*, artifact_dir: Path, namespace: str, platform: dict)
         gateway["namespace"],
         artifacts_dir / "gateway.yaml",
     )
-    gateway_service = llmd_runtime.oc(
+    gateway_service = oc(
         "get",
         "service",
         "-A",
@@ -306,7 +313,7 @@ def capture_resource_yaml(
     *,
     check: bool = True,
 ) -> None:
-    result = llmd_runtime.oc(
+    result = oc(
         "get",
         kind,
         name,
@@ -322,7 +329,7 @@ def capture_resource_yaml(
 
 
 def capture_namespace_events(namespace: str, destination: Path) -> None:
-    result = llmd_runtime.oc(
+    result = oc(
         "get",
         "events",
         "-n",

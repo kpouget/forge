@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from projects.core.dsl import always, execute_tasks, shell, task, template, toolbox
-from projects.llm_d.runtime import llmd_runtime
+from projects.core.dsl.utils.k8s import (
+    oc_get_json,
+    resource_exists,
+    wait_until,
+)
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 NFD_NAME = "nfd-instance"
 NFD_NAMESPACE = "openshift-nfd"
@@ -18,7 +23,7 @@ def run(*, gpu_label_selectors: str, timeout_seconds: int = 900) -> int:
         timeout_seconds: Maximum time to wait for the NFD resource and GPU labels
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -48,7 +53,7 @@ def render_manifest(args, ctx):
 def apply_manifest_if_missing(args, ctx):
     """Apply the NodeFeatureDiscovery manifest when missing"""
 
-    if llmd_runtime.resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
+    if resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
         return f"NodeFeatureDiscovery/{NFD_NAME} already exists"
 
     shell.run(f"oc apply -f {ctx.manifest_file}")
@@ -59,11 +64,11 @@ def apply_manifest_if_missing(args, ctx):
 def wait_for_nfd_resource(args, ctx):
     """Wait for the NodeFeatureDiscovery resource to exist"""
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"NodeFeatureDiscovery/{NFD_NAME} in {NFD_NAMESPACE}",
         timeout_seconds=args.timeout_seconds,
         interval_seconds=10,
-        predicate=lambda: llmd_runtime.resource_exists(
+        predicate=lambda: resource_exists(
             "nodefeaturediscovery",
             NFD_NAME,
             namespace=NFD_NAMESPACE,
@@ -78,12 +83,12 @@ def wait_for_gpu_labels(args, ctx):
 
     def _labels_present() -> bool:
         for selector in ctx.selectors:
-            data = llmd_runtime.oc_get_json("nodes", selector=selector, ignore_not_found=True)
+            data = oc_get_json("nodes", selector=selector, ignore_not_found=True)
             if data and data.get("items"):
                 return True
         return False
 
-    llmd_runtime.wait_until(
+    wait_until(
         "NFD GPU discovery labels on cluster nodes",
         timeout_seconds=args.timeout_seconds,
         interval_seconds=15,

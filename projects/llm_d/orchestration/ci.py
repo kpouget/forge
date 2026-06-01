@@ -4,12 +4,15 @@ LLM-D Project CI Operations
 
 """
 
+import logging
 import os
 import types
 
 import click
 
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
+
+# Use core K8s utilities instead of llmd_runtime
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, vault
 from projects.core.library.export import caliper_export_command
@@ -17,11 +20,13 @@ from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
-from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.runtime.runtime_config import init as runtime_init
+
+logger = logging.getLogger(__name__)
 
 
 def init_runtime() -> None:
-    llmd_runtime.init()
+    runtime_init()
 
 
 def load_runtime_configuration(*, cwd=None, artifact_dir=None):
@@ -82,8 +87,67 @@ def run_cleanup_phase() -> int:
 
 
 def list_vaults() -> list[str]:
+    """List all vaults from all categories."""
     init_runtime()
-    return config.project.get_config("vaults")
+    vault_config = config.project.get_config("vaults")
+
+    # Handle both old format (list) and new format (dict with categories)
+    if isinstance(vault_config, list):
+        return vault_config
+
+    # New format: collect all vaults from all categories
+    all_vaults = []
+    for _category, vaults in vault_config.items():
+        if isinstance(vaults, list):
+            all_vaults.extend(vaults)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_vaults = []
+    for _vault in all_vaults:
+        if _vault in seen:
+            continue
+
+        seen.add(_vault)
+        unique_vaults.append(_vault)
+
+    return unique_vaults
+
+
+def get_vaults_for_phase(phase: str) -> list[str]:
+    """Get vaults needed for a specific phase.
+
+    Args:
+        phase: Phase name ('resolve-only', 'test', 'prepare', 'all')
+
+    Returns:
+        List of vault names for the specified phase
+    """
+    init_runtime()
+    vault_config = config.project.get_config("vaults")
+
+    # Handle old format (list) - return all for any phase
+    if isinstance(vault_config, list):
+        return vault_config
+
+    if phase == "all":
+        return list_vaults()
+
+    # Return vaults for specific phase, defaulting to empty list if phase doesn't exist
+    return vault_config.get(phase, [])
+
+
+def init_vaults_for_phase(phase: str) -> None:
+    """Initialize vaults for a specific phase."""
+
+    # For other phases, initialize all vaults from resolve-only + phase-specific
+    phase_vaults = get_vaults_for_phase(phase)
+
+    if not phase_vaults:
+        logger.info(f"No vault to initialize for phase '{phase}'")
+        return
+
+    vault.init(phase_vaults)
 
 
 @click.group()
@@ -93,8 +157,6 @@ def main(ctx):
     """LLM-D Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     init_runtime()
-    if ctx.invoked_subcommand != "resolve-fournos-config":
-        vault.init(list_vaults())
 
 
 @main.command()
@@ -102,6 +164,7 @@ def main(ctx):
 @ci_lib.safe_ci_command
 def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
+    init_vaults_for_phase("prepare")
     return run_prepare_phase()
 
 
@@ -110,6 +173,7 @@ def prepare(ctx) -> int:
 @ci_lib.safe_ci_command
 def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
+    init_vaults_for_phase("test")
     return run_test_phase()
 
 
@@ -118,10 +182,17 @@ def test(ctx) -> int:
 @ci_lib.safe_ci_command
 def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
+    # Cleanup doesn't typically need vaults, but initialize resolve-only for consistency
+    # no vault needed
     return run_cleanup_phase()
 
 
-main.add_command(create_fournos_resolve_command(vault_list_func=list_vaults))
+def list_resolve_vaults() -> list[str]:
+    """List all vaults for resolve operations."""
+    return list_vaults()
+
+
+main.add_command(create_fournos_resolve_command(vault_list_func=list_resolve_vaults))
 main.add_command(caliper_export_command)
 
 

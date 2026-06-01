@@ -5,7 +5,17 @@ from __future__ import annotations
 import logging
 
 from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl.utils.k8s import (
+    apply_manifest,
+    job_pod_names,
+    oc,
+    oc_get_json,
+    resource_exists,
+    wait_for_job_completion,
+    wait_until,
+)
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
 
 logger = logging.getLogger("TOOLBOX")
@@ -29,7 +39,7 @@ def run(
         model_cache: Model-cache configuration
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -107,7 +117,7 @@ def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int
 def ensure_model_cache_pvc(
     config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
 ) -> None:
-    existing = llmd_runtime.oc_get_json(
+    existing = oc_get_json(
         "persistentvolumeclaim",
         name=cache_spec.pvc_name,
         namespace=cache_spec.namespace,
@@ -128,7 +138,7 @@ def ensure_model_cache_pvc(
 
         return
 
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         config.artifact_dir / "src" / "model-cache-pvc.yaml",
         llmd_runtime.render_model_cache_pvc(cache_spec),
     )
@@ -137,7 +147,7 @@ def ensure_model_cache_pvc(
 def run_model_cache_download_job(
     config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
 ) -> None:
-    llmd_runtime.oc(
+    oc(
         "delete",
         "job",
         cache_spec.download_job_name,
@@ -146,24 +156,22 @@ def run_model_cache_download_job(
         "--ignore-not-found=true",
         check=False,
     )
-    llmd_runtime.wait_until(
+    wait_until(
         f"job/{cache_spec.download_job_name} deletion in {cache_spec.namespace}",
         timeout_seconds=120,
         interval_seconds=5,
         predicate=lambda: (
-            not llmd_runtime.resource_exists(
-                "job", cache_spec.download_job_name, namespace=cache_spec.namespace
-            )
+            not resource_exists("job", cache_spec.download_job_name, namespace=cache_spec.namespace)
         ),
     )
 
-    llmd_runtime.apply_manifest(
+    apply_manifest(
         config.artifact_dir / "src" / "model-cache-job.yaml",
         llmd_runtime.render_model_cache_job(config, cache_spec),
     )
 
     try:
-        llmd_runtime.wait_for_job_completion(
+        wait_for_job_completion(
             cache_spec.download_job_name,
             cache_spec.namespace,
             timeout_seconds=config.model_cache["download"]["wait_timeout_seconds"],
@@ -201,7 +209,7 @@ def capture_model_cache_state(
         check=False,
     )
 
-    for pod_name in llmd_runtime.job_pod_names(cache_spec.download_job_name, cache_spec.namespace):
+    for pod_name in job_pod_names(cache_spec.download_job_name, cache_spec.namespace):
         capture_resource_yaml(
             "pod",
             pod_name,
@@ -209,7 +217,7 @@ def capture_model_cache_state(
             artifact_dir / f"{pod_name}.yaml",
             check=False,
         )
-        log_result = llmd_runtime.oc(
+        log_result = oc(
             "logs",
             pod_name,
             "-n",
@@ -229,7 +237,7 @@ def capture_resource_yaml(
     *,
     check: bool = True,
 ) -> None:
-    result = llmd_runtime.oc(
+    result = oc(
         "get",
         kind,
         name,

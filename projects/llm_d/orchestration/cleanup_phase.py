@@ -3,7 +3,13 @@ from __future__ import annotations
 import logging
 import subprocess
 
-from projects.llm_d.runtime import llmd_runtime
+from projects.core.dsl.utils.k8s import (
+    oc,
+    oc_get_json,
+    resource_exists,
+    wait_until,
+)
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +30,7 @@ def run(
         benchmark_name: Optional GuideLLM benchmark job name
     """
 
-    llmd_runtime.init()
+    runtime_init()
     cleanup_namespace(
         namespace=namespace,
         inference_service_name=inference_service_name,
@@ -41,7 +47,7 @@ def cleanup_namespace(
     cleanup_timeout_seconds: int,
     benchmark_name: str | None = None,
 ) -> None:
-    if not llmd_runtime.resource_exists("namespace", namespace):
+    if not resource_exists("namespace", namespace):
         return
 
     benchmark_names = {"guidellm-benchmark"}
@@ -109,18 +115,16 @@ def cleanup_namespace(
         "--ignore-not-found=true",
     )
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"llminferenceservice/{inference_service_name} deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
         predicate=lambda: (
-            not llmd_runtime.resource_exists(
-                "llminferenceservice", inference_service_name, namespace=namespace
-            )
+            not resource_exists("llminferenceservice", inference_service_name, namespace=namespace)
         ),
     )
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"llm-d workload pods deletion in {namespace}",
         timeout_seconds=cleanup_timeout_seconds,
         interval_seconds=10,
@@ -130,13 +134,13 @@ def cleanup_namespace(
 
 def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
-        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+        oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
         logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
-    payload = llmd_runtime.oc_get_json(
+    payload = oc_get_json(
         "pods",
         namespace=namespace,
         selector=f"app.kubernetes.io/name={inference_service_name}",

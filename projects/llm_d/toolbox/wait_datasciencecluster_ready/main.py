@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from projects.core.dsl import execute_tasks, task, toolbox
-from projects.llm_d.runtime import llmd_runtime
+from projects.core.dsl.utils.k8s import (
+    oc_get_json,
+    wait_until,
+)
+from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 def run(
@@ -17,7 +21,7 @@ def run(
         rhoai: RHOAI configuration block
     """
 
-    llmd_runtime.init()
+    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -29,7 +33,7 @@ def wait_for_datasciencecluster_ready(args, ctx):
     rhoai = args.rhoai
 
     def _dsc_ready() -> bool:
-        payload = llmd_runtime.oc_get_json(
+        payload = oc_get_json(
             "datasciencecluster",
             name=rhoai["datasciencecluster_name"],
             namespace=rhoai["namespace"],
@@ -41,7 +45,7 @@ def wait_for_datasciencecluster_ready(args, ctx):
             raise RuntimeError(f"DataScienceCluster entered terminal phase {phase}")
         return False
 
-    llmd_runtime.wait_until(
+    wait_until(
         f"datasciencecluster/{rhoai['datasciencecluster_name']} ready",
         timeout_seconds=rhoai["wait_timeout_seconds"],
         interval_seconds=10,

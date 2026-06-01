@@ -9,6 +9,12 @@ import pytest
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
+from projects.core.dsl.utils.k8s import (
+    oc,
+    oc_get_json,
+    resource_exists,
+    wait_until,
+)
 from projects.core.library import config as forge_config
 from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import cleanup_phase as cleanup_toolbox
@@ -1365,7 +1371,7 @@ def test_test_phase_cleanup_ignores_helper_delete_timeout(
 
 def test_wait_until_reraises_runtime_error() -> None:
     with pytest.raises(RuntimeError, match="terminal failure"):
-        llmd_runtime.wait_until(
+        wait_until(
             "test condition",
             timeout_seconds=1,
             interval_seconds=0,
@@ -1383,7 +1389,7 @@ def test_oc_forwards_timeout_to_run_command(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(llmd_runtime, "run_command", fake_run_command)
 
-    llmd_runtime.oc("get", "pods", timeout_seconds=42)
+    oc("get", "pods", timeout_seconds=42)
 
     assert captured["args"] == ["oc", "get", "pods"]
     assert captured["kwargs"]["timeout_seconds"] == 42
@@ -1403,7 +1409,7 @@ def test_oc_get_json_returns_none_only_for_not_found(
         ),
     )
 
-    payload = llmd_runtime.oc_get_json(
+    payload = oc_get_json(
         "llminferenceservice",
         name="llm-d",
         namespace="forge-llm-d",
@@ -1428,7 +1434,7 @@ def test_oc_get_json_raises_for_non_not_found_errors(
     )
 
     with pytest.raises(llmd_runtime.CommandError, match="Forbidden"):
-        llmd_runtime.oc_get_json("pods", namespace="forge-llm-d", ignore_not_found=True)
+        oc_get_json("pods", namespace="forge-llm-d", ignore_not_found=True)
 
 
 def test_resource_exists_propagates_non_not_found_errors(
@@ -1441,4 +1447,4 @@ def test_resource_exists_propagates_non_not_found_errors(
     )
 
     with pytest.raises(llmd_runtime.CommandError, match="boom"):
-        llmd_runtime.resource_exists("namespace", "forge-llm-d")
+        resource_exists("namespace", "forge-llm-d")
