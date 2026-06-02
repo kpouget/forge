@@ -21,7 +21,7 @@ operators:
   leader-worker-set:
     display_name: Leader Worker Set
     namespace: openshift-lws
-    channel: stable
+    channel: stable-v1.0
     source: redhat-operators
     wait_timeout_seconds: 900
   nfd:
