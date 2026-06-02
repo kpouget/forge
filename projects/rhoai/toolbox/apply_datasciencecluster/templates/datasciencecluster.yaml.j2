@@ -1,0 +1,37 @@
+{% set all_components = {
+    "codeflare": {},
+    "kueue": {},
+    "kserve": {
+      "serving": {
+        "managementState": "Managed",
+        "ingressGateway": {
+          "certificate": {
+            "type": "SelfSigned"
+          }
+        }
+      }
+    },
+    "modelmeshserving": {},
+    "dashboard": {},
+    "datasciencepipelines": {},
+    "workbenches": {},
+    "modelregistry": {}
+} %}
+apiVersion: datasciencecluster.opendatahub.io/v1
+kind: DataScienceCluster
+metadata:
+  name: {{ datasciencecluster_name }}
+  namespace: {{ namespace }}
+spec:
+  components:
+{% for component_name, component_config in all_components.items() %}
+    {{ component_name }}:
+{% if component_name in components %}
+      managementState: Managed
+{% if component_config %}
+{{ component_config | toyaml | indent(6, True) }}
+{% endif %}
+{% else %}
+      managementState: Removed
+{% endif %}
+{% endfor %}

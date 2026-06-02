@@ -17,7 +17,7 @@ from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidell
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.kserve.toolbox.deploy_llmisvc import main as deploy_llmisvc
-from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.orchestration.runtime_config import init as runtime_init
 
 logger = logging.getLogger(__name__)
 

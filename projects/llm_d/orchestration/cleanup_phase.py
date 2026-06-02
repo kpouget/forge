@@ -9,7 +9,7 @@ from projects.core.dsl.utils.k8s import (
     resource_exists,
     wait_until,
 )
-from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.orchestration.runtime_config import init as runtime_init
 
 logger = logging.getLogger(__name__)
 

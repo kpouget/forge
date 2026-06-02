@@ -6,21 +6,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from projects.llm_d.runtime.runtime_config import ResolvedConfig, load_yaml
+import yaml
+
+from projects.core.dsl import template
 
 
-def render_gateway(config: ResolvedConfig) -> dict[str, Any]:
-    """Render a Gateway manifest from configuration.
+def render_gateway(
+    *,
+    name: str,
+    namespace: str,
+    gateway_class_name: str,
+) -> dict[str, Any]:
+    """Render a Gateway manifest from Jinja template.
 
     Args:
-        config: Resolved configuration
+        name: Gateway name
+        namespace: Gateway namespace
+        gateway_class_name: Gateway class name
 
     Returns:
         Gateway manifest as dict
     """
-    template_path = config.config_dir / config.platform["gateway"]["manifest_template"]
-    manifest = load_yaml(template_path)
-    manifest["metadata"]["name"] = config.platform["gateway"]["name"]
-    manifest["metadata"]["namespace"] = config.platform["gateway"]["namespace"]
-    manifest["spec"]["gatewayClassName"] = config.platform["gateway"]["gateway_class_name"]
-    return manifest
+    rendered_yaml = template.render_template(
+        "gateway.yaml.j2",
+        context={
+            "name": name,
+            "namespace": namespace,
+            "gateway_class_name": gateway_class_name,
+        },
+    )
+    return yaml.safe_load(rendered_yaml)

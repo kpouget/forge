@@ -6,20 +6,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from projects.llm_d.runtime.runtime_config import ResolvedConfig, load_yaml
+import yaml
+
+from projects.core.dsl import template
 
 
-def render_datasciencecluster(config: ResolvedConfig) -> dict[str, Any]:
-    """Render a DataScienceCluster manifest from configuration.
+def render_datasciencecluster(
+    *,
+    datasciencecluster_name: str,
+    namespace: str,
+    components: list[str],
+) -> dict[str, Any]:
+    """Render a DataScienceCluster manifest from Jinja template.
 
     Args:
-        config: Resolved configuration
+        datasciencecluster_name: Name of the DataScienceCluster
+        namespace: Namespace for the DataScienceCluster
+        components: List of components to enable
 
     Returns:
         DataScienceCluster manifest as dict
     """
-    template_path = config.config_dir / config.platform["rhoai"]["datasciencecluster_template"]
-    manifest = load_yaml(template_path)
-    manifest["metadata"]["name"] = config.platform["rhoai"]["datasciencecluster_name"]
-    manifest["metadata"]["namespace"] = config.platform["rhoai"]["namespace"]
-    return manifest
+    rendered_yaml = template.render_template(
+        "datasciencecluster.yaml.j2",
+        context={
+            "datasciencecluster_name": datasciencecluster_name,
+            "namespace": namespace,
+            "components": components,
+        },
+    )
+    return yaml.safe_load(rendered_yaml)

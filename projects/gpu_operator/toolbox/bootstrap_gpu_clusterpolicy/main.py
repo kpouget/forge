@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import always, entrypoint, execute_tasks, shell, task, template
-from projects.core.dsl.utils.k8s import oc_get_json, resource_exists, wait_until
-from projects.llm_d.runtime.runtime_config import init as runtime_init
+import json
+import logging
+
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
+from projects.core.dsl.utils.k8s import oc, resource_exists
+
+logger = logging.getLogger(__name__)
 
 
 @entrypoint
@@ -17,7 +21,6 @@ def run(*, clusterpolicy_name: str = "gpu-cluster-policy", timeout_seconds: int 
         timeout_seconds: Maximum time to wait for the ClusterPolicy to become ready
     """
 
-    runtime_init()
     execute_tasks(locals())
     return 0
 
@@ -51,22 +54,46 @@ def apply_manifest_if_missing(args, ctx):
     return f"Applied ClusterPolicy/{args.clusterpolicy_name}"
 
 
+@retry(attempts=60, delay=15, backoff=1.0)
 @task
 def wait_for_clusterpolicy_ready(args, ctx):
     """Wait for the ClusterPolicy to report ready"""
 
-    def _clusterpolicy_ready() -> bool:
-        payload = oc_get_json("clusterpolicy", name=args.clusterpolicy_name)
-        state = payload.get("status", {}).get("state", "")
-        return state.lower() == "ready"
-
-    wait_until(
-        f"clusterpolicy/{args.clusterpolicy_name} ready",
-        timeout_seconds=args.timeout_seconds,
-        interval_seconds=15,
-        predicate=_clusterpolicy_ready,
+    result = oc(
+        "get",
+        "clusterpolicy",
+        args.clusterpolicy_name,
+        "-o",
+        "json",
+        check=False,
+        capture_output=True,
+        log_stdout=False,
     )
-    return f"ClusterPolicy/{args.clusterpolicy_name} ready"
+    if result.returncode != 0:
+        return False  # Retry
+
+    try:
+        payload = json.loads(result.stdout)
+        status = payload.get("status", {})
+        state = status.get("state", "").lower()
+
+        if state == "ready":
+            return f"ClusterPolicy/{args.clusterpolicy_name} ready"
+
+        # Look for error conditions to provide useful feedback
+        conditions = status.get("conditions", [])
+        for condition in conditions:
+            if condition.get("type") == "Error" and condition.get("status") == "True":
+                message = condition.get("message", "")
+                if message:
+                    logger.info(f"ClusterPolicy not ready: {message}")
+                    return (False, f"ClusterPolicy not ready: {message}")
+
+        # Fallback if no specific error message
+        return (False, f"ClusterPolicy state: {state}")
+
+    except json.JSONDecodeError:
+        return False  # Retry on JSON parse error
 
 
 @always
@@ -75,7 +102,7 @@ def capture_clusterpolicy_state(args, ctx):
     """Capture ClusterPolicy YAML for diagnostics"""
 
     shell.run(
-        f"oc get clusterpolicy {args.clusterpolicy_name} -o yaml",
+        f"oc get clusterpolicy {args.clusterpolicy_name} -oyaml",
         stdout_dest=args.artifact_dir / "artifacts" / "clusterpolicy.yaml",
         check=False,
     )

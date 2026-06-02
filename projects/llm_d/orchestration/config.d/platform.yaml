@@ -64,6 +64,8 @@ rhoai:
   namespace: redhat-ods-applications
   datasciencecluster_name: default-dsc
   datasciencecluster_template: manifests/datasciencecluster.yaml
+  components:
+    - kserve
   wait_timeout_seconds: 1800
   required_crds_before_dsc:
     - datascienceclusters.datasciencecluster.opendatahub.io

@@ -8,7 +8,6 @@ from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, t
 from projects.core.dsl.utils.k8s import (
     resource_exists,
 )
-from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 NFD_NAME = "nfd-instance"
 NFD_NAMESPACE = "openshift-nfd"
@@ -25,7 +24,6 @@ def run(*, timeout_seconds: int = 900) -> int:
         timeout_seconds: Maximum time to wait for the NFD resource and node labeling
     """
 
-    runtime_init()
     execute_tasks(locals())
     return 0
 

@@ -30,6 +30,7 @@ def run_command(
     input_text: str | None = None,
     timeout_seconds: float | None = 300,
     log_stdout: bool = True,
+    log_stderr: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command and return the result.
 
@@ -40,6 +41,7 @@ def run_command(
         input_text: Input to send to command
         timeout_seconds: Command timeout
         log_stdout: Log stdout to console (default True)
+        log_stderr: Log stderr to console (default True)
 
     Returns:
         CompletedProcess result (compatible with subprocess.CompletedProcess)
@@ -56,6 +58,7 @@ def run_command(
             command_str,
             check=check,
             log_stdout=log_stdout,
+            log_stderr=log_stderr,
         )
 
         # Convert shell.CommandResult to subprocess.CompletedProcess for compatibility
@@ -75,6 +78,7 @@ def oc(
     input_text: str | None = None,
     timeout_seconds: float | None = 300,
     log_stdout: bool = True,
+    log_stderr: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run an oc command.
 
@@ -85,6 +89,7 @@ def oc(
         input_text: Input to send to command
         timeout_seconds: Command timeout
         log_stdout: Log stdout to console (default True)
+        log_stderr: Log stderr to console (default True)
 
     Returns:
         CompletedProcess result
@@ -96,6 +101,7 @@ def oc(
         input_text=input_text,
         timeout_seconds=timeout_seconds,
         log_stdout=log_stdout,
+        log_stderr=log_stderr,
     )
 
 
@@ -131,7 +137,13 @@ def oc_get_json(
         args.extend(["-l", selector])
     args.extend(["-o", "json"])
 
-    result = oc(*args, check=not ignore_not_found, capture_output=True, log_stdout=False)
+    result = oc(
+        *args,
+        check=not ignore_not_found,
+        capture_output=True,
+        log_stdout=False,
+        log_stderr=not ignore_not_found,
+    )
     if result.returncode != 0:
         if ignore_not_found and _is_oc_not_found_error(result.stderr):
             return None

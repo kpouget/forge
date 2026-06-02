@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from projects.llm_d.runtime.runtime_config import ResolvedConfig, load_yaml, write_yaml
+from projects.llm_d.orchestration.runtime_config import load_yaml, write_yaml
 
 
 @dataclass(frozen=True)
@@ -56,52 +56,18 @@ class TestInputs:
     benchmark: dict[str, Any] | None
 
 
-def write_cleanup_inputs(config: ResolvedConfig) -> Path:
-    path = config.artifact_dir / "_meta" / "cleanup.inputs.yaml"
+def write_cleanup_inputs() -> Path:
+    """Write cleanup phase inputs using direct config access."""
+    from projects.llm_d.orchestration import runtime_config
+
+    path = runtime_config.get_artifact_dir() / "_meta" / "cleanup.inputs.yaml"
     write_yaml(
         path,
         {
-            "artifact_dir": str(config.artifact_dir),
-            "namespace": config.namespace,
-            "platform": config.platform,
-            "benchmark": config.benchmark,
-        },
-    )
-    return path
-
-
-def write_prepare_model_cache_inputs(config: ResolvedConfig) -> Path:
-    path = config.artifact_dir / "_meta" / "prepare_model_cache.inputs.yaml"
-    write_yaml(
-        path,
-        {
-            "artifact_dir": str(config.artifact_dir),
-            "preset_name": config.preset_name,
-            "namespace": config.namespace,
-            "namespace_is_managed": config.namespace_is_managed,
-            "model_key": config.model_key,
-            "model": config.model,
-            "model_cache": config.model_cache,
-        },
-    )
-    return path
-
-
-def write_prepare_inputs(config: ResolvedConfig) -> Path:
-    path = config.artifact_dir / "_meta" / "prepare.inputs.yaml"
-    write_yaml(
-        path,
-        {
-            "artifact_dir": str(config.artifact_dir),
-            "config_dir": str(config.config_dir),
-            "preset_name": config.preset_name,
-            "namespace": config.namespace,
-            "namespace_is_managed": config.namespace_is_managed,
-            "platform": config.platform,
-            "model_key": config.model_key,
-            "model": config.model,
-            "model_cache": config.model_cache,
-            "benchmark": config.benchmark,
+            "artifact_dir": str(runtime_config.get_artifact_dir()),
+            "namespace": runtime_config.get_namespace(),
+            "platform": runtime_config.get_platform_config(),
+            "benchmark": runtime_config.get_benchmark_config(),
         },
     )
     return path
@@ -122,28 +88,6 @@ def write_prepare_inputs_from_prepare(inputs: PrepareInputs) -> Path:
             "model": inputs.model,
             "model_cache": inputs.model_cache,
             "benchmark": inputs.benchmark,
-        },
-    )
-    return path
-
-
-def write_test_inputs(config: ResolvedConfig) -> Path:
-    path = config.artifact_dir / "_meta" / "test.inputs.yaml"
-    write_yaml(
-        path,
-        {
-            "artifact_dir": str(config.artifact_dir),
-            "config_dir": str(config.config_dir),
-            "preset_name": config.preset_name,
-            "namespace": config.namespace,
-            "platform": config.platform,
-            "model_key": config.model_key,
-            "model": config.model,
-            "scheduler_profile_key": config.scheduler_profile_key,
-            "scheduler_profile": config.scheduler_profile,
-            "model_cache": config.model_cache,
-            "smoke_request": config.smoke_request,
-            "benchmark": config.benchmark,
         },
     )
     return path

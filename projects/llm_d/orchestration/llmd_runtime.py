@@ -9,10 +9,6 @@ from projects.core.dsl.utils.k8s import (
     oc,
     oc_get_json,
 )
-from projects.llm_d.runtime.runtime_config import (
-    ModelCacheSpec,
-    ResolvedConfig,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -58,23 +54,23 @@ def load_runtime_script(name: str) -> str:
     return script_path.read_text(encoding="utf-8")
 
 
-def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict[str, Any]:
+def render_model_cache_job(config, spec: dict[str, Any]) -> dict[str, Any]:
     common_env = [
-        {"name": "MODEL_SOURCE", "value": spec.source_uri},
-        {"name": "MODEL_TARGET_DIR", "value": f"/cache/{spec.model_path}"},
-        {"name": "MARKER_FILE", "value": spec.marker_path},
-        {"name": "CACHE_KEY", "value": spec.cache_key},
+        {"name": "MODEL_SOURCE", "value": spec["source_uri"]},
+        {"name": "MODEL_TARGET_DIR", "value": f"/cache/{spec['model_path']}"},
+        {"name": "MARKER_FILE", "value": spec["marker_path"]},
+        {"name": "CACHE_KEY", "value": spec["cache_key"]},
     ]
     volumes: list[dict[str, Any]] = [
-        {"name": "cache", "persistentVolumeClaim": {"claimName": spec.pvc_name}}
+        {"name": "cache", "persistentVolumeClaim": {"claimName": spec["pvc_name"]}}
     ]
 
-    if spec.source_scheme == "hf":
+    if spec["source_scheme"] == "hf":
         command = load_runtime_script("download_hf_model.sh")
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
-        if spec.hf_token_secret_name:
+        if spec["hf_token_secret_name"]:
             volumes.append(
-                {"name": "hf-token", "secret": {"secretName": spec.hf_token_secret_name}}
+                {"name": "hf-token", "secret": {"secretName": spec["hf_token_secret_name"]}}
             )
             volume_mounts.append(
                 {
@@ -86,7 +82,7 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
             common_env.append(
                 {
                     "name": "HF_TOKEN_FILE",
-                    "value": f"/var/run/forge/hf-token/{spec.hf_token_secret_key}",
+                    "value": f"/var/run/forge/hf-token/{spec['hf_token_secret_key']}",
                 }
             )
 
@@ -98,14 +94,13 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
             "env": common_env,
             "volumeMounts": volume_mounts,
         }
-    elif spec.source_scheme == "oci":
-        registry_auth_secret_name = (
-            spec.oci_registry_auth_secret_name
-            or resolve_default_serviceaccount_image_pull_secret(spec.namespace)
-        )
+    elif spec["source_scheme"] == "oci":
+        registry_auth_secret_name = spec[
+            "oci_registry_auth_secret_name"
+        ] or resolve_default_serviceaccount_image_pull_secret(spec["namespace"])
         command = load_runtime_script("extract_oci_model.sh")
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
-        common_env.append({"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"})
+        common_env.append({"name": "OCI_IMAGE_PATH", "value": spec["oci_image_path"] or "/"})
         if registry_auth_secret_name:
             volumes.append(
                 {"name": "registry-auth", "secret": {"secretName": registry_auth_secret_name}}
@@ -120,7 +115,7 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
             common_env.append(
                 {
                     "name": "REGISTRY_AUTH_FILE",
-                    "value": f"/var/run/forge/registry-auth/{spec.oci_registry_auth_secret_key}",
+                    "value": f"/var/run/forge/registry-auth/{spec['oci_registry_auth_secret_key']}",
                 }
             )
 
@@ -133,14 +128,14 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
             "volumeMounts": volume_mounts,
         }
     else:  # pragma: no cover - guarded by resolve_model_cache
-        raise ValueError(f"Unsupported model cache source scheme: {spec.source_scheme}")
+        raise ValueError(f"Unsupported model cache source scheme: {spec['source_scheme']}")
 
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
-            "name": spec.download_job_name,
-            "namespace": spec.namespace,
+            "name": spec["download_job_name"],
+            "namespace": spec["namespace"],
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
                 "forge.openshift.io/project": "llm_d",
@@ -168,11 +163,11 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
     }
 
 
-def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
+def model_cache_pvc_ready(spec: dict[str, Any]) -> bool:
     payload = oc_get_json(
         "persistentvolumeclaim",
-        name=spec.pvc_name,
-        namespace=spec.namespace,
+        name=spec["pvc_name"],
+        namespace=spec["namespace"],
         ignore_not_found=True,
     )
     if not payload:
@@ -181,21 +176,21 @@ def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
     annotations = payload.get("metadata", {}).get("annotations", {})
     return (
         annotations.get("forge.openshift.io/model-cache-ready") == "true"
-        and annotations.get("forge.openshift.io/model-cache-key") == spec.cache_key
-        and annotations.get("forge.openshift.io/model-source-uri") == spec.source_uri
+        and annotations.get("forge.openshift.io/model-cache-key") == spec["cache_key"]
+        and annotations.get("forge.openshift.io/model-source-uri") == spec["source_uri"]
     )
 
 
-def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
+def annotate_model_cache_pvc(spec: dict[str, Any]) -> None:
     oc(
         "annotate",
         "persistentvolumeclaim",
-        spec.pvc_name,
+        spec["pvc_name"],
         "-n",
-        spec.namespace,
+        spec["namespace"],
         "--overwrite",
         "forge.openshift.io/model-cache-ready=true",
-        f"forge.openshift.io/model-cache-key={spec.cache_key}",
-        f"forge.openshift.io/model-source-uri={spec.source_uri}",
-        f"forge.openshift.io/model-uri={spec.model_uri}",
+        f"forge.openshift.io/model-cache-key={spec['cache_key']}",
+        f"forge.openshift.io/model-source-uri={spec['source_uri']}",
+        f"forge.openshift.io/model-uri={spec['model_uri']}",
     )

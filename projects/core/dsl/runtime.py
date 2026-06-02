@@ -21,6 +21,7 @@ from .log import (
     _get_toolbox_function_name,
     log_completion_banner,
     log_execution_banner,
+    log_task_header,
     logger,
 )
 from .script_manager import get_script_manager
@@ -128,6 +129,9 @@ def execute_tasks(function_args: dict = None):
 
         # Create a shared context that persists across all tasks
         shared_context = types.SimpleNamespace()
+
+        # Store artifact dirname suffix for task logging
+        shared_context._artifact_dirname_suffix = suffix
 
         # Create _meta directory for metadata files
         meta_dir = env.ARTIFACT_DIR / "_meta"
@@ -254,6 +258,24 @@ def _execute_single_task(task_info, args, shared_context):
     task_func = task_info["func"]
     condition = task_info["condition"]
     task_status = task_info["status"] = {}
+
+    # Log task header with suffix from shared context
+    suffix = getattr(shared_context, "_artifact_dirname_suffix", None)
+
+    # Get definition location from the original function
+    original_func = task_func.original_func
+    co_filename = original_func.__code__.co_filename
+    co_firstlineno = original_func.__code__.co_firstlineno
+
+    # Make filename relative to FORGE_HOME
+    try:
+        rel_definition_filename = str(Path(co_filename).relative_to(env.FORGE_HOME))
+    except ValueError:
+        rel_definition_filename = co_filename
+
+    log_task_header(
+        task_name, original_func.__doc__, rel_definition_filename, co_firstlineno, suffix
+    )
 
     # Check condition if present
     if condition is not None:

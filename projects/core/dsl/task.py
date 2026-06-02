@@ -10,7 +10,6 @@ import time
 
 from projects.core.library.run import SignalError
 
-from .log import log_task_header
 from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
@@ -80,17 +79,36 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
         try:
             result = func(*args, **kwargs)
 
-            # Check if result indicates we should retry (falsy values like False, None, [], etc.)
-            if not result:
+            # Check if result indicates we should retry
+            # Handle both False and (False, reason) formats
+            should_retry = False
+            retry_reason = None
+
+            if isinstance(result, tuple) and len(result) == 2 and result[0] is False:
+                should_retry = True
+                retry_reason = result[1]
+            elif not result:
+                should_retry = True
+                retry_reason = None
+
+            if should_retry:
                 if attempt < retry_attempts - 1:  # Not the last attempt
                     elapsed_time = time.time() - start_time
                     elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
                     logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
-                    logger.warning(
-                        f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
-                    )
+
+                    # Show reason if provided, otherwise show the returned value
+                    if retry_reason:
+                        logger.warning(
+                            f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (reason: {retry_reason})"
+                        )
+                    else:
+                        logger.warning(
+                            f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
+                        )
+
                     logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
                     logger.info(f"~~ RETRY in {current_delay:.0f}s")
                     logger.info("~" * LINE_WIDTH)
@@ -105,15 +123,22 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                         f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts} after {elapsed_mins:.0f}m {elapsed_secs:.0f}s"
                     )
                     logger.info("")
-                    raise RetryFailure(
-                        f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})"
-                    )
+
+                    # Include reason in final failure message if available
+                    if retry_reason:
+                        raise RetryFailure(
+                            f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last reason: {retry_reason})"
+                        )
+                    else:
+                        raise RetryFailure(
+                            f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})"
+                        )
             else:
                 # Truthy result means success
                 return result
 
-        except KeyboardInterrupt:
-            # Don't retry on keyboard interrupt, just re-raise immediately
+        except (KeyboardInterrupt, SignalError):
+            # Don't retry on keyboard interrupt or signal, just re-raise immediately
             raise
         except Exception as exc:
             if not retry_on_exc:
@@ -238,9 +263,6 @@ def task(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         task_name = func.__name__
-
-        # Log task header using definition location
-        log_task_header(task_name, func.__doc__, rel_definition_filename, definition_line_no)
 
         try:
             result = func(*args, **kwargs)

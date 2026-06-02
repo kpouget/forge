@@ -4,6 +4,8 @@ vaults:
   - psap-forge-mlflow-export
   test: []
   prepare: []
+  prepare-optional:
+  - psap-forge-hf
 
 caliper:
   export:

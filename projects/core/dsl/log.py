@@ -30,11 +30,27 @@ def setup_clean_logger(name: str):
 logger = setup_clean_logger("DSL")
 
 
-def log_task_header(task_name: str, task_doc: str, rel_filename: str, line_no: int):
+def log_task_header(
+    task_name: str,
+    task_doc: str,
+    rel_filename: str,
+    line_no: int,
+    artifact_dirname_suffix: str = None,
+):
     """Log the verbose task header with tildes"""
     logger.info("")
     logger.info("~" * LINE_WIDTH)
-    logger.info(f"~~ {rel_filename}:{line_no}")
+
+    # Build the file/line info with optional suffix
+    file_line_info = f"~~ {rel_filename}:{line_no}"
+
+    # Add suffix if available, with underscores stripped
+    if artifact_dirname_suffix:
+        # Strip underscores and add to display
+        display_suffix = artifact_dirname_suffix.strip("_")
+        file_line_info += f" [{display_suffix}]"
+
+    logger.info(file_line_info)
     logger.info(f"~~ TASK: {task_name} : {task_doc or 'No description'}")
     logger.info("~" * LINE_WIDTH)
     logger.info("")

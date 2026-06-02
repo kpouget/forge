@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
-from projects.core.dsl import entrypoint, execute_tasks, task
+from projects.core.dsl import entrypoint, execute_tasks, retry, task
+from projects.core.dsl.utils import write_json, write_text
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
     resource_exists,
     wait_for_job_completion,
-    wait_until,
 )
 from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
-from projects.llm_d.runtime.runtime_config import init as runtime_init
-from projects.llm_d.toolbox import toolbox_helper
 
 
 @entrypoint
@@ -39,108 +36,132 @@ def run(
         endpoint_url: Gateway endpoint URL returned by the deploy command
     """
 
-    runtime_init()
     context = execute_tasks(locals())
     return context.response
 
 
 @task
-def run_smoke_request_task(args, ctx):
-    """Run the smoke request job and validate its response"""
+def prepare_smoke_request(args, ctx):
+    """Prepare smoke request payload"""
 
-    ctx.response = run_smoke_request(
-        artifact_dir=args.artifact_dir,
-        namespace=args.namespace,
-        smoke=args.smoke,
-        model=args.model,
-        smoke_request=args.smoke_request,
-        endpoint_url=args.endpoint_url,
-    )
-    return "Smoke request completed"
-
-
-def run_smoke_request(
-    *,
-    artifact_dir: Path,
-    namespace: str,
-    smoke: dict,
-    model: dict,
-    smoke_request: dict,
-    endpoint_url: str,
-) -> dict[str, Any]:
-    job_name = smoke["job_name"]
+    job_name = args.smoke["job_name"]
+    ctx.job_name = job_name
 
     payload = {
-        "model": model["served_model_name"],
-        "prompt": smoke_request["prompt"],
-        "max_tokens": smoke_request["max_tokens"],
-        "temperature": smoke_request["temperature"],
+        "model": args.model["served_model_name"],
+        "prompt": args.smoke_request["prompt"],
+        "max_tokens": args.smoke_request["max_tokens"],
+        "temperature": args.smoke_request["temperature"],
     }
-    toolbox_helper.write_json(artifact_dir / "artifacts" / "smoke.request.json", payload)
+    ctx.payload = payload
+    write_json(args.artifact_dir / "artifacts" / "smoke.request.json", payload)
+    return f"Prepared smoke request for job {job_name}"
+
+
+@task
+def delete_existing_smoke_job(args, ctx):
+    """Delete existing smoke job"""
 
     oc(
         "delete",
         "job",
-        job_name,
+        ctx.job_name,
         "-n",
-        namespace,
+        args.namespace,
         "--ignore-not-found=true",
         check=False,
     )
-    wait_until(
-        f"job/{job_name} deletion in {namespace}",
-        timeout_seconds=120,
-        interval_seconds=5,
-        predicate=lambda: not resource_exists("job", job_name, namespace=namespace),
-    )
+    return f"Initiated deletion of job {ctx.job_name}"
+
+
+@retry(attempts=24, delay=5, backoff=1.0)
+@task
+def wait_smoke_job_deleted(args, ctx):
+    """Wait for smoke job deletion to complete"""
+
+    if not resource_exists("job", ctx.job_name, namespace=args.namespace):
+        return f"Job {ctx.job_name} deleted"
+    return False  # Retry
+
+
+@task
+def create_smoke_job(args, ctx):
+    """Create the smoke request job"""
 
     apply_manifest(
-        artifact_dir / "src" / "smoke-job.yaml",
+        args.artifact_dir / "src" / "smoke-job.yaml",
         render_smoke_request_job_from_parts(
-            namespace=namespace,
-            smoke=smoke,
-            endpoint_url=endpoint_url,
-            payload=payload,
+            namespace=args.namespace,
+            smoke=args.smoke,
+            endpoint_url=args.endpoint_url,
+            payload=ctx.payload,
         ),
     )
+    return f"Created smoke job {ctx.job_name}"
+
+
+@retry(attempts=60, delay=5, backoff=1.0)
+@task
+def wait_smoke_job_completion(args, ctx):
+    """Wait for smoke job completion"""
 
     try:
         wait_for_job_completion(
-            job_name,
-            namespace,
+            ctx.job_name,
+            args.namespace,
             timeout_seconds=(
-                smoke["request_retries"]
-                * (smoke["request_timeout_seconds"] + smoke["request_retry_delay_seconds"])
+                args.smoke["request_retries"]
+                * (
+                    args.smoke["request_timeout_seconds"]
+                    + args.smoke["request_retry_delay_seconds"]
+                )
             ),
             interval_seconds=5,
         )
+        return f"Smoke job {ctx.job_name} completed"
+    except Exception:
+        return False  # Retry
+
+
+@task
+def capture_smoke_response(args, ctx):
+    """Capture and validate smoke response"""
+
+    try:
+        capture_smoke_state(
+            artifact_dir=args.artifact_dir,
+            namespace=args.namespace,
+            smoke=args.smoke,
+        )
+
+        result = oc(
+            "logs",
+            f"job/{ctx.job_name}",
+            "-n",
+            args.namespace,
+            check=False,
+            capture_output=True,
+        )
+
+        if result.returncode != 0 or not result.stdout:
+            raise RuntimeError(
+                f"Smoke request job {ctx.job_name} completed but response logs could not be read: {result.stderr}"
+            )
+
+        response = json.loads(result.stdout)
+        if not response.get("choices"):
+            raise RuntimeError(f"Invalid smoke response payload: {result.stdout}")
+
+        ctx.response = response
+        write_json(args.artifact_dir / "artifacts" / "smoke.response.json", response)
+        return f"Captured smoke response for job {ctx.job_name}"
+
     finally:
         capture_smoke_state(
-            artifact_dir=artifact_dir,
-            namespace=namespace,
-            smoke=smoke,
+            artifact_dir=args.artifact_dir,
+            namespace=args.namespace,
+            smoke=args.smoke,
         )
-
-    result = oc(
-        "logs",
-        f"job/{job_name}",
-        "-n",
-        namespace,
-        check=False,
-        capture_output=True,
-    )
-
-    if result.returncode != 0 or not result.stdout:
-        raise RuntimeError(
-            f"Smoke request job {job_name} completed but response logs could not be read: {result.stderr}"
-        )
-
-    response = json.loads(result.stdout)
-    if not response.get("choices"):
-        raise RuntimeError(f"Invalid smoke response payload: {result.stdout}")
-
-    toolbox_helper.write_json(artifact_dir / "artifacts" / "smoke.response.json", response)
-    return response
 
 
 def capture_smoke_state(*, artifact_dir: Path, namespace: str, smoke: dict) -> None:
@@ -165,7 +186,7 @@ def capture_smoke_state(*, artifact_dir: Path, namespace: str, smoke: dict) -> N
         capture_output=True,
     )
     if result.returncode == 0 and result.stdout:
-        toolbox_helper.write_text(artifacts_dir / "smoke_job.logs", result.stdout)
+        write_text(artifacts_dir / "smoke_job.logs", result.stdout)
 
 
 def capture_get(
@@ -186,7 +207,7 @@ def capture_get(
     args.extend(["-o", output])
     result = oc(*args, check=False, capture_output=True)
     if result.returncode == 0 and result.stdout:
-        toolbox_helper.write_text(destination, result.stdout)
+        write_text(destination, result.stdout)
 
 
 if __name__ == "__main__":

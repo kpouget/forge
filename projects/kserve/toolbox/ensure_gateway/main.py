@@ -2,78 +2,89 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import entrypoint, execute_tasks, task
+from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     condition_status,
     oc_get_json,
     resource_exists,
-    wait_until,
 )
 from projects.kserve.toolbox.ensure_gateway.utils import render_gateway
-from projects.llm_d.runtime import phase_inputs
-from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
 @entrypoint
 def run(
     *,
     config_dir: str,
-    gateway: dict,
+    namespace: str,
+    name: str,
+    gateway_class_name: str,
+    status_address_name: str,
+    create_if_missing: bool,
+    wait_timeout_seconds: int,
 ) -> int:
     """
     Ensure the llm_d gateway exists and is programmed.
 
     Args:
         config_dir: Configuration directory
-        gateway: Gateway configuration block
+        namespace: Gateway namespace
+        name: Gateway name
+        gateway_class_name: Gateway class name
+        status_address_name: Status address name
+        create_if_missing: Whether to create gateway if missing
+        wait_timeout_seconds: Maximum wait time for gateway to be ready
     """
 
-    runtime_init()
     execute_tasks(locals())
     return 0
 
 
 @task
-def ensure_gateway(args, ctx):
-    """Ensure the gateway exists and reaches Programmed=True"""
+def create_gateway_if_needed(args, ctx):
+    """Create gateway if it doesn't exist"""
 
-    config = phase_inputs.build_prepare_inputs(
-        artifact_dir=args.artifact_dir,
-        config_dir=args.config_dir,
-        preset_name="ensure-gateway",
-        namespace="unused",
-        namespace_is_managed=False,
-        platform={"gateway": args.gateway},
-        model_key="unused",
-        model={},
-        model_cache={},
-        benchmark=None,
-    )
-    gateway = config.platform["gateway"]
-    if not resource_exists("gateway", gateway["name"], namespace=gateway["namespace"]):
-        if not gateway["create_if_missing"]:
-            raise RuntimeError(
-                f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
-            )
-        manifest = render_gateway(config)
-        apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
+    ctx.gateway = {
+        "namespace": args.namespace,
+        "name": args.name,
+        "gateway_class_name": args.gateway_class_name,
+        "status_address_name": args.status_address_name,
+        "create_if_missing": args.create_if_missing,
+        "wait_timeout_seconds": args.wait_timeout_seconds,
+    }
 
-    def _gateway_programmed() -> bool:
-        resource = oc_get_json(
-            "gateway",
-            name=gateway["name"],
-            namespace=gateway["namespace"],
+    if not resource_exists("gateway", args.name, namespace=args.namespace):
+        if not args.create_if_missing:
+            raise RuntimeError(f"Required gateway {args.name} does not exist in {args.namespace}")
+
+        # Create src directory before writing manifest
+        src_dir = args.artifact_dir / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+
+        manifest = render_gateway(
+            name=args.name,
+            namespace=args.namespace,
+            gateway_class_name=args.gateway_class_name,
         )
-        return condition_status(resource, "Programmed") == "True"
+        apply_manifest(src_dir / "gateway.yaml", manifest)
+        return f"Created gateway {args.name}"
 
-    wait_until(
-        f"gateway/{gateway['name']} programmed",
-        timeout_seconds=gateway["wait_timeout_seconds"],
-        interval_seconds=10,
-        predicate=_gateway_programmed,
+    return f"Gateway {args.name} already exists"
+
+
+@retry(attempts=90, delay=10, backoff=1.0)
+@task
+def wait_gateway_programmed(args, ctx):
+    """Wait for gateway to be programmed"""
+
+    resource = oc_get_json(
+        "gateway",
+        name=ctx.gateway["name"],
+        namespace=ctx.gateway["namespace"],
     )
-    return "Gateway ready"
+    if condition_status(resource, "Programmed") == "True":
+        return f"Gateway {ctx.gateway['name']} programmed"
+    return False  # Retry
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from projects.llm_d.runtime.runtime_config import load_yaml, resolve_model_cache_spec
+from projects.llm_d.orchestration.runtime_config import load_yaml, resolve_model_cache_spec
 
 
 def render_inference_service_from_parts(
@@ -57,7 +57,7 @@ def render_inference_service_from_parts(
         model=model,
         model_cache=model_cache,
     )
-    manifest["spec"]["model"]["uri"] = cache_spec.model_uri if cache_spec else model["uri"]
+    manifest["spec"]["model"]["uri"] = cache_spec["model_uri"] if cache_spec else model["uri"]
     manifest["spec"]["model"]["name"] = model["served_model_name"]
     manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(model["resources"])
 

@@ -1,0 +1,10 @@
+env_key: PSAP_FORGE_HF_SECRET_PATH
+description: |
+  Vault to access models from HuggingFace
+
+content:
+  hf_token:
+    description: |
+      Token to access HuggingFace git repositories
+    format: |
+      hf_TOKEN
