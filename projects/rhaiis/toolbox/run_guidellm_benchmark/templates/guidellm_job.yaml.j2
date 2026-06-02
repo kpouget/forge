@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ ctx.job_name }}
+  namespace: {{ args.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.openshift.io/project: rhaiis
+    forge.openshift.io/component: benchmark
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ args.timeout }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.openshift.io/project: rhaiis
+        forge.openshift.io/component: benchmark
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      containers:
+        - name: guidellm
+          image: "{{ args.benchmark_image }}"
+          command:
+            - /opt/app-root/bin/guidellm
+          args:
+            - benchmark
+            - run
+            - "--target={{ args.endpoint_url }}/v1"
+            - "--model={{ args.model_id }}"
+            - "--data={{ args.data }}"
+            - "--profile={{ args.rate_type }}"
+            - "--rate={{ args.rates }}"
+            - "--max-seconds={{ args.max_seconds }}"
+            - "--backend={{ args.backend_type }}"
+            - "--output-dir=/results"
+            - "--outputs=json"
+          env:
+            - name: HOME
+              value: /tmp/guidellm
+            - name: HF_HOME
+              value: /tmp/guidellm/.cache/huggingface
+            - name: USER
+              value: guidellm
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          volumeMounts:
+            - name: cache
+              mountPath: /tmp/guidellm
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: results
+          persistentVolumeClaim:
+            claimName: {{ ctx.pvc_name }}

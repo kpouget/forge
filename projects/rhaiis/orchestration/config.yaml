@@ -1,0 +1,84 @@
+rhaiis:
+  namespace: forge-rhaiis
+  accelerator: nvidia
+
+  images:
+    nvidia: quay.io/aipcc/rhaiis/cuda-ubi9:3.4.0-ea.2-1773886296
+    amd: quay.io/aipcc/rhaiis/rocm-ubi9:3.2.5-1766067105
+
+  deploy:
+    replicas: 1
+    cpu_request: "4"
+    memory_request: "16Gi"
+    storage_source: hf
+    storage_pvc: model-pvc-2
+    image_pull_secret: ""
+    service_account_name: ""
+    ready_timeout: 3600
+    health_check_timeout: 120
+
+  vllm_args:
+    gpu-memory-utilization: 0.9
+    trust-remote-code: true
+    disable-log-requests: true
+    uvicorn-log-level: debug
+    tensor-parallel-size: 1
+
+  env_vars: {}
+
+  accelerator_env_vars:
+    nvidia: {}
+    amd:
+      VLLM_ROCM_USE_AITER: "1"
+
+models:
+  qwen3-0_6b:
+    name: Qwen3-0.6B
+    hf_model_id: Qwen/Qwen3-0.6B
+    vllm_args: {}
+
+  llama-3-1-8b-fp8:
+    name: Meta-Llama-3.1-8B-Instruct-FP8
+    hf_model_id: RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic
+    vllm_args:
+      max-model-len: 16384
+
+  llama-3-3-70b-fp8:
+    name: Llama-3.3-70B-Instruct-FP8
+    hf_model_id: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+    vllm_args:
+      tensor-parallel-size: 4
+      kv-cache-dtype: fp8
+
+workloads:
+  balanced:
+    data: "prompt_tokens=1000,output_tokens=1000"
+    rates: [1, 50, 100, 200]
+    max_seconds: 180
+
+  short:
+    data: "prompt_tokens=256,output_tokens=256"
+    rates: [1, 50, 100, 200]
+    max_seconds: 120
+
+  long-prompt:
+    data: "prompt_tokens=8000,output_tokens=1000"
+    rates: [1, 25, 50, 100]
+    max_seconds: 300
+    vllm_args:
+      max-model-len: 10000
+
+benchmarks:
+  guidellm:
+    enabled: true
+    name: guidellm-benchmark
+    image: ghcr.io/vllm-project/guidellm:v0.6.0
+    backend_type: openai_http
+    rate_type: concurrent
+    timeout: 900
+    pvc_size: 5Gi
+
+tests:
+  rhaiis:
+    model_key: qwen3-0_6b
+    workload_key: balanced

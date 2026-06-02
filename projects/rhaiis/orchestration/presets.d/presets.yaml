@@ -1,0 +1,16 @@
+__multiple: true
+
+llama-70b:
+  tests.rhaiis.model_key: llama-3-3-70b-fp8
+
+llama-8b:
+  tests.rhaiis.model_key: llama-3-1-8b-fp8
+
+short-workload:
+  tests.rhaiis.workload_key: short
+
+long-workload:
+  tests.rhaiis.workload_key: long-prompt
+
+amd:
+  rhaiis.accelerator: amd
