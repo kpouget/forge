@@ -82,7 +82,7 @@ benchmarks:
     image: ghcr.io/vllm-project/guidellm:v0.6.0
     backend_type: openai_http
     rate_type: concurrent
-    timeout: 900
+    timeout: 14400
     pvc_size: 10Gi
 
 tests:
