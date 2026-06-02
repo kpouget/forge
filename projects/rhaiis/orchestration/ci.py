@@ -6,7 +6,32 @@ import click
 import prepare_rhaiis
 import test_rhaiis
 
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
+from projects.core.library import config, vault
+from projects.core.library.export import caliper_export_command
+
+
+def list_vaults() -> list[str]:
+    test_rhaiis.init()
+    return config.project.get_config("vaults")
+
+
+def resolve_hardware_request(hardware_spec: dict) -> dict:
+    test_rhaiis.init()
+
+    model_key = config.project.get_config("tests.rhaiis.model_key")
+    model = config.project.get_config(f"models.{model_key}")
+    vllm_args = model.get("vllm_args", {})
+    tp_size = int(vllm_args.get("tensor-parallel-size", 1))
+
+    accelerator = config.project.get_config("rhaiis.accelerator")
+    gpu_type = "mi300x" if accelerator == "amd" else "h200"
+
+    hardware_spec["gpuCount"] = tp_size
+    hardware_spec["gpuType"] = gpu_type
+
+    return hardware_spec
 
 
 @click.group()
@@ -16,6 +41,9 @@ def main(ctx):
     """RHAIIS Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     test_rhaiis.init()
+
+    if ctx.invoked_subcommand != "resolve-fournos-config":
+        vault.init(config.project.get_config("vaults"))
 
 
 @main.command()
@@ -41,6 +69,14 @@ def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_rhaiis.cleanup()
 
+
+main.add_command(caliper_export_command)
+main.add_command(
+    create_fournos_resolve_command(
+        vault_list_func=list_vaults,
+        hardware_resolver_func=resolve_hardware_request,
+    )
+)
 
 if __name__ == "__main__":
     main()

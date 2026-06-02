@@ -4,14 +4,15 @@ import json
 
 from projects.core.dsl import (
     RetryFailure,
+    entrypoint,
     execute_tasks,
     retry,
     shell,
     task,
-    toolbox,
 )
 
 
+@entrypoint
 def run(
     *,
     name: str,
@@ -55,13 +56,8 @@ def wait_for_ready(args, context):
             break
 
     if not ready:
-        reasons = [
-            f"{c['type']}={c.get('status','?')}({c.get('reason','')})"
-            for c in conditions
-        ]
-        raise RetryFailure(
-            f"InferenceService {args.name} not ready: {', '.join(reasons)}"
-        )
+        reasons = [f"{c['type']}={c.get('status', '?')}({c.get('reason', '')})" for c in conditions]
+        raise RetryFailure(f"InferenceService {args.name} not ready: {', '.join(reasons)}")
 
     return f"InferenceService {args.name} is Ready"
 
@@ -85,12 +81,12 @@ def verify_health(args, context):
         log_stdout=False,
     )
     if health_result.returncode != 0:
-        return f"Health endpoint not responding on {pod_name} (InferenceService is Ready, proceeding)"
+        return (
+            f"Health endpoint not responding on {pod_name} (InferenceService is Ready, proceeding)"
+        )
 
     return f"Health check passed on pod {pod_name}"
 
 
-main = toolbox.create_toolbox_main(run)
-
 if __name__ == "__main__":
-    main()
+    run.main()

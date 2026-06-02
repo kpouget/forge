@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
 from projects.core.dsl import (
+    entrypoint,
     execute_tasks,
     shell,
     task,
     template,
-    toolbox,
 )
 
 
+@entrypoint
 def run(
     *,
     deployment_name: str,
@@ -65,20 +66,20 @@ def ensure_namespace(args, context):
 
 
 @task
-def render_kserve_manifest(args, context):
-    output_path = args.artifact_dir / "kserve.yaml"
-    template.render_template_to_file("kserve.yaml.j2", output_path)
-    context.kserve_manifest_path = output_path
-    return f"Rendered KServe manifest to {output_path}"
+def render_and_apply_servingruntime(args, context):
+    output_path = args.artifact_dir / "servingruntime.yaml"
+    template.render_template_to_file("servingruntime.yaml.j2", output_path)
+    shell.run(f"oc apply -f {output_path}")
+    return f"Applied ServingRuntime {args.deployment_name}"
 
 
 @task
-def apply_kserve_manifest(args, context):
-    shell.run(f"oc apply -f {context.kserve_manifest_path}")
-    return f"Applied ServingRuntime + InferenceService {args.deployment_name}"
+def render_and_apply_inferenceservice(args, context):
+    output_path = args.artifact_dir / "inferenceservice.yaml"
+    template.render_template_to_file("inferenceservice.yaml.j2", output_path)
+    shell.run(f"oc apply -f {output_path}")
+    return f"Applied InferenceService {args.deployment_name}"
 
-
-main = toolbox.create_toolbox_main(run)
 
 if __name__ == "__main__":
-    main()
+    run.main()

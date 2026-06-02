@@ -1,3 +1,7 @@
+vaults:
+- psap-forge-notifications
+- psap-forge-mlflow-export
+
 rhaiis:
   namespace: forge-rhaiis
   accelerator: nvidia
@@ -82,3 +86,25 @@ tests:
   rhaiis:
     model_key: qwen3-0_6b
     workload_key: balanced
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: aws.credentials
+        config:
+          experiment: forge-rhaiis
+          run_name: null
+          description: "Caliper export from FORGE rhaiis benchmarks"
+          source_script: rhaiis project
+          tags: {}
+          parameters: {}
+          metrics: {}

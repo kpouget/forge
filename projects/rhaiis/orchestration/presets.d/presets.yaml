@@ -12,5 +12,8 @@ short-workload:
 long-workload:
   tests.rhaiis.workload_key: long-prompt
 
+nvidia:
+  rhaiis.accelerator: nvidia
+
 amd:
   rhaiis.accelerator: amd

@@ -2,14 +2,15 @@
 
 from projects.core.dsl import (
     RetryFailure,
+    entrypoint,
     execute_tasks,
     retry,
     shell,
     task,
-    toolbox,
 )
 
 
+@entrypoint
 def run(*, name: str, namespace: str):
     return execute_tasks(locals())
 
@@ -58,7 +59,5 @@ def wait_for_deletion(args, context):
     return f"Resources {args.name} fully deleted"
 
 
-main = toolbox.create_toolbox_main(run)
-
 if __name__ == "__main__":
-    main()
+    run.main()

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 from projects.core.dsl import (
+    entrypoint,
     execute_tasks,
     shell,
     task,
-    toolbox,
 )
 
 
+@entrypoint
 def run(*, name: str, namespace: str = ""):
     return execute_tasks(locals())
 
@@ -216,7 +217,5 @@ def capture_events(args, context):
     return "Namespace events captured"
 
 
-main = toolbox.create_toolbox_main(run)
-
 if __name__ == "__main__":
-    main()
+    run.main()

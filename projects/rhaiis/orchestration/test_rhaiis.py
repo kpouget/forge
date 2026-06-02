@@ -26,9 +26,7 @@ def _merge_vllm_args(
 def _merge_env_vars(accelerator: str, model: dict) -> dict:
     base = dict(config.project.get_config("rhaiis.env_vars") or {})
     base.update(model.get("env_vars", {}))
-    accel_vars = config.project.get_config(
-        f"rhaiis.accelerator_env_vars.{accelerator}"
-    ) or {}
+    accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{accelerator}") or {}
     base.update(accel_vars)
     return base
 
@@ -55,54 +53,48 @@ def test(_cfg):
     env_vars = _merge_env_vars(accelerator, model)
 
     logger.info(
-        f"Testing model={model['name']} workload={_cfg.workload_key} "
-        f"accelerator={accelerator}"
+        f"Testing model={model['name']} workload={_cfg.workload_key} accelerator={accelerator}"
     )
 
     from projects.rhaiis.toolbox.deploy_kserve_isvc.main import (
         run as deploy_kserve_isvc,
     )
-
-    deploy_kserve_isvc(
-        deployment_name=deployment_name,
-        namespace=_cfg.namespace,
-        model_id=model["hf_model_id"],
-        vllm_image=image,
-        accelerator=accelerator,
-        vllm_args=vllm_args,
-        env_vars=env_vars,
-        replicas=deploy_cfg.get("replicas", 1),
-        cpu_request=deploy_cfg.get("cpu_request", "4"),
-        memory_request=deploy_cfg.get("memory_request", "16Gi"),
-        storage_source=deploy_cfg.get("storage_source", "hf"),
-        storage_pvc=deploy_cfg.get("storage_pvc", ""),
-        image_pull_secret=deploy_cfg.get("image_pull_secret", ""),
-        service_account_name=deploy_cfg.get("service_account_name", ""),
+    from projects.rhaiis.toolbox.run_guidellm_benchmark.main import (
+        run as run_guidellm_benchmark,
     )
-
     from projects.rhaiis.toolbox.wait_isvc_ready.main import (
         run as wait_isvc_ready,
     )
 
-    wait_isvc_ready(
-        name=deployment_name,
-        namespace=_cfg.namespace,
-        timeout_seconds=deploy_cfg.get("ready_timeout", 3600),
-        health_check_timeout=deploy_cfg.get("health_check_timeout", 120),
-    )
-
-    from projects.rhaiis.toolbox.run_guidellm_benchmark.main import (
-        run as run_guidellm_benchmark,
-    )
-
-    endpoint_url = (
-        f"http://{deployment_name}-predictor"
-        f".{_cfg.namespace}.svc.cluster.local:8080"
-    )
-
-    rates_str = ",".join(str(r) for r in workload.get("rates", [1]))
-
     try:
+        deploy_kserve_isvc(
+            deployment_name=deployment_name,
+            namespace=_cfg.namespace,
+            model_id=model["hf_model_id"],
+            vllm_image=image,
+            accelerator=accelerator,
+            vllm_args=vllm_args,
+            env_vars=env_vars,
+            replicas=deploy_cfg.get("replicas", 1),
+            cpu_request=deploy_cfg.get("cpu_request", "4"),
+            memory_request=deploy_cfg.get("memory_request", "16Gi"),
+            storage_source=deploy_cfg.get("storage_source", "hf"),
+            storage_pvc=deploy_cfg.get("storage_pvc", ""),
+            image_pull_secret=deploy_cfg.get("image_pull_secret", ""),
+            service_account_name=deploy_cfg.get("service_account_name", ""),
+        )
+
+        wait_isvc_ready(
+            name=deployment_name,
+            namespace=_cfg.namespace,
+            timeout_seconds=deploy_cfg.get("ready_timeout", 3600),
+            health_check_timeout=deploy_cfg.get("health_check_timeout", 120),
+        )
+
+        endpoint_url = f"http://{deployment_name}-predictor.{_cfg.namespace}.svc.cluster.local:8080"
+
+        rates_str = ",".join(str(r) for r in workload.get("rates", [1]))
+
         run_guidellm_benchmark(
             namespace=_cfg.namespace,
             deployment_name=deployment_name,
@@ -111,9 +103,7 @@ def test(_cfg):
             data=workload["data"],
             rates=rates_str,
             max_seconds=workload.get("max_seconds", 180),
-            benchmark_image=benchmark_cfg.get(
-                "image", "ghcr.io/vllm-project/guidellm:v0.6.0"
-            ),
+            benchmark_image=benchmark_cfg.get("image", "ghcr.io/vllm-project/guidellm:v0.6.0"),
             backend_type=benchmark_cfg.get("backend_type", "openai_http"),
             rate_type=benchmark_cfg.get("rate_type", "concurrent"),
             timeout=benchmark_cfg.get("timeout", 900),

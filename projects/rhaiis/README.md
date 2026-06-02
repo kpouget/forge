@@ -55,9 +55,36 @@ Key sections:
 | `benchmarks.guidellm` | GuideLLM image, backend, timeout, PVC size |
 | `tests` | CI test mapping (model_key, workload_key) |
 
+## Fournos integration
+
+rhaiis supports Fournos-driven execution via `ci.py`:
+
+```
+bin/run_ci rhaiis ci resolve-fournos-config   # Populate spec.secretRefs + hardware
+bin/run_ci rhaiis ci pre-cleanup              # Delete leftover jobs/pods
+bin/run_ci rhaiis ci prepare                  # Verify cluster, ensure namespace/SA
+bin/run_ci rhaiis ci test                     # Deploy, benchmark, capture, cleanup
+bin/run_ci rhaiis ci export-artifacts         # Caliper export to MLflow
+```
+
+FournosJob example:
+```yaml
+spec:
+  executionEngine:
+    forge:
+      project: rhaiis
+      args: [test, llama-8b, short-workload]
+      configOverrides:
+        rhaiis.images.nvidia: "quay.io/custom/image:tag"
+```
+
+Presets from `args` are applied via `project.args` → `presets.d/presets.yaml`.
+Config overrides (e.g. `rhaiis.images.nvidia`) are applied as variable overrides.
+
 ## Main entrypoints
 
 - CLI: [`orchestration/cli.py`](./orchestration/cli.py)
+- CI: [`orchestration/ci.py`](./orchestration/ci.py) (Fournos pipeline)
 - CI test: [`orchestration/test_rhaiis.py`](./orchestration/test_rhaiis.py)
 
 ## Toolbox commands

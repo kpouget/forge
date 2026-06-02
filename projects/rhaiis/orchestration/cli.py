@@ -50,9 +50,7 @@ def _merge_vllm_args(defaults: dict, model: dict, workload: dict) -> dict:
 def _merge_env_vars(accelerator: str, model: dict) -> dict:
     base = dict(config.project.get_config("rhaiis.env_vars") or {})
     base.update(model.get("env_vars", {}))
-    accel_vars = config.project.get_config(
-        f"rhaiis.accelerator_env_vars.{accelerator}"
-    ) or {}
+    accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{accelerator}") or {}
     base.update(accel_vars)
     return base
 
@@ -149,47 +147,42 @@ def test(
         return
 
     from projects.rhaiis.toolbox.deploy_kserve_isvc.main import run as deploy_kserve_isvc
-
-    click.echo(f"Deploying {model_cfg['hf_model_id']} to {namespace}/{deployment_name}")
-    deploy_kserve_isvc(
-        deployment_name=deployment_name,
-        namespace=namespace,
-        model_id=model_cfg["hf_model_id"],
-        vllm_image=vllm_image,
-        accelerator=accelerator,
-        vllm_args=vllm_args,
-        env_vars=env_vars,
-        replicas=replicas,
-        cpu_request=deploy_cfg.get("cpu_request", "4"),
-        memory_request=deploy_cfg.get("memory_request", "16Gi"),
-        storage_source=storage_source,
-        storage_pvc=storage_pvc,
-        image_pull_secret=image_pull_secret,
-        service_account_name=service_account_name,
-    )
-
+    from projects.rhaiis.toolbox.run_guidellm_benchmark.main import run as run_guidellm_benchmark
     from projects.rhaiis.toolbox.wait_isvc_ready.main import run as wait_isvc_ready
 
-    click.echo("Waiting for InferenceService to be ready...")
-    wait_isvc_ready(
-        name=deployment_name,
-        namespace=namespace,
-        timeout_seconds=deploy_cfg.get("ready_timeout", 3600),
-        health_check_timeout=deploy_cfg.get("health_check_timeout", 120),
-    )
-
-    from projects.rhaiis.toolbox.run_guidellm_benchmark.main import run as run_guidellm_benchmark
-
-    endpoint_url = (
-        f"http://{deployment_name}-predictor"
-        f".{namespace}.svc.cluster.local:8080"
-    )
-
-    rates_str = ",".join(str(r) for r in rate_list)
-    click.echo(f"Running benchmark at rates={rates_str}...")
-
-    benchmark_error = None
+    run_error = None
     try:
+        click.echo(f"Deploying {model_cfg['hf_model_id']} to {namespace}/{deployment_name}")
+        deploy_kserve_isvc(
+            deployment_name=deployment_name,
+            namespace=namespace,
+            model_id=model_cfg["hf_model_id"],
+            vllm_image=vllm_image,
+            accelerator=accelerator,
+            vllm_args=vllm_args,
+            env_vars=env_vars,
+            replicas=replicas,
+            cpu_request=deploy_cfg.get("cpu_request", "4"),
+            memory_request=deploy_cfg.get("memory_request", "16Gi"),
+            storage_source=storage_source,
+            storage_pvc=storage_pvc,
+            image_pull_secret=image_pull_secret,
+            service_account_name=service_account_name,
+        )
+
+        click.echo("Waiting for InferenceService to be ready...")
+        wait_isvc_ready(
+            name=deployment_name,
+            namespace=namespace,
+            timeout_seconds=deploy_cfg.get("ready_timeout", 3600),
+            health_check_timeout=deploy_cfg.get("health_check_timeout", 120),
+        )
+
+        endpoint_url = f"http://{deployment_name}-predictor.{namespace}.svc.cluster.local:8080"
+
+        rates_str = ",".join(str(r) for r in rate_list)
+        click.echo(f"Running benchmark at rates={rates_str}...")
+
         run_guidellm_benchmark(
             namespace=namespace,
             deployment_name=deployment_name,
@@ -205,8 +198,8 @@ def test(
             pvc_size=benchmark_cfg.get("pvc_size", "5Gi"),
         )
     except Exception as exc:
-        benchmark_error = exc
-        click.echo(f"Benchmark failed: {exc}")
+        run_error = exc
+        click.echo(f"Run failed: {exc}")
     finally:
         from projects.rhaiis.toolbox.capture_isvc_state.main import run as capture_isvc_state
 
@@ -224,7 +217,7 @@ def test(
         except Exception as exc:
             click.echo(f"Warning: cleanup failed: {exc}")
 
-    if benchmark_error:
+    if run_error:
         raise SystemExit(1)
 
     click.echo("Benchmark completed successfully.")
@@ -240,7 +233,10 @@ def cleanup(ctx, deployment_name: str, namespace: str):
     from projects.rhaiis.toolbox.cleanup_isvc.main import run as cleanup_isvc
 
     click.echo(f"Capturing state for {deployment_name}...")
-    capture_isvc_state(name=deployment_name, namespace=namespace)
+    try:
+        capture_isvc_state(name=deployment_name, namespace=namespace)
+    except Exception as exc:
+        click.echo(f"Warning: capture failed: {exc}")
 
     click.echo(f"Cleaning up {deployment_name}...")
     cleanup_isvc(name=deployment_name, namespace=namespace)
