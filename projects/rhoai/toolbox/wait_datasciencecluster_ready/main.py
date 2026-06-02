@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     oc_get_json,
     wait_until,
@@ -10,6 +10,7 @@ from projects.core.dsl.utils.k8s import (
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
+@entrypoint
 def run(
     *,
     rhoai: dict,
@@ -54,8 +55,5 @@ def wait_for_datasciencecluster_ready(args, ctx):
     return "DataScienceCluster ready"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

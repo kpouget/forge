@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     job_pod_names,
@@ -14,6 +14,13 @@ from projects.core.dsl.utils.k8s import (
     wait_for_job_completion,
     wait_until,
 )
+from projects.kserve.toolbox.prepare_model_cache.utils import (
+    annotate_model_cache_pvc,
+    model_cache_pvc_ready,
+    pvc_access_mode_matches,
+    render_model_cache_job,
+    render_model_cache_pvc,
+)
 from projects.llm_d.runtime import phase_inputs
 from projects.llm_d.runtime.runtime_config import (
     ModelCacheSpec,
@@ -22,18 +29,12 @@ from projects.llm_d.runtime.runtime_config import (
 from projects.llm_d.runtime.runtime_config import (
     init as runtime_init,
 )
-from projects.kserve.toolbox.prepare_model_cache.utils import (
-    annotate_model_cache_pvc,
-    model_cache_pvc_ready,
-    pvc_access_mode_matches,
-    render_model_cache_job,
-    render_model_cache_pvc,
-)
 from projects.llm_d.toolbox import toolbox_helper
 
 logger = logging.getLogger("TOOLBOX")
 
 
+@entrypoint
 def run(
     *,
     namespace: str,
@@ -265,8 +266,5 @@ def capture_resource_yaml(
         toolbox_helper.write_text(destination, result.stdout)
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

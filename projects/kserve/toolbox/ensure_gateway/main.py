@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     condition_status,
@@ -10,11 +10,12 @@ from projects.core.dsl.utils.k8s import (
     resource_exists,
     wait_until,
 )
+from projects.kserve.toolbox.ensure_gateway.utils import render_gateway
 from projects.llm_d.runtime import phase_inputs
 from projects.llm_d.runtime.runtime_config import init as runtime_init
-from projects.llm_d.toolbox.ensure_gateway.utils import render_gateway
 
 
+@entrypoint
 def run(
     *,
     config_dir: str,
@@ -75,8 +76,5 @@ def ensure_gateway(args, ctx):
     return "Gateway ready"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

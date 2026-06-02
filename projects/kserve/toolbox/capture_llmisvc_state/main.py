@@ -5,9 +5,10 @@ LLMInferenceService state capture using task-based DSL
 Replaces llmd_capture_llmisvc_state Ansible role
 """
 
-from projects.core.dsl import execute_tasks, shell, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, shell, task
 
 
+@entrypoint
 def run(llmisvc_name: str, *, namespace: str = ""):
     """
     Capture LLMInferenceService state using task-based DSL
@@ -244,8 +245,5 @@ def capture_pods_describe(args, context):
     return f"Pod describe output captured for {len(pod_names)} pods"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

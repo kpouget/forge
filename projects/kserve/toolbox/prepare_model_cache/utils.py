@@ -46,7 +46,13 @@ def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
 
 def load_runtime_script(name: str) -> str:
     # Load scripts from the llm_d runtime scripts directory
-    script_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "llm_d" / "runtime" / "scripts" / name
+    script_path = (
+        Path(__file__).resolve().parent.parent.parent.parent.parent
+        / "llm_d"
+        / "runtime"
+        / "scripts"
+        / name
+    )
     return script_path.read_text(encoding="utf-8")
 
 

@@ -6,24 +6,25 @@ import logging
 import subprocess
 from pathlib import Path
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
     oc_get_json,
     wait_until,
 )
-from projects.llm_d.runtime.runtime_config import init as runtime_init
-from projects.llm_d.toolbox import toolbox_helper
-from projects.llm_d.toolbox.run_guidellm_benchmark.utils import (
+from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
     render_guidellm_copy_pod_from_parts,
     render_guidellm_job_from_parts,
     render_guidellm_pvc_from_parts,
 )
+from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.toolbox import toolbox_helper
 
 logger = logging.getLogger(__name__)
 
 
+@entrypoint
 def run(
     *,
     namespace: str,
@@ -280,8 +281,5 @@ def capture_get(
         toolbox_helper.write_text(destination, result.stdout)
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

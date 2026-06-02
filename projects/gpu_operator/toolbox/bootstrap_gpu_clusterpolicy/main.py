@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import always, execute_tasks, shell, task, template, toolbox
+from projects.core.dsl import always, entrypoint, execute_tasks, shell, task, template
 from projects.core.dsl.utils.k8s import oc_get_json, resource_exists, wait_until
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 
+@entrypoint
 def run(*, clusterpolicy_name: str = "gpu-cluster-policy", timeout_seconds: int = 1800) -> int:
     """
     Bootstrap the NVIDIA ClusterPolicy used by llm_d and wait for readiness.
@@ -81,8 +82,5 @@ def capture_clusterpolicy_state(args, ctx):
     return f"Captured ClusterPolicy/{args.clusterpolicy_name} state"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     condition_status,
@@ -12,11 +12,12 @@ from projects.core.dsl.utils.k8s import (
     oc_get_json,
     wait_until,
 )
+from projects.kserve.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
-from projects.llm_d.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
 
 
+@entrypoint
 def run(
     *,
     config_dir: str,
@@ -182,8 +183,5 @@ def try_resolve_endpoint_url(
     return None
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

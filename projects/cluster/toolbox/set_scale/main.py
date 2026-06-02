@@ -8,7 +8,7 @@ from datetime import datetime
 
 import yaml
 
-from projects.core.dsl import always, execute_tasks, retry, shell, task, toolbox
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task
 
 logger = logging.getLogger("DSL")
 
@@ -19,6 +19,7 @@ DEFAULT_COMPUTE_INSTANCES = {
 }
 
 
+@entrypoint
 def run(
     replicas: int,
     *,
@@ -552,8 +553,5 @@ def capture_compute_nodes_state(args, ctx):
     return "Captured compute node state"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

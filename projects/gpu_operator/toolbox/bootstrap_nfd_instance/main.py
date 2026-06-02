@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import always, execute_tasks, shell, task, template, toolbox
+import logging
+
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
 from projects.core.dsl.utils.k8s import (
-    oc_get_json,
     resource_exists,
-    wait_until,
 )
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 
 NFD_NAME = "nfd-instance"
 NFD_NAMESPACE = "openshift-nfd"
 
+logger = logging.getLogger("TOOLBOX")
 
-def run(*, gpu_label_selectors: str, timeout_seconds: int = 900) -> int:
+
+@entrypoint
+def run(*, timeout_seconds: int = 900) -> int:
     """
-    Bootstrap the NodeFeatureDiscovery instance used by llm_d and wait for GPU labels.
+    Bootstrap the NodeFeatureDiscovery instance and wait for it to be ready.
 
     Args:
-        gpu_label_selectors: Comma-separated list of node label selectors to probe
-        timeout_seconds: Maximum time to wait for the NFD resource and GPU labels
+        timeout_seconds: Maximum time to wait for the NFD resource and node labeling
     """
 
     runtime_init()
@@ -34,10 +36,7 @@ def setup_directories(args, ctx):
 
     shell.mkdir("src")
     shell.mkdir("artifacts")
-    ctx.selectors = [item.strip() for item in args.gpu_label_selectors.split(",") if item.strip()]
-    if not ctx.selectors:
-        raise ValueError("gpu_label_selectors must contain at least one selector")
-    return f"Prepared NFD bootstrap command with {len(ctx.selectors)} GPU selectors"
+    return "Prepared NFD bootstrap command"
 
 
 @task
@@ -60,47 +59,59 @@ def apply_manifest_if_missing(args, ctx):
     return f"Applied NodeFeatureDiscovery/{NFD_NAME}"
 
 
+@retry(attempts=90, delay=10)
 @task
 def wait_for_nfd_resource(args, ctx):
     """Wait for the NodeFeatureDiscovery resource to exist"""
 
-    wait_until(
-        f"NodeFeatureDiscovery/{NFD_NAME} in {NFD_NAMESPACE}",
-        timeout_seconds=args.timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: resource_exists(
-            "nodefeaturediscovery",
-            NFD_NAME,
-            namespace=NFD_NAMESPACE,
-        ),
-    )
-    return f"NodeFeatureDiscovery/{NFD_NAME} exists"
+    if resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
+        return f"NodeFeatureDiscovery/{NFD_NAME} exists"
+    return False
 
 
+@retry(attempts=60, delay=15)
 @task
-def wait_for_gpu_labels(args, ctx):
-    """Wait for any configured GPU label selector to match cluster nodes"""
+def wait_for_nfd_ready(args, ctx):
+    """Wait for NFD to label all nodes with kernel version"""
 
-    def _labels_present() -> bool:
-        for selector in ctx.selectors:
-            data = oc_get_json("nodes", selector=selector, ignore_not_found=True)
-            if data and data.get("items"):
-                return True
+    # Get all nodes count
+    total_result = shell.run(
+        "oc get nodes --no-headers -oname -lnode-role.kubernetes.io/worker",
+        check=False,
+        log_stdout=False,
+    )
+    if not total_result.success:
         return False
 
-    wait_until(
-        "NFD GPU discovery labels on cluster nodes",
-        timeout_seconds=args.timeout_seconds,
-        interval_seconds=15,
-        predicate=_labels_present,
+    total_nodes = len([line for line in total_result.stdout.strip().split("\n") if line.strip()])
+    if total_nodes == 0:
+        return False
+
+    # Get nodes with NFD kernel version label
+    labeled_result = shell.run(
+        "oc get nodes -l feature.node.kubernetes.io/kernel-version.major --no-headers -oname",
+        check=False,
     )
-    return "GPU discovery labels detected"
+
+    if not labeled_result.success:
+        labeled_count = 0
+    else:
+        labeled_count = len(
+            [line for line in labeled_result.stdout.strip().split("\n") if line.strip()]
+        )
+
+    if labeled_count == total_nodes:
+        return f"NFD ready: {total_nodes}/{total_nodes} nodes labeled with kernel version"
+
+    logger.info(f"NFD not ready: {total_nodes}/{total_nodes} nodes labeled with kernel version")
+
+    return False
 
 
 @always
 @task
 def capture_nfd_state(args, ctx):
-    """Capture the NodeFeatureDiscovery resource and matching nodes"""
+    """Capture the NodeFeatureDiscovery resource and all node labels"""
 
     shell.run(
         f"oc get nodefeaturediscovery {NFD_NAME} -n {NFD_NAMESPACE} -o yaml",
@@ -120,8 +131,5 @@ def capture_nfd_state(args, ctx):
     return "Captured NFD bootstrap state"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

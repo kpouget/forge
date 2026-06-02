@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import logging
 
-from projects.core.dsl import always, execute_tasks, retry, shell, task, template, toolbox
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
 
 logger = logging.getLogger("DSL")
 
 
+@entrypoint
 def run(
     catalog_source_name: str,
     catalog_namespace: str,
@@ -133,8 +134,5 @@ def capture_namespace_pods(args, ctx):
     return "Captured catalog namespace pods"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

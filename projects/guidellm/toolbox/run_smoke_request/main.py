@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
@@ -14,11 +14,12 @@ from projects.core.dsl.utils.k8s import (
     wait_for_job_completion,
     wait_until,
 )
+from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
-from projects.llm_d.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
 
 
+@entrypoint
 def run(
     *,
     namespace: str,
@@ -188,8 +189,5 @@ def capture_get(
         toolbox_helper.write_text(destination, result.stdout)
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

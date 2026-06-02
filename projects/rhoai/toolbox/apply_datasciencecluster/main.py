@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from projects.core.dsl import execute_tasks, task, toolbox
+from projects.core.dsl import entrypoint, execute_tasks, task
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
 )
 from projects.llm_d.runtime import phase_inputs
 from projects.llm_d.runtime.runtime_config import init as runtime_init
-from projects.llm_d.toolbox.apply_datasciencecluster.utils import render_datasciencecluster
+from projects.rhoai.toolbox.apply_datasciencecluster.utils import render_datasciencecluster
 
 
+@entrypoint
 def run(
     *,
     config_dir: str,
@@ -47,7 +48,12 @@ def apply_datasciencecluster(args, ctx):
         benchmark=None,
     )
     manifest = render_datasciencecluster(config)
-    apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
+
+    # Ensure the src directory exists
+    src_dir = config.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    apply_manifest(src_dir / "datasciencecluster.yaml", manifest)
     oc(
         "get",
         "datasciencecluster",
@@ -61,8 +67,5 @@ def apply_datasciencecluster(args, ctx):
     return "DataScienceCluster applied"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()
