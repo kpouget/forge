@@ -17,19 +17,16 @@ operators:
     namespace: openshift-cert-manager-operator
     channel: stable-v1.18
     source: redhat-operators
-    wait_timeout_seconds: 900
   leader-worker-set:
     display_name: Leader Worker Set
     namespace: openshift-lws
     channel: stable-v1.0
     source: redhat-operators
-    wait_timeout_seconds: 900
   nfd:
     display_name: Node Feature Discovery
     namespace: openshift-nfd
     channel: stable
     source: redhat-operators
-    wait_timeout_seconds: 900
     bootstrap_crd: nodefeaturediscoveries.nfd.openshift.io
     bootstrap_manifest: manifests/nfd-nodefeaturediscovery.yaml
   gpu-operator-certified:
@@ -37,7 +34,6 @@ operators:
     namespace: nvidia-gpu-operator
     channel: stable
     source: certified-operators
-    wait_timeout_seconds: 1800
     bootstrap_crd: clusterpolicies.nvidia.com
     bootstrap_manifest: manifests/gpu-clusterpolicy.yaml
   rhcl-operator:
@@ -45,13 +41,11 @@ operators:
     namespace: openshift-operators
     channel: stable
     source: redhat-operators
-    wait_timeout_seconds: 1800
   rhods-operator:
     display_name: Red Hat OpenShift AI
     namespace: redhat-ods-operator
     channel: stable-3.x
     source: redhat-operators
-    wait_timeout_seconds: 1800
 
 rhoai:
   custom_catalog:
@@ -60,13 +54,11 @@ rhoai:
     namespace: openshift-marketplace
     image: null
     display_name: Red Hat OpenShift AI Custom Catalog
-    wait_timeout_seconds: 900
   namespace: redhat-ods-applications
   datasciencecluster_name: default-dsc
   datasciencecluster_template: manifests/datasciencecluster.yaml
   components:
     - kserve
-  wait_timeout_seconds: 1800
   required_crds_before_dsc:
     - datascienceclusters.datasciencecluster.opendatahub.io
   required_crds_after_dsc:
@@ -79,7 +71,6 @@ gateway:
   status_address_name: gateway-external
   create_if_missing: true
   manifest_template: manifests/gateway.yaml
-  wait_timeout_seconds: 600
 
 inference_service:
   name: llm-d

@@ -66,7 +66,6 @@ def ensure_operator_subscription(operator_spec: dict[str, str]) -> dict[str, obj
         source_name=operator_spec["source"],
         channel=operator_spec["channel"],
         source_namespace=operator_spec.get("source_namespace", "openshift-marketplace"),
-        wait_timeout_seconds=operator_spec["wait_timeout_seconds"],
         display_name=operator_spec.get("display_name", operator_spec["package"]),
         artifact_dirname_suffix=f"_{operator_spec['package']}",
     )
@@ -86,7 +85,6 @@ def deploy_rhoai_custom_catalog(*, rhoai: dict) -> int:
         catalog_namespace=custom_catalog["namespace"],
         catalog_image=custom_catalog["image"],
         display_name=custom_catalog.get("display_name", custom_catalog["name"]),
-        wait_timeout_seconds=custom_catalog["wait_timeout_seconds"],
     )
 
 
@@ -131,11 +129,9 @@ def prepare_nfd() -> None:
     ensure_operator_subscription(operator_spec)
     wait_for_crd(
         operator_spec["bootstrap_crd"],
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
+        timeout_seconds=900,
     )
-    bootstrap_nfd_instance.run(
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
+    bootstrap_nfd_instance.run()
 
 
 def prepare_gpu_operator() -> None:
@@ -144,11 +140,9 @@ def prepare_gpu_operator() -> None:
     ensure_operator_subscription(operator_spec)
     wait_for_crd(
         operator_spec["bootstrap_crd"],
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
+        timeout_seconds=1800,
     )
-    bootstrap_gpu_clusterpolicy.run(
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
+    bootstrap_gpu_clusterpolicy.run()
 
 
 def prepare_rhoai_operator() -> None:
@@ -167,7 +161,7 @@ def ensure_required_crds_before_dsc() -> None:
     for crd_name in rhoai["required_crds_before_dsc"]:
         wait_for_crd(
             crd_name,
-            timeout_seconds=rhoai["wait_timeout_seconds"],
+            timeout_seconds=1800,
         )
 
 
@@ -178,7 +172,7 @@ def ensure_required_crds() -> None:
     for crd_name in rhoai["required_crds_after_dsc"]:
         wait_for_crd(
             crd_name,
-            timeout_seconds=rhoai["wait_timeout_seconds"],
+            timeout_seconds=1800,
         )
 
 
@@ -212,7 +206,6 @@ def ensure_gateway() -> None:
         gateway_class_name=gateway["gateway_class_name"],
         status_address_name=gateway["status_address_name"],
         create_if_missing=gateway["create_if_missing"],
-        wait_timeout_seconds=gateway["wait_timeout_seconds"],
     )
 
 

@@ -17,7 +17,6 @@ def run(
     catalog_image: str,
     *,
     display_name: str = "",
-    wait_timeout_seconds: int = 900,
 ) -> int:
     """
     Deploy a CatalogSource from a custom index image and wait for it to become READY.
@@ -27,7 +26,6 @@ def run(
         catalog_namespace: Namespace where the CatalogSource will be deployed
         catalog_image: Index image backing the CatalogSource
         display_name: Optional human-friendly label for logs
-        wait_timeout_seconds: Maximum time to wait for READY state
     """
 
     execute_tasks(locals())

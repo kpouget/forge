@@ -18,7 +18,6 @@ def run(
     channel: str,
     *,
     source_namespace: str = "openshift-marketplace",
-    wait_timeout_seconds: int = 900,
     installplan_approval: str = "Automatic",
     display_name: str = "",
     install_mode: str = "auto",
@@ -32,7 +31,6 @@ def run(
         source_name: CatalogSource name providing the operator
         channel: Subscription channel to use
         source_namespace: CatalogSource namespace
-        wait_timeout_seconds: Maximum time to wait for readiness
         installplan_approval: InstallPlan approval mode
         display_name: Optional human-friendly name used in logs
         install_mode: Install mode - "auto" (default), "namespace-scoped", or "cluster-wide"

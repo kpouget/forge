@@ -21,7 +21,6 @@ def run(
     gateway_class_name: str,
     status_address_name: str,
     create_if_missing: bool,
-    wait_timeout_seconds: int,
 ) -> int:
     """
     Ensure the llm_d gateway exists and is programmed.
@@ -33,7 +32,6 @@ def run(
         gateway_class_name: Gateway class name
         status_address_name: Status address name
         create_if_missing: Whether to create gateway if missing
-        wait_timeout_seconds: Maximum wait time for gateway to be ready
     """
 
     execute_tasks(locals())
@@ -50,7 +48,6 @@ def create_gateway_if_needed(args, ctx):
         "gateway_class_name": args.gateway_class_name,
         "status_address_name": args.status_address_name,
         "create_if_missing": args.create_if_missing,
-        "wait_timeout_seconds": args.wait_timeout_seconds,
     }
 
     if not resource_exists("gateway", args.name, namespace=args.namespace):
