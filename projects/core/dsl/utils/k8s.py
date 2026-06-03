@@ -107,16 +107,12 @@ def oc_resource_exists(kind: str, name: str, *, namespace: str | None = None) ->
     Returns:
         True if resource exists, False otherwise
     """
-    exists = oc(
-        "get",
-        kind,
-        name,
-        "-n",
-        namespace,
-        "--ignore-not-found",
-        "-oname",
-        check=False,
-    )
+    args = ["get", kind, name]
+    if namespace is not None:
+        args.extend(["-n", namespace])
+    args.extend(["--ignore-not-found", "-oname"])
+
+    exists = oc(*args, check=False)
 
     return bool(exists.stdout)
 

@@ -308,7 +308,6 @@ def extract_results(args, ctx):
     return f"Extracted results for {ctx.benchmark_name}"
 
 
-
 @task
 def cleanup_copy_pod(args, ctx):
     """Delete the copy pod after results extraction"""

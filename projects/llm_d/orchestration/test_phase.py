@@ -11,6 +11,7 @@ from projects.core.dsl.utils import slugify_identifier, truncate_k8s_name
 from projects.core.dsl.utils.k8s import oc_get_json, oc_resource_exists
 from projects.core.library import env
 from projects.core.library.run import SignalInterrupt
+from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
@@ -123,6 +124,15 @@ def run() -> int:
     namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     capture_namespace_events = platform["artifacts"]["capture_namespace_events"]
+
+    # Ensure namespace exists before starting any deployments
+    ensure_namespace(
+        namespace,
+        labels={
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.openshift.io/project": "llm_d",
+        },
+    )
 
     endpoint_url: str | None = None
     primary_exc: tuple[type[BaseException], BaseException, Any] | None = None
