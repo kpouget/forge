@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from projects.llm_d.orchestration.runtime_config import load_yaml, write_yaml
+from projects.core.library import env
+from projects.llm_d.orchestration.utils import load_yaml, write_yaml
 
 
 @dataclass(frozen=True)
@@ -60,11 +61,11 @@ def write_cleanup_inputs() -> Path:
     """Write cleanup phase inputs using direct config access."""
     from projects.llm_d.orchestration import runtime_config
 
-    path = runtime_config.get_artifact_dir() / "_meta" / "cleanup.inputs.yaml"
+    path = env.ARTIFACT_DIR / "_meta" / "cleanup.inputs.yaml"
     write_yaml(
         path,
         {
-            "artifact_dir": str(runtime_config.get_artifact_dir()),
+            "artifact_dir": str(env.ARTIFACT_DIR),
             "namespace": runtime_config.get_namespace(),
             "platform": runtime_config.get_platform_config(),
             "benchmark": runtime_config.get_benchmark_config(),

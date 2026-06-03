@@ -11,7 +11,7 @@ from projects.core.dsl.utils.k8s import (
     oc,
     oc_get_json,
 )
-from projects.core.library import vault
+from projects.core.library import env, vault
 from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
     main as bootstrap_gpu_clusterpolicy,
@@ -21,7 +21,7 @@ from projects.kserve.toolbox.ensure_gateway import main as ensure_gateway_comman
 from projects.kserve.toolbox.prepare_hf_model_cache.main import (
     run as prepare_hf_model_cache_toolbox_run,
 )
-from projects.llm_d.orchestration import llmd_runtime, runtime_config
+from projects.llm_d.orchestration import runtime_config
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.toolbox.capture_prepare_state.main import (
     run as capture_prepare_state_toolbox_run,
@@ -119,27 +119,25 @@ def rhoai_operator_spec(
 
 def prepare_rhcl_operator() -> None:
     platform = runtime_config.get_platform_config()
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "rhcl-operator")
+    operator_spec = operator_spec_by_package(platform, "rhcl-operator")
     ensure_operator_subscription(operator_spec)
 
 
 def prepare_cert_manager() -> None:
     platform = runtime_config.get_platform_config()
-    operator_spec = llmd_runtime.operator_spec_by_package(
-        platform, "openshift-cert-manager-operator"
-    )
+    operator_spec = operator_spec_by_package(platform, "openshift-cert-manager-operator")
     ensure_operator_subscription(operator_spec)
 
 
 def prepare_leader_worker_set() -> None:
     platform = runtime_config.get_platform_config()
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "leader-worker-set")
+    operator_spec = operator_spec_by_package(platform, "leader-worker-set")
     ensure_operator_subscription(operator_spec)
 
 
 def prepare_nfd() -> None:
     platform = runtime_config.get_platform_config()
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "nfd")
+    operator_spec = operator_spec_by_package(platform, "nfd")
     ensure_operator_subscription(operator_spec)
     wait_for_crds_command.run(
         crd_names=[operator_spec["bootstrap_crd"]],
@@ -150,7 +148,7 @@ def prepare_nfd() -> None:
 
 def prepare_gpu_operator() -> None:
     platform = runtime_config.get_platform_config()
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "gpu-operator-certified")
+    operator_spec = operator_spec_by_package(platform, "gpu-operator-certified")
     ensure_operator_subscription(operator_spec)
     wait_for_crds_command.run(
         crd_names=[operator_spec["bootstrap_crd"]],
@@ -163,7 +161,7 @@ def prepare_rhoai_operator() -> None:
     platform = runtime_config.get_platform_config()
     prepare_rhcl_operator()
     deploy_rhoai_custom_catalog(rhoai=platform["rhoai"])
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "rhods-operator")
+    operator_spec = operator_spec_by_package(platform, "rhods-operator")
     operator_spec = rhoai_operator_spec(rhoai=platform["rhoai"], operator_spec=operator_spec)
     ensure_operator_subscription(operator_spec)
     ensure_required_crds_before_dsc()
@@ -240,6 +238,7 @@ def cleanup_previous_run() -> None:
     cleanup_toolbox_run(
         namespace=namespace,
         inference_service_name=platform["inference_service"]["name"],
+        cleanup_timeout_seconds=platform["cluster"]["cleanup_timeout_seconds"],
         benchmark_name=benchmark["job_name"] if benchmark else None,
     )
 
@@ -309,7 +308,7 @@ def verify_gpu_nodes() -> None:
 
 
 def capture_prepare_state() -> None:
-    artifact_dir = runtime_config.get_artifact_dir()
+    artifact_dir = env.ARTIFACT_DIR
     namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     rhoai = platform["rhoai"]

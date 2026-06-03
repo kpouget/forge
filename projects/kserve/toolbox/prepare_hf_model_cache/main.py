@@ -44,12 +44,12 @@ def run(
     storage_class_name: str | None,
     pvc_name_prefix: str,
     model_directory_name: str,
-    marker_filename: str,
-    wait_timeout_seconds: int,
-    poll_interval_seconds: int,
+    marker_filename: str = "cached.marker",
+    wait_timeout_seconds: int = 3600,
+    poll_interval_seconds: int = 30,
     downloader_image: str,
     hf_token_file_path: str | None,
-    pod_image_pull_policy: str,
+    pod_image_pull_policy: str = "IfNotPresent",
 ) -> int:
     """Prepare a HuggingFace model cache PVC and populate it when needed.
 
