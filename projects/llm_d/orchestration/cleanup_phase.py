@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 
-from projects.core.dsl.utils.k8s import (
-    oc,
-    oc_get_json,
-    resource_exists,
-    wait_until,
-)
+from projects.core.dsl.utils.k8s import resource_exists
 from projects.llm_d.orchestration.runtime_config import init as runtime_init
+from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_resources_command
 
 logger = logging.getLogger(__name__)
 
@@ -50,100 +45,11 @@ def cleanup_namespace(
     if not resource_exists("namespace", namespace):
         return
 
-    benchmark_names = {"guidellm-benchmark"}
-    if benchmark_name:
-        benchmark_names.add(benchmark_name)
-
-    _best_effort_delete(
-        "llminferenceservice",
-        "delete",
-        "llminferenceservice",
-        inference_service_name,
-        "-n",
-        namespace,
-        "--ignore-not-found=true",
-    )
-
-    for current_benchmark_name in sorted(benchmark_names):
-        _best_effort_delete(
-            "benchmark helper job and pvc",
-            "delete",
-            "job,pvc",
-            current_benchmark_name,
-            "-n",
-            namespace,
-            "--ignore-not-found=true",
-        )
-        _best_effort_delete(
-            "benchmark helper copy pod",
-            "delete",
-            "pod",
-            f"{current_benchmark_name}-copy",
-            "-n",
-            namespace,
-            "--ignore-not-found=true",
-        )
-
-    _best_effort_delete(
-        "llm_d jobs",
-        "delete",
-        "job",
-        "-n",
-        namespace,
-        "-l",
-        "forge.openshift.io/project=llm_d",
-        "--ignore-not-found=true",
-    )
-    _best_effort_delete(
-        "llm_d pods",
-        "delete",
-        "pod",
-        "-n",
-        namespace,
-        "-l",
-        "forge.openshift.io/project=llm_d",
-        "--ignore-not-found=true",
-    )
-    _best_effort_delete(
-        "llm_d non-preserved pvcs",
-        "delete",
-        "pvc",
-        "-n",
-        namespace,
-        "-l",
-        "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true",
-        "--ignore-not-found=true",
-    )
-
-    wait_until(
-        f"llminferenceservice/{inference_service_name} deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: (
-            not resource_exists("llminferenceservice", inference_service_name, namespace=namespace)
-        ),
-    )
-
-    wait_until(
-        f"llm-d workload pods deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
-    )
-
-
-def _best_effort_delete(description: str, *oc_args: str) -> None:
-    try:
-        oc(*oc_args, check=False, timeout_seconds=60)
-    except subprocess.TimeoutExpired:
-        logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
-
-
-def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
-    payload = oc_get_json(
-        "pods",
+    cleanup_test_resources_command.run(
         namespace=namespace,
-        selector=f"app.kubernetes.io/name={inference_service_name}",
-        ignore_not_found=True,
+        inference_service_name=inference_service_name,
+        smoke_job_name=None,  # No specific smoke job name for runtime cleanup
+        benchmark_job_name=benchmark_name,
+        cleanup_timeout_seconds=cleanup_timeout_seconds,
+        cleanup_all_llm_d_resources=True,  # Enable broad cleanup for runtime
     )
-    return not payload or not payload.get("items")

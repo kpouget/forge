@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import subprocess
-import time
 from typing import Any
 
 import yaml
@@ -134,117 +133,6 @@ def _is_oc_not_found_error(stderr: str | None) -> bool:
         return True
 
     return bool(re.search(r"\bnot found\b", normalized))
-
-
-def wait_until(
-    description: str,
-    *,
-    timeout_seconds: int,
-    interval_seconds: int,
-    predicate,
-) -> Any:
-    """Wait until a condition is met.
-
-    Args:
-        description: Description of what we're waiting for (for logging)
-        timeout_seconds: Maximum time to wait
-        interval_seconds: Time between predicate checks
-        predicate: Function that returns truthy value when condition is met
-
-    Returns:
-        The truthy value returned by predicate
-
-    Raises:
-        RuntimeError: If timeout is reached
-    """
-    deadline = time.time() + timeout_seconds
-    last_error: Exception | None = None
-
-    while time.time() < deadline:
-        try:
-            value = predicate()
-            if value:
-                return value
-            last_error = None
-        except Exception as exc:  # pragma: no cover - exercised in integration paths
-            if isinstance(exc, RuntimeError):
-                raise
-            last_error = exc
-            logger.info("waiting for %s: %s", description, exc)
-        time.sleep(interval_seconds)
-
-    if last_error:
-        raise RuntimeError(f"Timed out waiting for {description}: {last_error}") from last_error
-    raise RuntimeError(f"Timed out waiting for {description}")
-
-
-def wait_for_job_completion(
-    job_name: str, namespace: str, *, timeout_seconds: int, interval_seconds: int = 10
-) -> dict[str, Any]:
-    """Wait for a Job to complete successfully.
-
-    Args:
-        job_name: Job name
-        namespace: Namespace
-        timeout_seconds: Maximum time to wait
-        interval_seconds: Time between checks
-
-    Returns:
-        Job resource data
-
-    Raises:
-        RuntimeError: If job fails or timeout is reached
-    """
-
-    def _job_completed() -> dict[str, Any] | None:
-        payload = oc_get_json(
-            "job",
-            name=job_name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        if not payload:
-            return None
-        status = payload.get("status", {})
-        if status.get("succeeded", 0):
-            return payload
-        failed_count = status.get("failed", 0)
-        for condition in status.get("conditions", []):
-            if condition.get("type") == "Failed" and condition.get("status") == "True":
-                raise RuntimeError(
-                    f"job/{job_name} failed: {condition.get('reason') or 'unknown reason'}"
-                )
-        if failed_count:
-            raise RuntimeError(f"job/{job_name} failed after {failed_count} attempt(s)")
-        return None
-
-    return wait_until(
-        f"job/{job_name} completion in {namespace}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=interval_seconds,
-        predicate=_job_completed,
-    )
-
-
-def job_pod_names(job_name: str, namespace: str) -> list[str]:
-    """Get the names of pods created by a Job.
-
-    Args:
-        job_name: Job name
-        namespace: Namespace
-
-    Returns:
-        List of pod names
-    """
-    payload = oc_get_json(
-        "pods",
-        namespace=namespace,
-        selector=f"job-name={job_name}",
-        ignore_not_found=True,
-    )
-    if not payload:
-        return []
-    return [item["metadata"]["name"] for item in payload.get("items", [])]
 
 
 def apply_manifest(artifact_path: Any, manifest: dict[str, Any]) -> None:

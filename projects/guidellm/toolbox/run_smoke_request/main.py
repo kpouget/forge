@@ -10,8 +10,8 @@ from projects.core.dsl.utils import write_json, write_text
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
+    oc_get_json,
     resource_exists,
-    wait_for_job_completion,
 )
 from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
 
@@ -105,22 +105,34 @@ def create_smoke_job(args, ctx):
 def wait_smoke_job_completion(args, ctx):
     """Wait for smoke job completion"""
 
-    try:
-        wait_for_job_completion(
-            ctx.job_name,
-            args.namespace,
-            timeout_seconds=(
-                args.smoke["request_retries"]
-                * (
-                    args.smoke["request_timeout_seconds"]
-                    + args.smoke["request_retry_delay_seconds"]
-                )
-            ),
-            interval_seconds=5,
-        )
-        return f"Smoke job {ctx.job_name} completed"
-    except Exception:
-        return False  # Retry
+    # Check job status
+    payload = oc_get_json(
+        "job",
+        name=ctx.job_name,
+        namespace=args.namespace,
+        ignore_not_found=True,
+    )
+    if not payload:
+        return (False, f"Job {ctx.job_name} not found, retrying...")
+
+    status = payload.get("status", {})
+
+    # Check if succeeded
+    if status.get("succeeded", 0):
+        return f"Smoke job {ctx.job_name} completed successfully"
+
+    # Check if failed
+    failed_count = status.get("failed", 0)
+    for condition in status.get("conditions", []):
+        if condition.get("type") == "Failed" and condition.get("status") == "True":
+            raise RuntimeError(
+                f"job/{ctx.job_name} failed: {condition.get('reason') or 'unknown reason'}"
+            )
+    if failed_count:
+        raise RuntimeError(f"job/{ctx.job_name} failed after {failed_count} attempt(s)")
+
+    # Still running
+    return (False, f"Smoke job {ctx.job_name} still running, retrying...")
 
 
 @task

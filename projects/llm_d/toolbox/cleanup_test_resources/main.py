@@ -16,9 +16,10 @@ def run(
     *,
     namespace: str,
     inference_service_name: str,
-    smoke_job_name: str,
+    smoke_job_name: str | None = None,
     benchmark_job_name: str | None = None,
     cleanup_timeout_seconds: int = 900,
+    cleanup_all_llm_d_resources: bool = False,
 ) -> int:
     """
     Clean up test resources including jobs, PVCs, and llminferenceservice.
@@ -26,9 +27,10 @@ def run(
     Args:
         namespace: Namespace containing the resources
         inference_service_name: Name of the LLM inference service
-        smoke_job_name: Name of the smoke test job
+        smoke_job_name: Name of the smoke test job (optional)
         benchmark_job_name: Name of the benchmark job (optional)
         cleanup_timeout_seconds: Maximum time to wait for deletions
+        cleanup_all_llm_d_resources: Clean up all llm_d labeled resources
     """
 
     execute_tasks(locals())
@@ -42,13 +44,19 @@ def setup_directories(args, ctx):
     artifacts_dir = args.artifact_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    ctx.benchmark_name = args.benchmark_job_name or "guidellm-benchmark"
+    ctx.benchmark_name = args.benchmark_job_name
+    if not ctx.benchmark_name and not args.cleanup_all_llm_d_resources:
+        ctx.benchmark_name = "guidellm-benchmark"
+
     return f"Prepared cleanup for namespace {args.namespace}"
 
 
 @task
-def delete_test_resources(args, ctx):
-    """Delete smoke test job, benchmark job and related resources"""
+def delete_smoke_test_job(args, ctx):
+    """Delete smoke test job if specified"""
+
+    if not args.smoke_job_name:
+        return "No smoke job specified, skipping"
 
     _best_effort_delete(
         "smoke helper job",
@@ -59,6 +67,17 @@ def delete_test_resources(args, ctx):
         args.namespace,
         "--ignore-not-found=true",
     )
+
+    return f"Deleted smoke test job {args.smoke_job_name}"
+
+
+@task
+def delete_benchmark_resources(args, ctx):
+    """Delete benchmark job, PVC and related resources"""
+
+    if not ctx.benchmark_name:
+        return "No benchmark resources specified, skipping"
+
     _best_effort_delete(
         "benchmark helper job and pvc",
         "delete",
@@ -78,7 +97,69 @@ def delete_test_resources(args, ctx):
         "--ignore-not-found=true",
     )
 
-    return "Deleted test helper resources"
+    # For runtime cleanup, also handle the default benchmark name
+    if args.cleanup_all_llm_d_resources and ctx.benchmark_name != "guidellm-benchmark":
+        _best_effort_delete(
+            "default benchmark helper job and pvc",
+            "delete",
+            "job,pvc",
+            "guidellm-benchmark",
+            "-n",
+            args.namespace,
+            "--ignore-not-found=true",
+        )
+        _best_effort_delete(
+            "default benchmark helper copy pod",
+            "delete",
+            "pod",
+            "guidellm-benchmark-copy",
+            "-n",
+            args.namespace,
+            "--ignore-not-found=true",
+        )
+
+    return f"Deleted benchmark resources for {ctx.benchmark_name}"
+
+
+@task
+def delete_llm_d_labeled_resources(args, ctx):
+    """Delete all llm_d labeled resources when cleanup_all is enabled"""
+
+    if not args.cleanup_all_llm_d_resources:
+        return "Cleanup all llm_d resources disabled, skipping"
+
+    _best_effort_delete(
+        "llm_d jobs",
+        "delete",
+        "job",
+        "-n",
+        args.namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d",
+        "--ignore-not-found=true",
+    )
+    _best_effort_delete(
+        "llm_d pods",
+        "delete",
+        "pod",
+        "-n",
+        args.namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d",
+        "--ignore-not-found=true",
+    )
+    _best_effort_delete(
+        "llm_d non-preserved pvcs",
+        "delete",
+        "pvc",
+        "-n",
+        args.namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true",
+        "--ignore-not-found=true",
+    )
+
+    return "Deleted all llm_d labeled resources"
 
 
 @task

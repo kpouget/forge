@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from projects.core.dsl.utils.k8s import oc
+from projects.core.dsl.utils.k8s import oc, oc_get_json
 
 
 def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool:
@@ -174,3 +174,24 @@ def render_hf_model_cache_job(
             }
         },
     }
+
+
+def job_pod_names(job_name: str, namespace: str) -> list[str]:
+    """Get the names of pods created by a Job.
+
+    Args:
+        job_name: Job name
+        namespace: Namespace
+
+    Returns:
+        List of pod names
+    """
+    payload = oc_get_json(
+        "pods",
+        namespace=namespace,
+        selector=f"job-name={job_name}",
+        ignore_not_found=True,
+    )
+    if not payload:
+        return []
+    return [item["metadata"]["name"] for item in payload.get("items", [])]

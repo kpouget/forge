@@ -16,14 +16,13 @@ from projects.core.dsl.utils import (
 )
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
-    job_pod_names,
     oc,
     oc_get_json,
     resource_exists,
-    wait_for_job_completion,
 )
 from projects.kserve.toolbox.prepare_hf_model_cache.utils import (
     annotate_model_cache_pvc,
+    job_pod_names,
     model_cache_pvc_ready,
     pvc_access_mode_matches,
     render_hf_model_cache_job,
@@ -303,15 +302,36 @@ def wait_for_download(args, ctx):
 
     cache_spec = ctx.cache_spec
 
-    logger.info("Waiting for model download to complete (logs will be saved to artifacts)")
-    wait_for_job_completion(
-        cache_spec["download_job_name"],
-        cache_spec["namespace"],
-        timeout_seconds=args.wait_timeout_seconds,
-        interval_seconds=args.poll_interval_seconds,
+    # Check job status
+    payload = oc_get_json(
+        "job",
+        name=cache_spec["download_job_name"],
+        namespace=cache_spec["namespace"],
+        ignore_not_found=True,
     )
+    if not payload:
+        return (False, f"Download job {cache_spec['download_job_name']} not found, retrying...")
 
-    return f"Download job {cache_spec['download_job_name']} completed"
+    status = payload.get("status", {})
+
+    # Check if succeeded
+    if status.get("succeeded", 0):
+        return f"Download job {cache_spec['download_job_name']} completed successfully"
+
+    # Check if failed
+    failed_count = status.get("failed", 0)
+    for condition in status.get("conditions", []):
+        if condition.get("type") == "Failed" and condition.get("status") == "True":
+            raise RuntimeError(
+                f"job/{cache_spec['download_job_name']} failed: {condition.get('reason') or 'unknown reason'}"
+            )
+    if failed_count:
+        raise RuntimeError(
+            f"job/{cache_spec['download_job_name']} failed after {failed_count} attempt(s)"
+        )
+
+    # Still running
+    return (False, f"Download job {cache_spec['download_job_name']} still running, retrying...")
 
 
 @task

@@ -148,7 +148,7 @@ def run_cleanup_phase() -> int:
 
 
 def list_vaults() -> list[str]:
-    """List all vaults from all categories."""
+    """List all mandatory vaults (excludes optional vaults)."""
 
     vault_config = config.project.get_config("vaults")
 
@@ -156,16 +156,16 @@ def list_vaults() -> list[str]:
     if isinstance(vault_config, list):
         return vault_config
 
-    # New format: collect all vaults from all categories
-    all_vaults = []
-    for _category, vaults in vault_config.items():
-        if isinstance(vaults, list):
-            all_vaults.extend(vaults)
+    # New format: collect only mandatory vaults (exclude *-optional categories)
+    mandatory_vaults = []
+    for category, vaults in vault_config.items():
+        if isinstance(vaults, list) and not category.endswith("-optional"):
+            mandatory_vaults.extend(vaults)
 
     # Remove duplicates while preserving order
     seen = set()
     unique_vaults = []
-    for _vault in all_vaults:
+    for _vault in mandatory_vaults:
         if _vault in seen:
             continue
 
@@ -185,17 +185,8 @@ def get_vaults_for_phase(phase: str) -> list[str]:
         List of vault names for the specified phase
     """
 
-    vault_config = config.project.get_config("vaults")
-
-    # Handle old format (list) - return all for any phase
-    if isinstance(vault_config, list):
-        return vault_config
-
-    if phase == "all":
-        return list_vaults()
-
     # Get vaults for specific phase, defaulting to empty list if phase doesn't exist
-    return vault_config.get(phase, [])
+    return config.project.get_config(f"vaults.{phase}", [])
 
 
 def init_vaults_for_phase(phase: str) -> None:
@@ -237,8 +228,11 @@ def main(ctx):
     ctx.ensure_object(types.SimpleNamespace)
     init()
 
-    if ctx.invoked_subcommand != "resolve-fournos-config":
-        init_vaults_for_phase(ctx.invoked_subcommand)
+    if ctx.invoked_subcommand == "resolve-fournos-config":
+        logger.info("No need to initialize the vaults for the resolve step")
+        return
+
+    init_vaults_for_phase(ctx.invoked_subcommand)
 
 
 @main.command()
@@ -268,8 +262,31 @@ def pre_cleanup(ctx) -> int:
 
 
 def list_resolve_vaults() -> list[str]:
-    """List all vaults for resolve operations."""
-    return list_vaults()
+    """List all vaults for resolve operations (includes both mandatory and optional)."""
+
+    vault_config = config.project.get_config("vaults")
+
+    # Handle both old format (list) and new format (dict with categories)
+    if isinstance(vault_config, list):
+        return vault_config
+
+    # New format: collect all vaults from all categories for resolve operations
+    all_vaults = []
+    for _category, vaults in vault_config.items():
+        if isinstance(vaults, list):
+            all_vaults.extend(vaults)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_vaults = []
+    for _vault in all_vaults:
+        if _vault in seen:
+            continue
+
+        seen.add(_vault)
+        unique_vaults.append(_vault)
+
+    return unique_vaults
 
 
 main.add_command(create_fournos_resolve_command(vault_list_func=list_resolve_vaults))
