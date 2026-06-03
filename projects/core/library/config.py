@@ -492,6 +492,12 @@ def init(orchestration_dir, *, apply_config_overrides=True):
 
     project.ensure_core_fields()
     project.load_presets(src_config.parent / "presets.d")
+
+    # Ensure presets_applied.txt exists even if empty
+    presets_applied_file = env.ARTIFACT_DIR / CI_METADATA_DIRNAME / "presets_applied.txt"
+    presets_applied_file.parent.mkdir(parents=True, exist_ok=True)
+    presets_applied_file.touch(exist_ok=True)
+
     project.apply_config_overrides()
     project.apply_presets_from_project_args()
     project.apply_config_overrides()  # reapply so that the value overrides are applied last
@@ -506,7 +512,7 @@ def reload(orchestration_dir, *, apply_config_overrides=True):
     if artifact_config.exists():
         artifact_config.unlink()
 
-    presets_applied = env.ARTIFACT_DIR / "presets_applied"
+    presets_applied = env.ARTIFACT_DIR / CI_METADATA_DIRNAME / "presets_applied.txt"
     if presets_applied.exists():
         presets_applied.unlink()
 
