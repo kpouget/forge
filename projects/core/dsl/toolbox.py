@@ -16,7 +16,7 @@ from collections.abc import Callable
 import yaml
 
 from projects.core.library import env
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 from .cli import create_dynamic_parser
 from .runtime import TaskExecutionError
@@ -75,7 +75,7 @@ def run_toolbox_command(command_func: Callable) -> None:
         # Execute the command function
         command_func(**kwargs)
         print("✅ Command completed successfully")
-    except (KeyboardInterrupt, SignalError):
+    except (KeyboardInterrupt, SignalInterrupt):
         print("\n🚫 Operation interrupted by user")
         sys.exit(1)
     except Exception as e:

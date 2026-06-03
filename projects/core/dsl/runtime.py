@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 import projects.core.library.env as env
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 from .context import create_task_parameters
 from .log import (
@@ -172,7 +172,7 @@ def execute_tasks(function_args: dict = None):
                     _execute_single_task(current_task_info, args, shared_context)
                     task_index += 1
 
-            except (KeyboardInterrupt, SignalError):
+            except (KeyboardInterrupt, SignalInterrupt):
                 logger.info("")
                 logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
                 logger.info("==> Exiting...")
@@ -332,7 +332,7 @@ def _execute_single_task(task_info, args, shared_context):
             if not attr_name.startswith("_"):
                 setattr(shared_context, attr_name, attr_value)
 
-    except (KeyboardInterrupt, SignalError):
+    except (KeyboardInterrupt, SignalInterrupt):
         raise
     except Exception as e:
         co_filename = task_func.original_func.__code__.co_filename

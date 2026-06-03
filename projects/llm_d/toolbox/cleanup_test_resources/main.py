@@ -16,7 +16,7 @@ def run(
     *,
     namespace: str,
     inference_service_name: str,
-    smoke_job_name: str | None = None,
+    smoke_pod_name: str | None = None,
     benchmark_job_name: str | None = None,
     cleanup_timeout_seconds: int = 900,
     cleanup_all_llm_d_resources: bool = False,
@@ -27,7 +27,7 @@ def run(
     Args:
         namespace: Namespace containing the resources
         inference_service_name: Name of the LLM inference service
-        smoke_job_name: Name of the smoke test job (optional)
+        smoke_pod_name: Name of the smoke test pod (optional)
         benchmark_job_name: Name of the benchmark job (optional)
         cleanup_timeout_seconds: Maximum time to wait for deletions
         cleanup_all_llm_d_resources: Clean up all llm_d labeled resources
@@ -52,23 +52,23 @@ def setup_directories(args, ctx):
 
 
 @task
-def delete_smoke_test_job(args, ctx):
-    """Delete smoke test job if specified"""
+def delete_smoke_test_pod(args, ctx):
+    """Delete smoke test pod if specified"""
 
-    if not args.smoke_job_name:
-        return "No smoke job specified, skipping"
+    if not args.smoke_pod_name:
+        return "No smoke pod specified, skipping"
 
     _best_effort_delete(
-        "smoke helper job",
+        "smoke helper pod",
         "delete",
-        "job",
-        args.smoke_job_name,
+        "pod",
+        args.smoke_pod_name,
         "-n",
         args.namespace,
         "--ignore-not-found=true",
     )
 
-    return f"Deleted smoke test job {args.smoke_job_name}"
+    return f"Deleted smoke test pod {args.smoke_pod_name}"
 
 
 @task

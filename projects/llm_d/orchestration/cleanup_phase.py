@@ -48,7 +48,7 @@ def cleanup_namespace(
     cleanup_test_resources_command.run(
         namespace=namespace,
         inference_service_name=inference_service_name,
-        smoke_job_name=None,  # No specific smoke job name for runtime cleanup
+        smoke_pod_name=None,  # No specific smoke pod name for runtime cleanup
         benchmark_job_name=benchmark_name,
         cleanup_timeout_seconds=cleanup_timeout_seconds,
         cleanup_all_llm_d_resources=True,  # Enable broad cleanup for runtime

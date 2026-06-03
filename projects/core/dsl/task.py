@@ -8,7 +8,7 @@ import logging
 import os
 import time
 
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 from .script_manager import get_script_manager
 
@@ -57,7 +57,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
-        retry_on_exceptions: If True, retry on raised exceptions (never on KeyboardInterrupt/SignalError)
+        retry_on_exceptions: If True, retry on raised exceptions (never on KeyboardInterrupt/SignalInterrupt)
         *args, **kwargs: Arguments to pass to the function
 
     Returns:
@@ -157,7 +157,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                 # Truthy result means success
                 return result
 
-        except (KeyboardInterrupt, SignalError):
+        except (KeyboardInterrupt, SignalInterrupt):
             # Don't retry on keyboard interrupt or signal, just re-raise immediately
             raise
         except Exception as exc:
@@ -313,7 +313,7 @@ def task(func):
             if task_result:
                 task_result._set_result(result)
             return result
-        except (KeyboardInterrupt, SignalError):
+        except (KeyboardInterrupt, SignalInterrupt):
             raise
         except Exception as e:
             logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
@@ -400,7 +400,7 @@ def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
-        retry_on_exceptions: If True, also retry when the task raises (never on KeyboardInterrupt/SignalError)
+        retry_on_exceptions: If True, also retry when the task raises (never on KeyboardInterrupt/SignalInterrupt)
     """
 
     def decorator(func):

@@ -268,7 +268,7 @@ def jump_ci(command):
                 except subprocess.CalledProcessError:
                     logging.fatal(f"Test step '{command}' on cluster '{cluster}' FAILED.")
                     failed = True
-                except run.SignalError as e:
+                except run.SignalInterrupt as e:
                     logging.error(f"Caught signal {e.sig}. Aborting.")
                     raise
                 finally:

@@ -10,6 +10,7 @@ from projects.core.dsl import shell
 from projects.core.dsl.utils import slugify_identifier, truncate_k8s_name
 from projects.core.dsl.utils.k8s import oc_get_json, oc_resource_exists
 from projects.core.library import env
+from projects.core.library.run import SignalInterrupt
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
@@ -148,6 +149,8 @@ def run(
             scheduler_profile=scheduler_profile,
             model_cache=model_cache,
         )
+        if not endpoint_url:
+            raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
         run_smoke_request(
             namespace=namespace,
             smoke=smoke,
@@ -162,43 +165,51 @@ def run(
         )
     except Exception:
         primary_exc = sys.exc_info()
+    except SignalInterrupt:
+        primary_exc = sys.exc_info()
     finally:
-        finalizer_exc = _run_finalizer(
-            primary_exc,
-            finalizer_exc,
-            "capture inference-service state",
-            capture_inference_service_state,
-            namespace=namespace,
-            inference_service=inference_service,
-        )
-        finalizer_exc = _run_finalizer(
-            primary_exc,
-            finalizer_exc,
-            "write endpoint URL",
-            write_endpoint_url,
-            artifact_dir=artifact_dir,
-            endpoint_url=endpoint_url,
-        )
-        if False:
+        do_finalizers = False
+        if primary_exc and isinstance(primary_exc[1], SignalInterrupt):
+            logging.warning("Caught a SignalInterrupt, skipping the finalizers")
+            do_finalizers = False
+
+        if do_finalizers:
             finalizer_exc = _run_finalizer(
                 primary_exc,
                 finalizer_exc,
-                "cleanup runtime resources",
-                cleanup_test_resources,
+                "capture inference-service state",
+                capture_inference_service_state,
                 namespace=namespace,
                 inference_service=inference_service,
-                smoke=smoke,
-                benchmark=benchmark,
             )
-        finalizer_exc = _run_finalizer(
-            primary_exc,
-            finalizer_exc,
-            "capture namespace events",
-            capture_namespace_events_after_test,
-            artifact_dir=artifact_dir,
-            namespace=namespace,
-            capture_namespace_events=capture_namespace_events,
-        )
+            finalizer_exc = _run_finalizer(
+                primary_exc,
+                finalizer_exc,
+                "write endpoint URL",
+                write_endpoint_url,
+                artifact_dir=artifact_dir,
+                endpoint_url=endpoint_url,
+            )
+            if False:
+                finalizer_exc = _run_finalizer(
+                    primary_exc,
+                    finalizer_exc,
+                    "cleanup runtime resources",
+                    cleanup_test_resources,
+                    namespace=namespace,
+                    inference_service=inference_service,
+                    smoke=smoke,
+                    benchmark=benchmark,
+                )
+                finalizer_exc = _run_finalizer(
+                    primary_exc,
+                    finalizer_exc,
+                    "capture namespace events",
+                    capture_namespace_events_after_test,
+                    artifact_dir=artifact_dir,
+                    namespace=namespace,
+                    capture_namespace_events=capture_namespace_events,
+                )
 
     if primary_exc is not None:
         raise primary_exc[1].with_traceback(primary_exc[2])
@@ -220,7 +231,7 @@ def deploy_inference_service(
     scheduler_profile: dict | None,
     model_cache: dict,
 ) -> str:
-    return
+    return "https://inference-gateway.apps.psap-fire-athena.ibm.rhperfscale.org/forge-llm-d/llm-d"
     # Validate that model cache PVC exists before deploying
     ensure_model_cache_pvc(
         namespace=namespace,
@@ -269,11 +280,9 @@ def run_smoke_request(
     return run_smoke_request_command.run(
         namespace=namespace,
         endpoint_url=endpoint_url,
-        job_name=smoke["job_name"],
+        pod_name=smoke["pod_name"],
         client_image=smoke["client_image"],
         endpoint_path=smoke["endpoint_path"],
-        request_retries=smoke["request_retries"],
-        request_retry_delay_seconds=smoke["request_retry_delay_seconds"],
         request_timeout_seconds=smoke["request_timeout_seconds"],
         served_model_name=model["served_model_name"],
         prompt=smoke_request["prompt"],
@@ -322,7 +331,7 @@ def cleanup_test_resources(
     cleanup_test_resources_command.run(
         namespace=namespace,
         inference_service_name=inference_service["name"],
-        smoke_job_name=smoke["job_name"],
+        smoke_pod_name=smoke["pod_name"],
         benchmark_job_name=benchmark_job_name,
     )
 

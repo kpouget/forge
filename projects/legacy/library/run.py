@@ -29,17 +29,17 @@ except Exception as e:
     logging.warning(f"Cannot call os.setpgrp: {e}")
 
 
-class SignalError(SystemExit):
+class SignalInterrupt(SystemExit):
     def __init__(self, sig, frame):
         self.sig = sig
         self.frame = frame
 
     def __str__(self):
-        return f"SignalError(sig={self.sig})"
+        return f"SignalInterrupt(sig={self.sig})"
 
 
 def raise_signal(sig, frame):
-    raise SignalError(sig, frame)
+    raise SignalInterrupt(sig, frame)
 
 
 signal.signal(signal.SIGINT, raise_signal)

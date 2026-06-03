@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import projects.core.library.env as env
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
@@ -129,7 +129,7 @@ def run(
 
         return cmd_result
 
-    except (KeyboardInterrupt, SignalError):
+    except (KeyboardInterrupt, SignalInterrupt):
         raise
     except Exception as e:
         logger.error(f"<{e.__class__.__name__}> {e}")

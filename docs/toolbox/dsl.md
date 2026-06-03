@@ -91,7 +91,7 @@ Place `@always` tasks **after** the main pipeline so they behave as teardown (se
 - Writes metadata (`_meta/metadata.yaml`, `_meta/restart.sh`) and `task.log`.
 - Runs tasks from the **calling file** only (`ScriptManager` path must match `Path(__file__).relative_to(FORGE_HOME)` vs `os.path.relpath` at task definition — run commands from the repository root as the toolbox does).
 
-Interrupts (`KeyboardInterrupt`, `SignalError`) stop execution and still emit completion banners where implemented (not covered by `test_dsl_toolbox.py`; see `runtime.py`).
+Interrupts (`KeyboardInterrupt`, `SignalInterrupt`) stop execution and still emit completion banners where implemented (not covered by `test_dsl_toolbox.py`; see `runtime.py`).
 
 ### Trace and artifacts (post-mortem)
 
@@ -133,4 +133,4 @@ Declare orchestration and operator inputs on the **public entrypoint** (typed pa
 | Decorator stack | `@retry` / `@when` **without** `@task` raise **`TypeError` at definition time** with the “Put `@task` BELOW …” message. |
 | Success return | `execute_tasks` returns **`shared_context`** with task attributes and **`artifact_dir`** set. |
 
-Not in that file: interrupt handling (`KeyboardInterrupt` / `SignalError`), and CLI wiring (`create_toolbox_main` / `run_toolbox_command`)—those are documented above but not exercised by these unit tests.
+Not in that file: interrupt handling (`KeyboardInterrupt` / `SignalInterrupt`), and CLI wiring (`create_toolbox_main` / `run_toolbox_command`)—those are documented above but not exercised by these unit tests.

@@ -48,7 +48,13 @@ def run(
         "gateway_status_address_name": gateway_status_address_name,
     }
     context = execute_tasks(task_args)
-    return context.endpoint_url
+
+    # Ensure endpoint_url is available
+    endpoint_url = getattr(context, "endpoint_url", None)
+    if not endpoint_url:
+        raise RuntimeError("Failed to resolve gateway endpoint URL after deployment")
+
+    return endpoint_url
 
 
 @task
