@@ -51,7 +51,7 @@ def log_task_header(
         file_line_info += f" [{display_suffix}]"
 
     logger.info(file_line_info)
-    logger.info(f"~~ TASK: {task_name} : {task_doc or 'No description'}")
+    logger.info(f"~~ TASK: {task_name} : {(task_doc or 'No description').strip()}")
     logger.info("~" * LINE_WIDTH)
     logger.info("")
 

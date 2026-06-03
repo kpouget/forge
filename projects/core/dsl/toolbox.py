@@ -79,6 +79,9 @@ def run_toolbox_command(command_func: Callable) -> None:
         print("\n🚫 Operation interrupted by user")
         sys.exit(1)
     except Exception as e:
+        # Generate FAILURE file for agent analysis
+        _generate_failure_file(e)
+
         # Check if this is a TaskExecutionError to provide better formatting
         if isinstance(e, TaskExecutionError):
             for line in get_task_execution_error(e):
@@ -126,6 +129,17 @@ def get_task_execution_error(e):
         yield f"~~     {e.original_exception}"
 
     yield "x" * 80
+
+
+def _generate_failure_file(exception: Exception) -> None:
+    """Generate a FAILURE file for agent analysis when toolbox command fails (CLI entry point)"""
+    try:
+        # Import here to avoid circular imports
+        from .runtime import _generate_failure_file_for_agent
+
+        _generate_failure_file_for_agent(exception)
+    except Exception as failure_error:
+        logger.warning(f"Failed to generate FAILURE file: {failure_error}")
 
 
 def create_toolbox_main(command_func: Callable) -> Callable:

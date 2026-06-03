@@ -1,0 +1,17 @@
+env_key: PSAP_MODELS_CORP_RH
+description: |
+  Vault to query RH models corp endpoints
+
+content:
+  agent-models.yaml:
+    description: |
+      Access to the RH models used by FORGE agent
+    format: |
+      model_key_1:
+          model_api: "..."
+          model_id: "..."
+          user_key: "..."
+      model_key_2:
+          model_api: "..."
+          model_id: "..."
+          user_key: "..."
