@@ -35,6 +35,8 @@ spec:
           value: prepare
         - name: job-step-name
           value: 000__prepare
+        - name: always-send-notification
+          value: "true"
 
   finally:
     - name: export-artifacts

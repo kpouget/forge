@@ -17,6 +17,9 @@ spec:
       type: string
     - name: job-step-name
       type: string
+    - name: always-send-notification
+      type: string
+      default: "false"
   steps:
     - name: forge
       image: image-registry.openshift-image-registry.svc:5000/$(context.taskRun.namespace)/forge-core:latest
@@ -36,6 +39,8 @@ spec:
         value: /var/run/secrets/fournos
       - name: FOURNOS_CI
         value: "true"
+      - name: PSAP_FORGE_ALWAYS_SEND_NOTIFICATION
+        value: "$(params.always-send-notification)"
       volumeMounts:
         - name: kubeconfig
           mountPath: /var/run/secrets/fournos-kubeconfig
