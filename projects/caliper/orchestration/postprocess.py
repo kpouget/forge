@@ -24,6 +24,7 @@ from projects.caliper.orchestration.postprocess_config import (
     CaliperOrchestrationPostprocessConfig,
 )
 from projects.caliper.orchestration.postprocess_outcome import (
+    FINAL_SUCCESS,
     TestPhaseOutcome,
     compute_final_postprocess_status,
 )
@@ -410,8 +411,29 @@ def run_postprocess_from_orchestration_config(
         has_improvement=False,
     )
 
-    return {
+    result = {
         "final_status": final,
+        "success": final == FINAL_SUCCESS,
         "test_phase": test_block,
         "steps": steps,
     }
+
+    # Generate HTML reports if we have an output directory
+    if visualize_output_dir is not None:
+        output_dir = visualize_output_dir.resolve()
+
+        # Import here to avoid circular imports
+        from projects.core.library.postprocess import generate_postprocess_status_report
+        from projects.core.library.reports_index import generate_caliper_reports_index
+
+        try:
+            generate_caliper_reports_index(result, output_dir, "reports_index.html")
+        except Exception as e:
+            logger.warning("Failed to generate reports index: %s", e)
+
+        try:
+            generate_postprocess_status_report(result, output_dir, "postprocess_status.html")
+        except Exception as e:
+            logger.warning("Failed to generate postprocessing status report: %s", e)
+
+    return result

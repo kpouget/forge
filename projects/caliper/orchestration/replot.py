@@ -280,7 +280,9 @@ def run_replot_from_orchestration_config(
         else:
             logger.info("Post-processing completed (parsing only)")
 
-        status["replot"]["postprocess_status"] = "success"
+        status["replot"]["postprocess_status"] = (
+            "success" if postprocess_result.get("success", False) else "failed"
+        )
         status["replot"]["postprocess_result"] = postprocess_result
 
         # Step 3: Clean up download directory unless keeping

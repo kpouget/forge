@@ -117,8 +117,9 @@ def run_and_postprocess(test_func, *args, **kwargs):
             status = run_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
 
             # Check if postprocessing failed
-            final_status = status.get("final_status")
-            if final_status and "failed" in final_status:
+            success = status.get("success", False)
+            if not success:
+                final_status = status.get("final_status", "unknown")
                 if original_exc is not None:
                     # Both test and postprocess failed: log both issues
                     logger.error(
@@ -192,19 +193,6 @@ def run_postprocess_after_test(
             "Caliper postprocess finished:\n%s",
             yaml.dump(status, indent=2, default_flow_style=False, sort_keys=False),
         )
-
-        # Generate postprocessing status report
-        try:
-            generate_postprocess_status_report(status, workspace, "postprocess_status.html")
-        except Exception as e:
-            logger.error("Failed to generate postprocessing status report: %s", e, exc_info=True)
-            raise
-
-        # Generate reports index if visualization was successful
-        try:
-            generate_caliper_reports_index(status, workspace, "reports_index.html")
-        except Exception as e:
-            logger.warning("Failed to generate reports index: %s", e)
 
     return status
 
@@ -286,6 +274,17 @@ def run_orchestration_postprocess(
     except OSError as e:
         logger.warning("Could not write %s: %s", status_path, e)
 
+    # Generate HTML reports
+    try:
+        generate_caliper_reports_index(result, Path(status_base), "reports_index.html")
+    except Exception as e:
+        logger.warning("Failed to generate reports index: %s", e)
+
+    try:
+        generate_postprocess_status_report(result, Path(status_base), "postprocess_status.html")
+    except Exception as e:
+        logger.warning("Failed to generate postprocessing status report: %s", e)
+
     return result
 
 
@@ -321,17 +320,13 @@ def postprocess_command(_ctx, artifact_dir: Path, output_dir: Path):
     )
     logger.info("Caliper postprocess status:\n" + yaml.dump(status, indent=2))
 
-    # Generate reports index
-    try:
-        generate_caliper_reports_index(status, output_dir, "reports_index.html")
-    except Exception as e:
-        logger.warning("Failed to generate reports index: %s", e)
-
-    # Generate postprocessing status report
-    try:
-        generate_postprocess_status_report(status, output_dir, "postprocess_status.html")
-    except Exception as e:
-        logger.error("Failed to generate postprocessing status report: %s", e, exc_info=True)
-        raise
+    # Check success flag and return appropriate exit code
+    success = status.get("success", False)
+    if not success:
+        logger.error(
+            "Postprocessing failed (final_status: %s) - returning exit code 1",
+            status.get("final_status", "unknown"),
+        )
+        return 1
 
     return 0
