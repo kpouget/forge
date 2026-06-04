@@ -27,8 +27,42 @@ from projects.core.library import ci as ci_lib
 from projects.core.library import config, env
 from projects.core.library.dict import get_nested, set_nested
 from projects.core.library.reports_index import generate_caliper_reports_index
+from projects.core.library.status_to_html import convert_status_yaml_to_html
 
 logger = logging.getLogger(__name__)
+
+
+def generate_postprocess_status_report(
+    status: dict, output_dir: Path | str, filename: str = "postprocess_status.html"
+) -> str:
+    """Generate an HTML report from Caliper postprocessing status.
+
+    Args:
+        status: Postprocessing status dictionary from orchestration
+        output_dir: Directory to write the report
+        filename: Name of the HTML file to generate
+
+    Returns:
+        Path to the generated HTML report
+    """
+    output_dir = Path(output_dir)
+    output_file = output_dir / filename
+
+    # Write the status as a temporary YAML file
+    temp_yaml = output_dir / f"{filename}.temp.yaml"
+    temp_yaml.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(temp_yaml, "w", encoding="utf-8") as f:
+            yaml.dump(status, f, indent=2, default_flow_style=False)
+
+        # Use the better organized convert_status_yaml_to_html function
+        return convert_status_yaml_to_html(temp_yaml, output_file)
+
+    finally:
+        # Clean up temp file
+        if temp_yaml.exists():
+            temp_yaml.unlink()
 
 
 def run_and_postprocess(test_func, *args, **kwargs):
@@ -159,6 +193,13 @@ def run_postprocess_after_test(
             yaml.dump(status, indent=2, default_flow_style=False, sort_keys=False),
         )
 
+        # Generate postprocessing status report
+        try:
+            generate_postprocess_status_report(status, workspace, "postprocess_status.html")
+        except Exception as e:
+            logger.error("Failed to generate postprocessing status report: %s", e, exc_info=True)
+            raise
+
         # Generate reports index if visualization was successful
         try:
             generate_caliper_reports_index(status, workspace, "reports_index.html")
@@ -213,13 +254,15 @@ def run_orchestration_postprocess(
     )
 
     # Resolve visualize_config path from FORGE_HOME if it's relative
-    visualize_config_path = get_nested(postprocess_config_raw, 'visualize.visualize_config')
+    visualize_config_path = get_nested(postprocess_config_raw, "visualize.visualize_config")
     if visualize_config_path:
         config_path = Path(visualize_config_path)
         if not config_path.is_absolute():
             resolved_path = env.FORGE_HOME / config_path
-            set_nested(postprocess_config_raw, 'visualize.visualize_config', str(resolved_path))
-            logger.info("Resolved visualize_config path from %s to %s", visualize_config_path, resolved_path)
+            set_nested(postprocess_config_raw, "visualize.visualize_config", str(resolved_path))
+            logger.info(
+                "Resolved visualize_config path from %s to %s", visualize_config_path, resolved_path
+            )
 
     result = run_postprocess_from_orchestration_config(
         postprocess_config_raw,
@@ -283,5 +326,12 @@ def postprocess_command(_ctx, artifact_dir: Path, output_dir: Path):
         generate_caliper_reports_index(status, output_dir, "reports_index.html")
     except Exception as e:
         logger.warning("Failed to generate reports index: %s", e)
+
+    # Generate postprocessing status report
+    try:
+        generate_postprocess_status_report(status, output_dir, "postprocess_status.html")
+    except Exception as e:
+        logger.error("Failed to generate postprocessing status report: %s", e, exc_info=True)
+        raise
 
     return 0

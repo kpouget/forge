@@ -15,7 +15,6 @@ from projects.caliper.engine.parameter_matrix import (
 from projects.caliper.postprocess.helpers.visualization_utils import (
     create_report_filename,
     create_report_title_display,
-    figure_to_base64,
     save_figure,
 )
 
@@ -706,12 +705,6 @@ def _create_comprehensive_html_report_with_images(
             border-radius: 5px;
             margin: 10px 0;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }}
-        .plot-image:hover {{
-            transform: scale(1.02);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            border-color: #007bff;
         }}
         .plot-link {{
             display: inline-block;
@@ -721,12 +714,6 @@ def _create_comprehensive_html_report_with_images(
             color: white;
             text-decoration: none;
             border-radius: 5px;
-            transition: background-color 0.3s;
-        }}
-        .plot-link:hover {{
-            background: #0056b3;
-            text-decoration: none;
-            color: white;
         }}
         .insight {{
             background: #e9f7ef;

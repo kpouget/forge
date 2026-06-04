@@ -27,7 +27,6 @@ from projects.caliper.orchestration.postprocess_outcome import (
     TestPhaseOutcome,
     compute_final_postprocess_status,
 )
-from projects.caliper.postprocess.helpers.html_index import generate_html_index
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +111,13 @@ def _run_kpi_generate(
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         import json
+
         with open(output_file, "w") as f:
             for kpi in kpis:
                 f.write(json.dumps(kpi) + "\n")
 
         logger.info(f"Generated {len(kpis)} KPI records in {output_file}")
-        return {
-            "status": "success",
-            "kpi_count": len(kpis),
-            "output_file": str(output_file)
-        }
+        return {"status": "success", "kpi_count": len(kpis), "output_file": str(output_file)}
     except Exception as e:
         logger.error(f"KPI generation failed: {e}")
         return {"status": "failed", "error": str(e)}
@@ -146,7 +142,7 @@ def _run_ai_eval_export(
 ) -> dict[str, Any]:
     """Export AI evaluation payload using the plugin's build_ai_eval_payload method."""
     try:
-        if not hasattr(plugin, 'build_ai_eval_payload'):
+        if not hasattr(plugin, "build_ai_eval_payload"):
             return {"status": "skipped", "reason": "plugin does not support AI evaluation"}
 
         payload = plugin.build_ai_eval_payload(model)
@@ -156,6 +152,7 @@ def _run_ai_eval_export(
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         import json
+
         with open(output_file, "w") as f:
             json.dump(payload, f, indent=2)
 
@@ -163,7 +160,7 @@ def _run_ai_eval_export(
         return {
             "status": "success",
             "output_file": str(output_file),
-            "payload_schema_version": payload.get("schema_version", "unknown")
+            "payload_schema_version": payload.get("schema_version", "unknown"),
         }
     except Exception as e:
         logger.error(f"AI eval export failed: {e}")
@@ -294,24 +291,12 @@ def run_postprocess_from_orchestration_config(
                     # If path is not under output_dir, keep as-is
                     relative_paths.append(str(path))
 
-            # Generate HTML index
-            index_path = None
-            try:
-                index_path = generate_html_index(
-                    output_dir=output_dir, title="Caliper Reports Index", include_subdirs=True
-                )
-                logger.info(f"Generated HTML index: {index_path}")
-            except Exception as e:
-                logger.warning(f"Failed to generate HTML index: {e}")
-
             result = {
                 "status": "ok",
                 "plugin_module": mod_str,
                 "output_dir": str(output_dir),
                 "paths": relative_paths,
             }
-            if index_path:
-                result["index_path"] = str(Path(index_path).relative_to(output_dir))
 
             return result
         except Exception as e:  # noqa: BLE001
@@ -374,9 +359,14 @@ def run_postprocess_from_orchestration_config(
             ai_eval_results = {}
 
             if postprocess_config.kpi.generate.enabled:
-                kpi_results["kpi_generate"] = _run_kpi_generate(postprocess_config, plugin, model, output_dir)
+                kpi_results["kpi_generate"] = _run_kpi_generate(
+                    postprocess_config, plugin, model, output_dir
+                )
             else:
-                kpi_results["kpi_generate"] = {"status": "skipped", "reason": "kpi.generate disabled"}
+                kpi_results["kpi_generate"] = {
+                    "status": "skipped",
+                    "reason": "kpi.generate disabled",
+                }
 
             if postprocess_config.kpi.export.enabled:
                 kpi_results["kpi_export"] = _run_kpi_export(postprocess_config)

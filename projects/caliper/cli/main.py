@@ -23,7 +23,6 @@ from projects.caliper.engine.load_plugin import load_plugin
 from projects.caliper.engine.parse import run_parse
 from projects.caliper.engine.plugin_config import resolve_plugin_module_string
 from projects.caliper.engine.visualize import run_visualize
-from projects.caliper.postprocess.helpers.html_index import generate_html_index
 
 _ARTIFACTS_DIR_HELP = (
     "Root directory of the test artifact tree (directories containing "
@@ -240,11 +239,6 @@ def parse_cmd(
     type=click.Path(path_type=Path),
     required=True,
 )
-@click.option(
-    "--generate-index/--no-index",
-    default=True,
-    help="Generate HTML index file listing all created reports.",
-)
 @click.pass_context
 def visualize_cmd(
     ctx: click.Context,
@@ -254,7 +248,6 @@ def visualize_cmd(
     include_label: tuple[str, ...],
     exclude_label: tuple[str, ...],
     output_dir: Path,
-    generate_index: bool,
     artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module_override: str | None,
@@ -265,7 +258,7 @@ def visualize_cmd(
     Loads test data (runs parse if needed), applies label filters, and generates
     visualization reports using plugin capabilities. Specify individual reports
     via --reports, or use predefined groups via --report-group (from
-    visualize-groups.yaml). Creates HTML index by default.
+    visualize-groups.yaml).
 
     Examples:
       caliper visualize --reports performance_analysis --output-dir /tmp/reports
@@ -298,19 +291,7 @@ def visualize_cmd(
         click.echo(f"visualize failed: {e}", err=True)
         sys.exit(2)
 
-    # Generate HTML index if requested
-    if generate_index:
-        try:
-            index_path = generate_html_index(
-                output_dir=output_dir, title="Caliper Reports Index", include_subdirs=True
-            )
-            click.echo("Wrote: " + ", ".join(paths))
-            click.echo(f"Generated index: {index_path}")
-        except Exception as e:  # noqa: BLE001
-            click.echo("Wrote: " + ", ".join(paths))
-            click.echo(f"Warning: Failed to generate HTML index: {e}", err=True)
-    else:
-        click.echo("Wrote: " + ", ".join(paths))
+    click.echo("Wrote: " + ", ".join(paths))
 
 
 @main.command("list-reports")
@@ -367,33 +348,6 @@ def list_reports_cmd(
     except Exception as e:
         click.echo(f"❌ Failed to list reports: {e}", err=True)
         sys.exit(1)
-
-
-@main.command("index")
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory containing HTML files to index.",
-)
-@click.option("--title", default="Caliper Reports Index", help="Title for the index page.")
-@click.option(
-    "--include-subdirs/--no-subdirs", default=True, help="Include HTML files from subdirectories."
-)
-def index_cmd(
-    output_dir: Path,
-    title: str,
-    include_subdirs: bool,
-) -> None:
-    """Generate an HTML index of all HTML files in the output directory."""
-    try:
-        index_path = generate_html_index(
-            output_dir=output_dir, title=title, include_subdirs=include_subdirs
-        )
-        click.echo(f"Generated HTML index: {index_path}")
-    except Exception as e:  # noqa: BLE001
-        click.echo(f"Failed to generate HTML index: {e}", err=True)
-        sys.exit(2)
 
 
 @main.group("kpi")
