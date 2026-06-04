@@ -6,7 +6,7 @@ import hashlib
 import logging
 from pathlib import Path
 
-from projects.core.dsl import entrypoint, execute_tasks, retry, task
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import (
     slugify_identifier,
     truncate_k8s_name,
@@ -418,6 +418,7 @@ def finalize_cache(args, ctx):
     return f"Cache finalized and labeled as populated for {cache_spec['pvc_name']}"
 
 
+@always
 @task
 def cleanup_download_job(args, ctx):
     """Clean up the completed download job and its pods"""
@@ -443,6 +444,7 @@ def cleanup_download_job(args, ctx):
     return f"Download job {cache_spec['download_job_name']} deleted"
 
 
+@always
 @task
 def cleanup_hf_token_secret(args, ctx):
     """Clean up the HuggingFace token secret if we created it"""
