@@ -58,9 +58,9 @@ caliper:
       report_group: null
 
     kpi:
-      enabled: false
+      enabled: true
       generate:
-        enabled: false
+        enabled: true
         output: kpis.jsonl
       export:
         enabled: false
