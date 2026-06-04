@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
-import json
-
 from projects.core.dsl import (
     RetryFailure,
     entrypoint,
     execute_tasks,
     retry,
-    shell,
     task,
 )
+from projects.core.dsl.utils.k8s import condition_status, oc, oc_get_json
 
 
 @entrypoint
@@ -38,45 +36,50 @@ def compute_retry_params(args, context):
 @retry(attempts=360, delay=10, retry_on_exceptions=True)
 @task
 def wait_for_ready(args, context):
-    result = shell.run(
-        f"oc get inferenceservice {args.name} -n {args.namespace} -ojson",
-        check=False,
-        log_stdout=False,
+    isvc = oc_get_json(
+        "inferenceservice", name=args.name, namespace=args.namespace, ignore_not_found=True
     )
-    if result.returncode != 0:
+    if isvc is None:
         raise RetryFailure(f"InferenceService {args.name} not found yet")
 
-    isvc = json.loads(result.stdout)
+    ready = condition_status(isvc, "Ready")
+    if ready == "True":
+        return f"InferenceService {args.name} is Ready"
+
     conditions = isvc.get("status", {}).get("conditions", [])
-
-    ready = False
-    for cond in conditions:
-        if cond.get("type") == "Ready" and cond.get("status") == "True":
-            ready = True
-            break
-
-    if not ready:
-        reasons = [f"{c['type']}={c.get('status', '?')}({c.get('reason', '')})" for c in conditions]
-        raise RetryFailure(f"InferenceService {args.name} not ready: {', '.join(reasons)}")
-
-    return f"InferenceService {args.name} is Ready"
+    reasons = [f"{c['type']}={c.get('status', '?')}({c.get('reason', '')})" for c in conditions]
+    raise RetryFailure(f"InferenceService {args.name} not ready: {', '.join(reasons)}")
 
 
 @task
 def verify_health(args, context):
-    pod_result = shell.run(
-        f"oc get pods -l serving.kserve.io/inferenceservice={args.name} "
-        f"-n {args.namespace} -o jsonpath='{{.items[0].metadata.name}}'",
+    pod_name_result = oc(
+        "get",
+        "pods",
+        "-l",
+        f"serving.kserve.io/inferenceservice={args.name}",
+        "-n",
+        args.namespace,
+        "-o",
+        "jsonpath={.items[0].metadata.name}",
         check=False,
         log_stdout=False,
     )
-    if pod_result.returncode != 0 or not pod_result.stdout.strip():
+    if pod_name_result.returncode != 0 or not pod_name_result.stdout.strip():
         return "No pod found — skipping health check (InferenceService is Ready)"
 
-    pod_name = pod_result.stdout.strip()
-    health_result = shell.run(
-        f"oc exec {pod_name} -n {args.namespace} -c kserve-container -- "
-        f"curl -sf http://localhost:8080/health",
+    pod_name = pod_name_result.stdout.strip()
+    health_result = oc(
+        "exec",
+        pod_name,
+        "-n",
+        args.namespace,
+        "-c",
+        "kserve-container",
+        "--",
+        "curl",
+        "-sf",
+        "http://localhost:8080/health",
         check=False,
         log_stdout=False,
     )

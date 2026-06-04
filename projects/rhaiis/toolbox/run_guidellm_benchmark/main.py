@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
+import time
 
 from projects.core.dsl import (
     always,
     entrypoint,
     execute_tasks,
-    shell,
     task,
     template,
 )
+from projects.core.dsl.utils import write_text
+from projects.core.dsl.utils.k8s import (
+    condition_status,
+    oc,
+    oc_get_json,
+)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("TOOLBOX")
 
 
 @entrypoint
@@ -37,104 +41,87 @@ def run(
     return execute_tasks(locals())
 
 
-def _oc_run(
-    *args: str,
-    check: bool = True,
-    capture_output: bool = True,
-    input_text: str | None = None,
-    timeout_seconds: float = 300,
-) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["oc", *args],
-        capture_output=capture_output,
-        text=True,
-        input=input_text,
-        timeout=timeout_seconds,
-    )
-    if check and result.returncode != 0:
-        raise RuntimeError(f"oc {' '.join(args)} failed: {result.stderr}")
-    return result
-
-
-def _oc_get_json(
-    kind: str,
-    *,
-    name: str | None = None,
-    namespace: str | None = None,
-    selector: str | None = None,
-    ignore_not_found: bool = False,
-) -> dict | None:
-    cmd = ["get", kind]
-    if name:
-        cmd.append(name)
-    if namespace:
-        cmd.extend(["-n", namespace])
-    if selector:
-        cmd.extend(["-l", selector])
-    cmd.extend(["-o", "json"])
-    result = _oc_run(*cmd, check=False)
-    if result.returncode != 0:
-        if ignore_not_found:
-            return None
-        raise RuntimeError(f"oc get {kind} failed: {result.stderr}")
-    return json.loads(result.stdout)
-
-
 def _best_effort_delete(description: str, *oc_args: str) -> None:
-    try:
-        _oc_run(*oc_args, check=False, timeout_seconds=60)
-    except subprocess.TimeoutExpired:
-        logger.warning("Timed out deleting %s", description)
-
-
-def _write_artifact(path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    logger.info("Deleting %s ...", description)
+    oc(*oc_args, check=False)
 
 
 def _poll_copy_pod_ready(pod_name, namespace, *, timeout_seconds=120, interval_seconds=5):
-    import time
-
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        payload = _oc_get_json("pod", name=pod_name, namespace=namespace)
-        if payload:
-            conditions = payload.get("status", {}).get("conditions", [])
-            if any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions):
-                logger.info("Copy pod %s is ready", pod_name)
+        phase = oc(
+            "get",
+            "pod",
+            pod_name,
+            "-n",
+            namespace,
+            "-o",
+            "jsonpath={.status.phase}",
+            check=False,
+            log_stdout=False,
+        )
+        if phase.returncode == 0 and phase.stdout.strip() == "Running":
+            ready = condition_status(
+                oc_get_json("pod", name=pod_name, namespace=namespace) or {},
+                "Ready",
+            )
+            if ready == "True":
+                logger.info("Copy pod %s is Running and Ready", pod_name)
                 return
+        logger.info("Waiting for copy pod %s ... (phase=%s)", pod_name, phase.stdout.strip())
         time.sleep(interval_seconds)
     raise RuntimeError(f"Timed out waiting for copy pod {pod_name} to be ready")
 
 
 def _wait_for_job_completion(job_name, namespace, *, timeout_seconds, interval_seconds=10):
-    import time
-
-    def _job_terminal():
-        payload = _oc_get_json("job", name=job_name, namespace=namespace)
-        if payload is None:
-            return None
-        status = payload.get("status", {})
-        if status.get("succeeded"):
-            return payload
-        for condition in status.get("conditions", []):
-            if condition.get("type") == "Failed" and condition.get("status") == "True":
-                raise RuntimeError(f"job/{job_name} failed: {condition.get('reason', 'unknown')}")
-        if status.get("failed"):
-            raise RuntimeError(f"job/{job_name} failed after {status['failed']} attempt(s)")
-        return None
-
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        try:
-            value = _job_terminal()
-            if value:
-                return value
-        except RuntimeError:
-            raise
-        except Exception as exc:
-            logger.info("waiting for job/%s: %s", job_name, exc)
+        phase = oc(
+            "get",
+            "job",
+            job_name,
+            "-n",
+            namespace,
+            "-o",
+            "jsonpath={.status.succeeded},{.status.failed}",
+            check=False,
+            log_stdout=False,
+        )
+        if phase.returncode != 0:
+            logger.info("Waiting for job/%s ... (not found yet)", job_name)
+            time.sleep(interval_seconds)
+            continue
+
+        parts = phase.stdout.strip().split(",")
+        succeeded = parts[0] if len(parts) > 0 else ""
+        failed = parts[1] if len(parts) > 1 else ""
+
+        if succeeded and int(succeeded) > 0:
+            logger.info("job/%s succeeded", job_name)
+            return
+
+        if failed and int(failed) > 0:
+            reason = oc(
+                "get",
+                "job",
+                job_name,
+                "-n",
+                namespace,
+                "-o",
+                "jsonpath={.status.conditions[?(@.type=='Failed')].reason}",
+                check=False,
+                log_stdout=False,
+            )
+            raise RuntimeError(f"job/{job_name} failed: {reason.stdout.strip() or 'unknown'}")
+
+        logger.info(
+            "Waiting for job/%s ... (succeeded=%s, failed=%s)",
+            job_name,
+            succeeded or "0",
+            failed or "0",
+        )
         time.sleep(interval_seconds)
+
     raise RuntimeError(f"Timed out waiting for job/{job_name} completion in {namespace}")
 
 
@@ -172,11 +159,11 @@ def create_benchmark_resources(args, context):
 
     pvc_path = src_dir / "guidellm-pvc.yaml"
     template.render_template_to_file("guidellm_pvc.yaml.j2", pvc_path)
-    shell.run(f"oc apply -f {pvc_path}")
+    oc("apply", "-f", str(pvc_path))
 
     job_path = src_dir / "guidellm-job.yaml"
     template.render_template_to_file("guidellm_job.yaml.j2", job_path)
-    shell.run(f"oc apply -f {job_path}")
+    oc("apply", "-f", str(job_path))
 
     return f"Created PVC and benchmark job {context.job_name}"
 
@@ -196,13 +183,21 @@ def wait_for_completion(args, context):
 def capture_benchmark_state(args, context):
     artifacts_dir = args.artifact_dir / "artifacts"
 
-    result = _oc_run(
-        "get", "job", context.job_name, "-n", args.namespace, "-o", "yaml", check=False
+    result = oc(
+        "get",
+        "job",
+        context.job_name,
+        "-n",
+        args.namespace,
+        "-o",
+        "yaml",
+        check=False,
+        log_stdout=False,
     )
     if result.returncode == 0 and result.stdout:
-        _write_artifact(artifacts_dir / "guidellm_job.yaml", result.stdout)
+        write_text(artifacts_dir / "guidellm_job.yaml", result.stdout)
 
-    result = _oc_run(
+    result = oc(
         "get",
         "pods",
         "-l",
@@ -212,13 +207,21 @@ def capture_benchmark_state(args, context):
         "-o",
         "yaml",
         check=False,
+        log_stdout=False,
     )
     if result.returncode == 0 and result.stdout:
-        _write_artifact(artifacts_dir / "guidellm_pods.yaml", result.stdout)
+        write_text(artifacts_dir / "guidellm_pods.yaml", result.stdout)
 
-    result = _oc_run("logs", f"job/{context.job_name}", "-n", args.namespace, check=False)
+    result = oc(
+        "logs",
+        f"job/{context.job_name}",
+        "-n",
+        args.namespace,
+        check=False,
+        log_stdout=False,
+    )
     if result.returncode == 0 and result.stdout:
-        _write_artifact(artifacts_dir / "guidellm_benchmark.log", result.stdout)
+        write_text(artifacts_dir / "guidellm_benchmark.log", result.stdout)
 
     return "Captured benchmark state and logs"
 
@@ -226,7 +229,7 @@ def capture_benchmark_state(args, context):
 @always
 @task
 def copy_benchmark_results(args, context):
-    pod_data = _oc_get_json(
+    pod_data = oc_get_json(
         "pods",
         namespace=args.namespace,
         selector=f"job-name={context.job_name}",
@@ -235,17 +238,18 @@ def copy_benchmark_results(args, context):
     context.node_name = None
     if pod_data and pod_data.get("items"):
         context.node_name = pod_data["items"][0].get("spec", {}).get("nodeName")
+        logger.info("Benchmark pod ran on node %s", context.node_name)
 
     src_dir = args.artifact_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
 
     copy_pod_path = src_dir / "guidellm-copy-pod.yaml"
     template.render_template_to_file("copy_pod.yaml.j2", copy_pod_path)
-    shell.run(f"oc apply -f {copy_pod_path}")
+    oc("apply", "-f", str(copy_pod_path))
 
     _poll_copy_pod_ready(context.copy_pod_name, args.namespace)
 
-    result = _oc_run(
+    result = oc(
         "exec",
         "-n",
         args.namespace,
@@ -254,9 +258,10 @@ def copy_benchmark_results(args, context):
         "cat",
         "/results/benchmarks.json",
         check=False,
+        log_stdout=False,
     )
     if result.returncode == 0 and result.stdout:
-        _write_artifact(
+        write_text(
             args.artifact_dir / "artifacts" / "results" / "benchmarks.json",
             result.stdout,
         )

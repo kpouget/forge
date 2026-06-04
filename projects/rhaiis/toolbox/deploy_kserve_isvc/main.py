@@ -3,10 +3,10 @@
 from projects.core.dsl import (
     entrypoint,
     execute_tasks,
-    shell,
     task,
     template,
 )
+from projects.core.dsl.utils.k8s import oc, oc_resource_exists
 
 
 @entrypoint
@@ -40,10 +40,7 @@ def prepare_args(args, context):
     tp_size = vllm_args.get("tensor-parallel-size", 1)
     context.gpu_count = int(tp_size)
 
-    if args.storage_source == "pvc" and args.storage_pvc:
-        context.use_pvc = True
-        context.pvc_name = args.storage_pvc
-    elif args.storage_source == "hf" and args.storage_pvc:
+    if args.storage_pvc:
         context.use_pvc = True
         context.pvc_name = args.storage_pvc
     else:
@@ -55,21 +52,17 @@ def prepare_args(args, context):
 
 @task
 def ensure_namespace(args, context):
-    result = shell.run(
-        f"oc get namespace {args.namespace}",
-        check=False,
-    )
-    if result.returncode != 0:
-        shell.run(f"oc create namespace {args.namespace}")
-        return f"Created namespace {args.namespace}"
-    return f"Namespace {args.namespace} exists"
+    if oc_resource_exists("namespace", args.namespace):
+        return f"Namespace {args.namespace} exists"
+    oc("create", "namespace", args.namespace)
+    return f"Created namespace {args.namespace}"
 
 
 @task
 def render_and_apply_servingruntime(args, context):
     output_path = args.artifact_dir / "servingruntime.yaml"
     template.render_template_to_file("servingruntime.yaml.j2", output_path)
-    shell.run(f"oc apply -f {output_path}")
+    oc("apply", "-f", str(output_path))
     return f"Applied ServingRuntime {args.deployment_name}"
 
 
@@ -77,7 +70,7 @@ def render_and_apply_servingruntime(args, context):
 def render_and_apply_inferenceservice(args, context):
     output_path = args.artifact_dir / "inferenceservice.yaml"
     template.render_template_to_file("inferenceservice.yaml.j2", output_path)
-    shell.run(f"oc apply -f {output_path}")
+    oc("apply", "-f", str(output_path))
     return f"Applied InferenceService {args.deployment_name}"
 
 
