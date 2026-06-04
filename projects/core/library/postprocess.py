@@ -25,6 +25,7 @@ from projects.caliper.orchestration.postprocess_config import (
 from projects.caliper.orchestration.postprocess_outcome import TestPhaseOutcome
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env
+from projects.core.library.dict import get_nested, set_nested
 from projects.core.library.reports_index import generate_caliper_reports_index
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,15 @@ def run_orchestration_postprocess(
         postprocess_config=postprocess_config,
     )
 
+    # Resolve visualize_config path from FORGE_HOME if it's relative
+    visualize_config_path = get_nested(postprocess_config_raw, 'visualize.visualize_config')
+    if visualize_config_path:
+        config_path = Path(visualize_config_path)
+        if not config_path.is_absolute():
+            resolved_path = env.FORGE_HOME / config_path
+            set_nested(postprocess_config_raw, 'visualize.visualize_config', str(resolved_path))
+            logger.info("Resolved visualize_config path from %s to %s", visualize_config_path, resolved_path)
+
     result = run_postprocess_from_orchestration_config(
         postprocess_config_raw,
         artifacts_dir=artifacts_dir,
@@ -243,27 +253,26 @@ def run_orchestration_postprocess(
     "--artifact-dir",
     "artifact_dir",
     type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
-    default=None,
+    required=True,
     help=(
         "Caliper artifact tree root (directories with __test_labels__.yaml). "
-        "Overrides caliper.postprocess.artifacts_dir and ARTIFACT_BASE_DIR when set."
+        "Required parameter for post-processing."
     ),
 )
 @click.option(
     "--output-dir",
     "output_dir",
     type=click.Path(path_type=Path, exists=False, file_okay=False, dir_okay=True),
-    default=None,
+    required=True,
     help=(
         "Output directory, where the post processing results will be stored. "
-        "Overrides caliper.postprocess.artifacts_dir and ARTIFACT_BASE_DIR when set."
+        "Required parameter for post-processing."
     ),
 )
 @click.pass_context
 @ci_lib.safe_ci_command
-def postprocess_command(_ctx, artifact_dir: Path | None, output_dir: Path | None):
+def postprocess_command(_ctx, artifact_dir: Path, output_dir: Path):
     """Run the post-processing pipeline."""
-
     status = run_orchestration_postprocess(
         artifact_dir=artifact_dir,
         test_outcome=TestPhaseOutcome("NOT_AVAILABLE"),
