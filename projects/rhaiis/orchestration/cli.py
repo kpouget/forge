@@ -55,6 +55,28 @@ def _merge_env_vars(accelerator: str, model: dict) -> dict:
     return base
 
 
+def _build_guidellm_args(
+    *, model_id: str, data: str, rates_str: str, max_seconds: int, backend_type: str, rate_type: str
+) -> list[str]:
+    return [
+        f"--model={model_id}",
+        f"--data={data}",
+        f"--rate={rates_str}",
+        f"--max-seconds={max_seconds}",
+        f"--backend={backend_type}",
+        f"--profile={rate_type}",
+        "--output-dir=/results",
+        "--outputs=json",
+    ]
+
+
+def _split_image_tag(full_image: str) -> tuple[str, str]:
+    if ":" in full_image:
+        parts = full_image.rsplit(":", 1)
+        return parts[0], parts[1]
+    return full_image, "latest"
+
+
 @click.group()
 @click.pass_context
 def cli(ctx):
@@ -146,9 +168,17 @@ def test(
         click.echo(f"  Max seconds: {max_seconds_val}")
         return
 
+    from projects.guidellm.toolbox.run_guidellm_benchmark.main import (
+        run as run_guidellm_benchmark,
+    )
+    from projects.guidellm.toolbox.run_guidellm_benchmark.main import (
+        wait_guidellm_benchmark_task,
+    )
     from projects.rhaiis.toolbox.deploy_kserve_isvc.main import run as deploy_kserve_isvc
-    from projects.rhaiis.toolbox.run_guidellm_benchmark.main import run as run_guidellm_benchmark
     from projects.rhaiis.toolbox.wait_isvc_ready.main import run as wait_isvc_ready
+
+    benchmark_timeout = benchmark_cfg.get("timeout", 14400)
+    wait_guidellm_benchmark_task._retry_config["attempts"] = max(1, benchmark_timeout // 10)
 
     run_error = None
     try:
@@ -183,19 +213,27 @@ def test(
         rates_str = ",".join(str(r) for r in rate_list)
         click.echo(f"Running benchmark at rates={rates_str}...")
 
-        run_guidellm_benchmark(
-            namespace=namespace,
-            deployment_name=deployment_name,
-            endpoint_url=endpoint_url,
+        benchmark_image = benchmark_cfg.get("image", "ghcr.io/vllm-project/guidellm:v0.6.0")
+        image, version = _split_image_tag(benchmark_image)
+
+        guidellm_args = _build_guidellm_args(
             model_id=model_cfg["hf_model_id"],
             data=workload_cfg["data"],
-            rates=rates_str,
+            rates_str=rates_str,
             max_seconds=max_seconds_val,
-            benchmark_image=benchmark_cfg.get("image", "ghcr.io/vllm-project/guidellm:v0.6.0"),
             backend_type=benchmark_cfg.get("backend_type", "openai_http"),
             rate_type=benchmark_cfg.get("rate_type", "concurrent"),
-            timeout=benchmark_cfg.get("timeout", 900),
+        )
+
+        run_guidellm_benchmark(
+            endpoint_url=f"{endpoint_url}/v1",
+            name=f"guidellm-{deployment_name}",
+            namespace=namespace,
+            image=image,
+            version=version,
+            timeout=benchmark_timeout,
             pvc_size=benchmark_cfg.get("pvc_size", "5Gi"),
+            guidellm_args=guidellm_args,
         )
     except Exception as exc:
         run_error = exc
