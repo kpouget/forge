@@ -13,13 +13,14 @@ import click
 import prepare_skeleton
 import test_skeleton
 
-from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import ci as ci_lib
 from projects.core.library import config
-from projects.core.library.export import caliper_export_command
+from projects.core.library.export import caliper_export_entrypoint
+from projects.core.library.replot import caliper_replot_entrypoint
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):
@@ -56,10 +57,11 @@ def pre_cleanup(ctx):
     return prepare_skeleton.cleanup()
 
 
-main.add_command(caliper_export_command)
+main.add_command(caliper_export_entrypoint)
+main.add_command(caliper_replot_entrypoint)
 
 main.add_command(
-    create_fournos_resolve_command(
+    create_fournos_resolve_entrypoint(
         vault_list_func=lambda: config.project.get_config("vaults"),
         hardware_resolver_func=test_skeleton.resolve_hardware_request,
     )

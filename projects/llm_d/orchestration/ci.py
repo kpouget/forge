@@ -10,12 +10,13 @@ from pathlib import Path
 
 import click
 
-from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 
 # Use core K8s utilities instead of llmd_runtime
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env, run, vault
-from projects.core.library.export import caliper_export_command
+from projects.core.library.export import caliper_export_entrypoint
+from projects.core.library.replot import caliper_replot_entrypoint
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
@@ -103,7 +104,7 @@ def init_vaults_for_phase(phase: str) -> None:
     vault.init(mandatory_vaults=mandatory_vaults, optional_vaults=optional_vaults)
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):
@@ -175,9 +176,9 @@ def list_resolve_vaults() -> list[str]:
     return unique_vaults
 
 
-main.add_command(create_fournos_resolve_command(vault_list_func=list_resolve_vaults))
-main.add_command(caliper_export_command)
-
+main.add_command(create_fournos_resolve_entrypoint(vault_list_func=list_resolve_vaults))
+main.add_command(caliper_export_entrypoint)
+main.add_command(caliper_replot_entrypoint)
 
 if __name__ == "__main__":
     main()

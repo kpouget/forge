@@ -54,6 +54,10 @@ def get_supported_fournos_directives() -> dict[str, str]:
                         Example: /parallel 1 gpu-basic cpu-intensive
                                  /parallel 2 memory-heavy network-test
                         Effect: Sets fournos_launcher.parallel_jobs[idx] = [preset1, preset2, ...]""",
+        "/replot.url": """Set URL for downloading artifacts to replot.
+                         Format: /replot.url URL
+                         Example: /replot.url s3://bucket/path/to/artifacts
+                         Effect: Sets caliper.replot.url in configuration.""",
         "/help": """Show all supported FOURNOS directives.
                    Format: /help
                    Effect: Logs available directive information.""",
@@ -185,6 +189,29 @@ def handle_gpu_directive(line: str) -> dict[str, str]:
     return {"fournos.job.hardware.gpu_type": gpu_type, "fournos.job.hardware.gpu_count": gpu_count}
 
 
+def handle_replot_url_directive(line: str) -> dict[str, str]:
+    """
+    Handle /replot.url directive for setting replot URL.
+
+    Format: /replot.url URL
+
+    Args:
+        line: The directive line
+
+    Returns:
+        Dictionary with replot URL configuration
+
+    Raises:
+        ValueError: If URL is empty
+    """
+    replot_url = line.removeprefix("/replot.url").strip()
+
+    if not replot_url:
+        raise ValueError(f"Invalid /replot.url directive: URL cannot be empty in '{line}'")
+
+    return {"caliper.replot.url": replot_url}
+
+
 def handle_help_directive(line: str) -> dict[str, str]:
     """Handle /help directive for FOURNOS directives."""
     # Create help directive handler using the factory
@@ -267,6 +294,7 @@ def get_fournos_directive_handlers() -> dict[str, callable]:
         "/pipeline": handle_pipeline_directive,
         "/gpu": handle_gpu_directive,
         "/parallel": handle_parallel_directive,
+        "/replot.url": handle_replot_url_directive,
         "/help": handle_help_directive,
     }
 

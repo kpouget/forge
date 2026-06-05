@@ -10,6 +10,8 @@ from pathlib import Path
 
 import click
 
+from projects.core.library import ci as ci_lib
+
 # Add the testing directory to path for imports
 testing_dir = Path(__file__).parent.parent / "testing"
 if str(testing_dir) not in sys.path:
@@ -39,7 +41,7 @@ def run_and_catch(phase, fct, *args, **kwargs):
         sys.exit(1)
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.pass_context
 def main(ctx, verbose):

@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import shell
-from projects.core.library import env
+from projects.core.library import config, env
+from projects.core.library.postprocess import run_and_postprocess, write_test_labels
 from projects.core.library.run import SignalInterrupt
 from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
@@ -21,7 +22,35 @@ from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_r
 logger = logging.getLogger(__name__)
 
 
+def create_test_labels() -> None:
+    """Create __test_labels__.yaml with model name and guidellm configuration."""
+    from projects.llm_d.orchestration import runtime_config
+
+    # Get model information
+    model_key = runtime_config.get_model_key()
+
+    # Get benchmark/guidellm configuration
+    benchmark = runtime_config.get_benchmark_config()
+
+    labels = {
+        "model_key": model_key,
+    }
+
+    # Add guidellm configuration information
+    if benchmark:
+        # Add rate if configured
+        labels["guidellm_loadshape"] = config.project.get_config("runtime.benchmark_key")
+
+    write_test_labels(env.ARTIFACT_DIR, labels)
+    logger.info("Created test labels: %s", labels)
+
+
 def run() -> int:
+    """Main test function that wraps do_test() with outcome postprocessing."""
+    return run_and_postprocess(do_test)
+
+
+def do_test() -> int:
     artifact_dir = env.ARTIFACT_DIR
 
     # Load minimal config needed for orchestration flow
@@ -45,13 +74,17 @@ def run() -> int:
     finalizer_exc: tuple[type[BaseException], BaseException, Any] | None = None
 
     try:
-        endpoint_url = deploy_inference_service()
+        with env.NextArtifactDir("llmd_test"):
+            # Create test labels with actual model and profile information
+            create_test_labels()
 
-        if not endpoint_url:
-            raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
-        run_smoke_request(endpoint_url=endpoint_url)
+            endpoint_url = deploy_inference_service()
 
-        run_guidellm_benchmark(endpoint_url=endpoint_url)
+            if not endpoint_url:
+                raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
+            run_smoke_request(endpoint_url=endpoint_url)
+
+            run_guidellm_benchmark(endpoint_url=endpoint_url)
     except Exception:
         primary_exc = sys.exc_info()
     except SignalInterrupt:

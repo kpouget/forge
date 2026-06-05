@@ -60,7 +60,7 @@ def _require_artifacts_dir(ctx: click.Context) -> Path:
         _exit_with_help(
             ctx,
             "This command requires the test artifact tree root: "
-            "`--artifacts-dir DIR` or `--base-dir DIR` "
+            "`--artifacts-dir DIR` "
             "(before or after the subcommand).",
             code=1,
         )
@@ -89,7 +89,6 @@ def _workspace_cli_options(cmd: Any) -> Any:
     opts = (
         click.option(
             "--artifacts-dir",
-            "--base-dir",
             "artifacts_dir",
             type=click.Path(path_type=Path, exists=True),
             default=None,
@@ -105,12 +104,11 @@ def _workspace_cli_options(cmd: Any) -> Any:
             help=_POSTPROCESS_CONFIG_HELP + " Overrides the global option when set here.",
         ),
         click.option(
-            "--plugin-module",
             "--plugin",
             "plugin_module_override",
             metavar="MODULE",
             default=None,
-            help="Plugin import path; same as global --plugin-module / --plugin.",
+            help="Plugin import path; same as global --plugin.",
         ),
     )
     for opt in reversed(opts):
@@ -141,7 +139,6 @@ def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--artifacts-dir",
-    "--base-dir",
     "artifacts_dir",
     type=click.Path(path_type=Path, exists=True),
     default=None,
@@ -154,7 +151,6 @@ def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
     help=_POSTPROCESS_CONFIG_HELP,
 )
 @click.option(
-    "--plugin-module",
     "--plugin",
     "plugin_module",
     metavar="MODULE",
@@ -184,15 +180,29 @@ def main(
     default=None,
     help="Override cache file path.",
 )
+@click.option(
+    "--show-matrix/--no-show-matrix",
+    default=True,
+    help="Display parameter matrix summary after parsing (default: enabled).",
+)
 @click.pass_context
 def parse_cmd(
     ctx: click.Context,
     no_cache: bool,
     cache_dir: Path | None,
+    show_matrix: bool,
     artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module_override: str | None,
 ) -> None:
+    """
+    Parse test artifacts into a unified data model.
+
+    Discovers test directories marked with __test_labels__.yaml (or settings.yaml for
+    MatrixBenchmarking), parses artifacts using the specified plugin, and creates a
+    unified data model with caching for performance. Shows parameter matrix summary
+    of discovered test variations.
+    """
     _apply_workspace_cli_overrides(
         ctx,
         artifacts_dir=artifacts_dir,
@@ -207,6 +217,7 @@ def parse_cmd(
             plugin_module=mod,
             plugin=plugin,
             use_cache=not no_cache,
+            show_parameter_matrix=show_matrix,
         )
     except Exception as e:  # noqa: BLE001
         click.echo(f"parse failed: {e}", err=True)
@@ -241,6 +252,19 @@ def visualize_cmd(
     postprocess_config: Path | None,
     plugin_module_override: str | None,
 ) -> None:
+    """
+    Generate visual reports and charts from parsed test data.
+
+    Loads test data (runs parse if needed), applies label filters, and generates
+    visualization reports using plugin capabilities. Specify individual reports
+    via --reports, or use predefined groups via --report-group (from
+    visualize-groups.yaml).
+
+    Examples:
+      caliper visualize --reports performance_analysis --output-dir /tmp/reports
+      caliper visualize --report-group comprehensive --output-dir /tmp/reports
+      caliper visualize --include-label model=llama --output-dir /tmp/reports
+    """
     _apply_workspace_cli_overrides(
         ctx,
         artifacts_dir=artifacts_dir,
@@ -266,7 +290,64 @@ def visualize_cmd(
     except Exception as e:  # noqa: BLE001
         click.echo(f"visualize failed: {e}", err=True)
         sys.exit(2)
+
     click.echo("Wrote: " + ", ".join(paths))
+
+
+@main.command("list-reports")
+@_workspace_cli_options
+@click.pass_context
+def list_reports_cmd(
+    ctx: click.Context,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+):
+    """List available reports supported by the plugin."""
+    try:
+        _apply_workspace_cli_overrides(
+            ctx,
+            artifacts_dir=artifacts_dir,
+            postprocess_config=postprocess_config,
+            plugin_module_override=plugin_module_override,
+        )
+        mod, plugin = _plugin_tuple(ctx)
+
+        # Get plugin docstring to extract report information
+        plugin_doc = plugin.__class__.__doc__ or ""
+
+        # Extract available reports from docstring
+        reports = []
+        in_reports_section = False
+
+        for line in plugin_doc.split("\n"):
+            line = line.strip()
+            if "Available visual reports:" in line:
+                in_reports_section = True
+                continue
+            elif in_reports_section and line.startswith("*"):
+                # Extract report ID from lines like "* ``report_id`` — description"
+                if "``" in line:
+                    report_parts = line.split("``")
+                    if len(report_parts) >= 3:
+                        report_id = report_parts[1]
+                        description = "``".join(report_parts[2:]).strip(" —").strip()
+                        reports.append((report_id, description))
+            elif in_reports_section and line and not line.startswith("*"):
+                # End of reports section
+                break
+
+        if reports:
+            click.echo(f"📊 Available reports for plugin {plugin.__class__.__name__}:")
+            click.echo()
+            for report_id, description in reports:
+                click.echo(f"  {report_id:<35} {description}")
+        else:
+            click.echo(f"❌ No reports found in {plugin.__class__.__name__} plugin docstring")
+
+    except Exception as e:
+        click.echo(f"❌ Failed to list reports: {e}", err=True)
+        sys.exit(1)
 
 
 @main.group("kpi")
@@ -360,7 +441,7 @@ def kpi_analyze(
 @main.group("artifacts")
 @click.pass_context
 def artifacts_group(ctx: click.Context) -> None:
-    """File artifact export."""
+    """File artifact export and import."""
 
 
 @artifacts_group.command("export")
@@ -495,7 +576,7 @@ def artifacts_export(
         sys.exit(code)
 
 
-@main.command("ai-eval-export")
+@main.command("ai-eval-export", hidden=True)
 @_workspace_cli_options
 @click.option("--output", type=click.Path(path_type=Path), required=True)
 @click.pass_context
@@ -521,12 +602,85 @@ def ai_eval_export(
             plugin=plugin,
             output=output,
             use_cache=True,
-            cache_path=None,
         )
     except Exception as e:  # noqa: BLE001
         click.echo(f"ai-eval-export failed: {e}", err=True)
         sys.exit(2)
     click.echo(f"Wrote {output}")
+
+
+@artifacts_group.command("import")
+@click.option("--from-mlflow", "mlflow_run_id", help="MLflow run ID to download artifacts from.")
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Local directory to download artifacts to.",
+)
+@click.option(
+    "--mlflow-tracking-uri",
+    envvar="MLFLOW_TRACKING_URI",
+    help="MLflow tracking server URI (can be set via MLFLOW_TRACKING_URI).",
+)
+@click.option(
+    "--artifact-path",
+    default="",
+    help="Specific artifact path to download (default: download all artifacts).",
+)
+@click.pass_context
+def import_command(
+    ctx: click.Context,
+    mlflow_run_id: str | None,
+    output_dir: Path,
+    mlflow_tracking_uri: str | None,
+    artifact_path: str,
+) -> None:
+    """Download artifact files from MLflow."""
+    if mlflow_run_id:
+        if not mlflow_tracking_uri:
+            click.echo(
+                "Error: MLflow tracking URI required. Set --mlflow-tracking-uri or MLFLOW_TRACKING_URI.",
+                err=True,
+            )
+            sys.exit(1)
+
+        try:
+            import mlflow
+            from mlflow.tracking import MlflowClient
+
+            # Set tracking URI
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+            client = MlflowClient()
+
+            # Download artifacts
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Download artifacts to the output directory
+            downloaded_path = client.download_artifacts(
+                run_id=mlflow_run_id, path=artifact_path, dst_path=str(output_dir)
+            )
+
+            # Count downloaded files
+            if Path(downloaded_path).is_file():
+                downloaded_files = [Path(downloaded_path)]
+            else:
+                downloaded_files = list(Path(downloaded_path).rglob("*"))
+                downloaded_files = [f for f in downloaded_files if f.is_file()]
+
+            click.echo(f"Downloaded {len(downloaded_files)} files to {output_dir}")
+            if downloaded_files:
+                click.echo("Downloaded files:")
+                for file in downloaded_files[:10]:  # Show first 10
+                    click.echo(f"  {file.relative_to(output_dir)}")
+                if len(downloaded_files) > 10:
+                    click.echo(f"  ... and {len(downloaded_files) - 10} more")
+
+        except Exception as e:  # noqa: BLE001
+            click.echo(f"artifacts import failed: {e}", err=True)
+            sys.exit(2)
+    else:
+        click.echo("Error: Specify source backend: --from-mlflow RUN_ID", err=True)
+        sys.exit(1)
 
 
 def run_cli() -> None:
@@ -537,14 +691,13 @@ def run_cli() -> None:
         rv = main.main(standalone_mode=False, prog_name="caliper")
         if isinstance(rv, int) and rv != 0:
             sys.exit(rv)
-    except click.MissingParameter as exc:
-        msg = exc.format_message()
-        sub = getattr(exc, "ctx", None)
-        click.echo(f"Error: {msg}\n", err=True)
-        if sub is not None:
-            click.echo(sub.get_help(), err=True)
-        ec = getattr(exc, "exit_code", 2)
-        sys.exit(2 if ec is None else int(ec))
+    except click.ClickException as exc:
+        # Handle click exceptions including NoArgsIsHelpError and MissingParameter
+        if hasattr(exc, "ctx") and exc.ctx:
+            click.echo(exc.ctx.get_help(), err=True)
+        else:
+            exc.show(sys.stderr)
+        sys.exit(2)
     except SystemExit:
         raise
 

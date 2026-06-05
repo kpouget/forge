@@ -123,6 +123,7 @@ def build_cache_spec(args, ctx):
     ctx.cache_spec = cache_spec
     ctx.hf_secret_created = False
     ctx.hf_secret_name = None
+    ctx.pvc_exists = False
     return f"Cache spec built for {cache_spec['pvc_name']}"
 
 
@@ -154,6 +155,8 @@ def ensure_pvc(args, ctx):
                 f"PVC {cache_spec['pvc_name']} exists with storageClassName={actual_storage_class}, expected {cache_spec['storage_class_name']}"
             )
 
+        # Store the fact that PVC already existed
+        ctx.pvc_exists = True
         return f"PVC {cache_spec['pvc_name']} already exists"
 
     # Ensure the src directory exists
@@ -168,6 +171,8 @@ def ensure_pvc(args, ctx):
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     write_yaml(artifacts_dir / "pvc-manifest.yaml", pvc_manifest)
 
+    # Store the fact that PVC was created
+    ctx.pvc_exists = True
     return f"PVC {cache_spec['pvc_name']} created"
 
 
@@ -187,6 +192,17 @@ def create_hf_token_secret(args, ctx):
 
     # Create a unique secret name to avoid conflicts
     secret_name = f"{cache_spec['pvc_name']}-hf-token"
+
+    # Delete existing secret if it exists to avoid conflicts
+    oc(
+        "delete",
+        "secret",
+        secret_name,
+        "-n",
+        cache_spec["namespace"],
+        "--ignore-not-found=true",
+        check=False,
+    )
 
     # Create the secret using --from-file
     oc(
@@ -258,7 +274,7 @@ def wait_job_deleted(args, ctx):
 def create_download_job(args, ctx):
     """Create the model download job"""
 
-    if ctx.cache_ready:
+    if getattr(ctx, "cache_ready", False):
         return "Skipping job creation - cache already ready"
 
     cache_spec = ctx.cache_spec
@@ -285,7 +301,7 @@ def create_download_job(args, ctx):
 def wait_for_download(args, ctx):
     """Wait for the download job to complete"""
 
-    if ctx.cache_ready:
+    if getattr(ctx, "cache_ready", False):
         return "Skipping download wait - cache already ready"
 
     cache_spec = ctx.cache_spec
@@ -410,7 +426,7 @@ def capture_download_artifacts(args, ctx):
 def finalize_cache(args, ctx):
     """Finalize the cache by annotating and labeling the PVC"""
 
-    if ctx.cache_ready:
+    if getattr(ctx, "cache_ready", False):
         return f"Cache finalized for existing {ctx.cache_spec['pvc_name']}"
 
     cache_spec = ctx.cache_spec
@@ -423,7 +439,7 @@ def finalize_cache(args, ctx):
 def cleanup_download_job(args, ctx):
     """Clean up the completed download job and its pods"""
 
-    if ctx.cache_ready:
+    if getattr(ctx, "cache_ready", False):
         return "No download job to clean up - cache was already ready"
 
     cache_spec = ctx.cache_spec
