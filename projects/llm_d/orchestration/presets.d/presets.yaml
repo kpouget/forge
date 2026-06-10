@@ -12,29 +12,28 @@ deployment-distributed-default:
   runtime.selected_preset: deployment-distributed-default
   runtime.scheduler_profile_key: default
 
-smoke:
-  extends:
-    - deployment-approximate-prefix-cache
-  runtime.selected_preset: smoke
+smoke-base:
   runtime.model_key: qwen3-0-6b
   runtime.smoke_request_key: default
   runtime.benchmark_key: null
+
+smoke:
+  extends:
+    - smoke-base
+    - deployment-approximate-prefix-cache
+  runtime.selected_preset: smoke
 
 smoke-precise:
   extends:
+    - smoke-base
     - deployment-precise-prefix-cache
   runtime.selected_preset: smoke-precise
-  runtime.model_key: qwen3-0-6b
-  runtime.smoke_request_key: default
-  runtime.benchmark_key: null
 
 smoke-default-scheduler:
   extends:
+    - smoke-base
     - deployment-distributed-default
   runtime.selected_preset: smoke-default-scheduler
-  runtime.model_key: qwen3-0-6b
-  runtime.smoke_request_key: default
-  runtime.benchmark_key: null
 
 benchmark-short:
   runtime.selected_preset: benchmark-short

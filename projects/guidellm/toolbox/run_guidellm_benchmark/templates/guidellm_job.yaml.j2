@@ -20,14 +20,6 @@ spec:
       containers:
         - name: guidellm
           image: {{ image }}
-          command: ["/opt/app-root/bin/guidellm"]
-          args:
-            - benchmark
-            - run
-            - --target={{ endpoint_url }}
-{% for arg in guidellm_args %}
-            - {{ arg }}
-{% endfor %}
           env:
             - name: USER
               value: guidellm

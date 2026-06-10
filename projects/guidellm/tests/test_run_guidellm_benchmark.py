@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
+    build_guidellm_args,
     expand_guidellm_runs,
     render_guidellm_job_from_parts,
 )
@@ -31,6 +32,31 @@ def test_expand_guidellm_runs_converts_rates_to_individual_runs() -> None:
         "--rate=64",
         "--data=prompt_tokens=128,prefix_count=128",
         "--max-requests=640",
+    ]
+
+
+def test_expand_guidellm_runs_expands_plain_rate_reference() -> None:
+    runs = expand_guidellm_runs(
+        [
+            "--backend-type=openai_http",
+            "--rate-type=concurrent",
+            "--rates=32,64",
+            "--max-requests={rate}",
+        ]
+    )
+
+    assert [run.rate for run in runs] == ["32", "64"]
+    assert runs[0].args == [
+        "--backend-type=openai_http",
+        "--rate-type=concurrent",
+        "--rate=32",
+        "--max-requests=32",
+    ]
+    assert runs[1].args == [
+        "--backend-type=openai_http",
+        "--rate-type=concurrent",
+        "--rate=64",
+        "--max-requests=64",
     ]
 
 
@@ -110,4 +136,24 @@ def test_render_guidellm_job_from_parts_keeps_plain_rates_as_single_guidellm_run
         "--rates=300,200,100",
         "--data=prompt_tokens=1000,output_tokens=1000",
         "--max-seconds=600",
+    ]
+
+
+def test_build_guidellm_args_renders_list_values() -> None:
+    benchmark = {
+        "outputs": "json",
+        "args": {
+            "backend_type": "openai_http",
+            "rate_type": "concurrent",
+            "rates": [300, 200, 100, 50, 1],
+            "max_seconds": 600,
+        },
+    }
+
+    assert build_guidellm_args(benchmark) == [
+        "--backend-type=openai_http",
+        "--rate-type=concurrent",
+        "--rates=300,200,100,50,1",
+        "--max-seconds=600",
+        "--outputs=json",
     ]

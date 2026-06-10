@@ -6,7 +6,7 @@ import pytest
 
 from projects.core.library import config as core_config
 from projects.core.library import env
-from projects.llm_d.orchestration import runtime_config, test_phase
+from projects.llm_d.orchestration import runtime_config
 
 PROJECT_ORCHESTRATION_DIR = Path(__file__).resolve().parents[1] / "orchestration"
 
@@ -72,23 +72,3 @@ def test_benchmark_workloads_are_available() -> None:
     assert "turns=5" in multi_turn["args"]["data"]
     assert "prefix_count={2*rate}" in multi_turn["args"]["data"]
     assert multi_turn["args"]["max_requests"] == "{10*rate}"
-
-
-def test_build_guidellm_args_renders_list_values() -> None:
-    benchmark = {
-        "outputs": "json",
-        "args": {
-            "backend_type": "openai_http",
-            "rate_type": "concurrent",
-            "rates": [300, 200, 100, 50, 1],
-            "max_seconds": 600,
-        },
-    }
-
-    assert test_phase.build_guidellm_args(benchmark) == [
-        "--backend-type=openai_http",
-        "--rate-type=concurrent",
-        "--rates=300,200,100,50,1",
-        "--max-seconds=600",
-        "--outputs=json",
-    ]

@@ -15,7 +15,6 @@ def resolve_visualize_config(
     base_dir: Path,
     explicit_path: Path | None,
 ) -> dict[str, Any] | None:
-
     def _load(p: Path) -> dict[str, Any] | None:
         data = yaml.safe_load(p.read_text(encoding="utf-8"))
         if data is None:

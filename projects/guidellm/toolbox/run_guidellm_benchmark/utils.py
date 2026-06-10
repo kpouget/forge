@@ -4,7 +4,6 @@ Utilities for the GuideLL-M benchmark toolbox module.
 
 from __future__ import annotations
 
-import ast
 import re
 import shlex
 from dataclasses import dataclass
@@ -35,36 +34,23 @@ def _format_expression_value(value: float | int) -> str:
 
 def _evaluate_rate_expression(expression: str, rate: str) -> str:
     rate_value = float(rate)
-    parsed = ast.parse(expression, mode="eval")
+    normalized = expression.strip()
 
-    def _eval(node: ast.AST) -> float:
-        if isinstance(node, ast.Expression):
-            return _eval(node.body)
-        if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
-            return float(node.value)
-        if isinstance(node, ast.Name) and node.id == "rate":
-            return rate_value
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd | ast.USub):
-            operand = _eval(node.operand)
-            return operand if isinstance(node.op, ast.UAdd) else -operand
-        if isinstance(node, ast.BinOp):
-            left = _eval(node.left)
-            right = _eval(node.right)
-            if isinstance(node.op, ast.Add):
-                return left + right
-            if isinstance(node.op, ast.Sub):
-                return left - right
-            if isinstance(node.op, ast.Mult):
-                return left * right
-            if isinstance(node.op, ast.Div):
-                return left / right
-            if isinstance(node.op, ast.FloorDiv):
-                return left // right
-            raise ValueError(f"Unsupported rate expression operator: {ast.dump(node.op)}")
+    if normalized == "rate":
+        return _format_expression_value(rate_value)
 
-        raise ValueError(f"Unsupported rate expression: {expression}")
+    left_multiply = re.fullmatch(r"(\d+)\s*\*\s*rate", normalized)
+    if left_multiply:
+        return _format_expression_value(int(left_multiply.group(1)) * rate_value)
 
-    return _format_expression_value(_eval(parsed))
+    right_multiply = re.fullmatch(r"rate\s*\*\s*(\d+)", normalized)
+    if right_multiply:
+        return _format_expression_value(rate_value * int(right_multiply.group(1)))
+
+    raise ValueError(
+        f"Unsupported rate expression: {expression}. "
+        "Supported forms are 'rate', 'N*rate', and 'rate*N'."
+    )
 
 
 def _substitute_rate_expressions(value: str, rate: str) -> str:
@@ -76,7 +62,7 @@ def _substitute_rate_expressions(value: str, rate: str) -> str:
 
 
 def _has_rate_expressions(guidellm_args: list[str]) -> bool:
-    return any(re.search(r"\{[^{}]*\*rate[^{}]*\}", arg) for arg in guidellm_args)
+    return any(re.search(r"\{[^{}]*\brate\b[^{}]*\}", arg) for arg in guidellm_args)
 
 
 def expand_guidellm_runs(guidellm_args: list[str]) -> list[GuideLLMRun]:
@@ -109,6 +95,27 @@ def expand_guidellm_runs(guidellm_args: list[str]) -> list[GuideLLMRun]:
     return runs
 
 
+def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
+    guidellm_args: list[str] = []
+    benchmark_args = benchmark.get("args", {})
+    if benchmark_args:
+        for key, value in benchmark_args.items():
+            cli_key = key.replace("_", "-")
+            if isinstance(value, list):
+                rendered_value = ",".join(str(item) for item in value)
+            else:
+                rendered_value = str(value)
+            guidellm_args.append(f"--{cli_key}={rendered_value}")
+
+    if "rate" in benchmark and "rate" not in benchmark_args:
+        guidellm_args.append(f"--rate={benchmark['rate']}")
+
+    if not any(arg.startswith("--outputs=") for arg in guidellm_args):
+        guidellm_args.append(f"--outputs={benchmark.get('outputs', 'json')}")
+
+    return guidellm_args
+
+
 def _build_multi_run_script(*, endpoint_url: str, runs: list[GuideLLMRun]) -> str:
     lines = ["set -euo pipefail", "mkdir -p /results"]
     for run in runs:
@@ -121,9 +128,9 @@ def _build_multi_run_script(*, endpoint_url: str, runs: list[GuideLLMRun]) -> st
             *run.args,
         ]
         lines.append(shlex.join(command))
+        output_path = shlex.quote(f"/results/benchmarks-{run.label}.json")
         lines.append(
-            "test -f /results/benchmarks.json && "
-            f"mv /results/benchmarks.json /results/benchmarks-{run.label}.json"
+            f"test -f /results/benchmarks.json && mv /results/benchmarks.json {output_path}"
         )
 
     return "\n".join(lines)
@@ -178,8 +185,6 @@ def render_guidellm_job_from_parts(
             "namespace": namespace,
             "name": name,
             "image": image,
-            "endpoint_url": endpoint_url,
-            "guidellm_args": [],
         },
     )
     manifest = yaml.safe_load(rendered_yaml)

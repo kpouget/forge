@@ -290,27 +290,14 @@ def extract_results(args, ctx):
     """Extract GuideLLM results from copy pod"""
 
     results_dir = args.artifact_dir / "artifacts" / "results"
-    if len(ctx.guidellm_runs) == 1 and ctx.guidellm_runs[0].rate is None:
-        result = oc(
-            "exec",
-            "-n",
-            ctx.target_namespace,
-            f"{ctx.benchmark_name}-copy",
-            "--",
-            "cat",
-            "/results/benchmarks.json",
-            check=False,
-            log_stdout=False,
-        )
-        if result.returncode != 0 or not result.stdout:
-            raise RuntimeError(f"No results found for {ctx.benchmark_name}")
-
-        write_text(results_dir / "benchmarks.json", result.stdout)
-        return f"Extracted results for {ctx.benchmark_name}"
-
-    found_results = 0
     for run in ctx.guidellm_runs:
-        remote_path = f"/results/benchmarks-{run.label}.json"
+        if run.rate is None:
+            remote_path = "/results/benchmarks.json"
+            local_path = results_dir / "benchmarks.json"
+        else:
+            remote_path = f"/results/benchmarks-{run.label}.json"
+            local_path = results_dir / f"benchmarks-{run.label}.json"
+
         result = oc(
             "exec",
             "-n",
@@ -325,11 +312,7 @@ def extract_results(args, ctx):
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(f"No results found for {ctx.benchmark_name} run {run.label}")
 
-        write_text(results_dir / f"benchmarks-{run.label}.json", result.stdout)
-        found_results += 1
-
-    if not found_results:
-        raise RuntimeError(f"No results found for {ctx.benchmark_name}")
+        write_text(local_path, result.stdout)
 
     return f"Extracted results for {ctx.benchmark_name}"
 

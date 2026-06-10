@@ -11,6 +11,7 @@ from projects.core.library.postprocess import run_and_postprocess, write_test_la
 from projects.core.library.run import SignalInterrupt
 from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
+from projects.guidellm.toolbox.run_guidellm_benchmark.utils import build_guidellm_args
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.kserve.toolbox.deploy_llmisvc import main as deploy_llmisvc
@@ -265,27 +266,6 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         pvc_size=benchmark.get("pvc_size"),
         guidellm_args=guidellm_args,
     )
-
-
-def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
-    guidellm_args: list[str] = []
-    benchmark_args = benchmark.get("args", {})
-    if benchmark_args:
-        for key, value in benchmark_args.items():
-            cli_key = key.replace("_", "-")
-            if isinstance(value, list):
-                rendered_value = ",".join(str(item) for item in value)
-            else:
-                rendered_value = str(value)
-            guidellm_args.append(f"--{cli_key}={rendered_value}")
-
-    if "rate" in benchmark and "rate" not in benchmark_args:
-        guidellm_args.append(f"--rate={benchmark['rate']}")
-
-    if not any(arg.startswith("--outputs=") for arg in guidellm_args):
-        guidellm_args.append(f"--outputs={benchmark.get('outputs', 'json')}")
-
-    return guidellm_args
 
 
 def capture_inference_service_state() -> None:
