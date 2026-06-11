@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import time
+
 from projects.core.dsl import (
     RetryFailure,
     entrypoint,
@@ -26,6 +28,7 @@ def run(
 def compute_retry_params(args, context):
     context.max_attempts = max(1, args.timeout_seconds // args.poll_interval)
     context.health_attempts = max(1, args.health_check_timeout // args.poll_interval)
+    context.start_time = time.monotonic()
     return (
         f"Will poll every {args.poll_interval}s, "
         f"max {context.max_attempts} attempts for readiness, "
@@ -36,6 +39,12 @@ def compute_retry_params(args, context):
 @retry(attempts=360, delay=10, retry_on_exceptions=True)
 @task
 def wait_for_ready(args, context):
+    elapsed = time.monotonic() - context.start_time
+    if elapsed > args.timeout_seconds:
+        raise RuntimeError(
+            f"InferenceService {args.name} not ready after {elapsed:.0f}s (timeout={args.timeout_seconds}s)"
+        )
+
     isvc = oc_get_json(
         "inferenceservice", name=args.name, namespace=args.namespace, ignore_not_found=True
     )
