@@ -9,7 +9,7 @@ from projects.core.dsl.utils.k8s import (
     oc_get_json,
     oc_resource_exists,
 )
-from projects.kserve.toolbox.ensure_gateway.utils import render_gateway
+from projects.llm_d.toolbox.ensure_gateway.utils import render_gateway
 
 
 @entrypoint

@@ -10,7 +10,7 @@ from typing import Any
 
 @dataclass
 class TestBaseNode:
-    """Directory containing __test_labels__.yaml."""
+    """Directory containing __test_labels__.yaml or MatrixBenchmarking settings.yaml."""
 
     directory: Path
     labels: dict[str, Any]

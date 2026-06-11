@@ -179,7 +179,7 @@ def resolve_fournos_config(
     return 0
 
 
-def create_fournos_resolve_command(
+def create_fournos_resolve_entrypoint(
     vault_list_func: Callable[[], list[str]],
     hardware_resolver_func: Callable[[dict], dict] | None = None,
 ):

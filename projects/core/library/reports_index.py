@@ -36,9 +36,9 @@ def generate_caliper_reports_index(
         logger.info("No successful visualize step found, skipping index generation")
         return None
 
-    # Look for HTML files in the output directory
+    # Look for HTML and data files in the output directory
     html_files = []
-    json_files = []
+    data_files = []
 
     ignored_files = {index_filename, "caliper_postprocess_status.yaml"}
 
@@ -46,27 +46,20 @@ def generate_caliper_reports_index(
         if html_file.name not in ignored_files:
             html_files.append(html_file)
 
-    for json_file in sorted(output_dir.glob("*.json")):
-        if json_file.name not in ignored_files:
-            json_files.append(json_file)
+    # Include JSON and JSONL files
+    for data_file in sorted(list(output_dir.glob("*.json")) + list(output_dir.glob("*.jsonl"))):
+        if data_file.name not in ignored_files:
+            data_files.append(data_file)
 
-    # Check subdirectories for additional reports
-    for subdir in sorted(output_dir.glob("*/")):
-        if subdir.is_dir():
-            for html_file in sorted(subdir.glob("*.html")):
-                if html_file.name not in ignored_files:
-                    html_files.append(html_file)
-            for json_file in sorted(subdir.glob("*.json")):
-                if json_file.name not in ignored_files:
-                    json_files.append(json_file)
+    # Only list files in the root output directory (no subdirectories)
 
-    if not html_files and not json_files:
-        logger.info("No HTML or JSON reports found, skipping index generation")
+    if not html_files and not data_files:
+        logger.info("No HTML or data reports found, skipping index generation")
         return None
 
     # Generate HTML content
     html_content = _generate_index_html_content(
-        html_files=html_files, json_files=json_files, output_dir=output_dir, status=status
+        html_files=html_files, data_files=data_files, output_dir=output_dir, status=status
     )
 
     # Write index file
@@ -80,7 +73,7 @@ def generate_caliper_reports_index(
 
 
 def _generate_index_html_content(
-    html_files: list[Path], json_files: list[Path], output_dir: Path, status: dict[str, Any]
+    html_files: list[Path], data_files: list[Path], output_dir: Path, status: dict[str, Any]
 ) -> str:
     """Generate the HTML content for the reports index."""
 
@@ -100,10 +93,9 @@ def _generate_index_html_content(
         "        body { font-family: Arial, sans-serif; margin: 40px; }",
         "        h1 { color: #333; border-bottom: 2px solid #333; }",
         "        h2 { color: #666; margin-top: 30px; }",
-        "        ul { list-style-type: none; padding-left: 0; }",
+        "        ul { list-style-type: disc; padding-left: 20px; }",
         "        li { margin: 8px 0; }",
         "        a { text-decoration: none; color: #0066cc; }",
-        "        a:hover { text-decoration: underline; }",
         "        .status { padding: 10px; border-radius: 5px; margin: 20px 0; }",
         "        .success { background-color: #d4edda; border: 1px solid #c3e6cb; }",
         "        .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; }",
@@ -134,13 +126,13 @@ def _generate_index_html_content(
             html_parts.append(f"        <li><a href='{rel_path}'>{html_file.name}</a></li>")
         html_parts.append("    </ul>")
 
-    # Add JSON reports section
-    if json_files:
-        html_parts.append("    <h2>📋 JSON Reports</h2>")
+    # Add data files section
+    if data_files:
+        html_parts.append("    <h2>📋 Data Files</h2>")
         html_parts.append("    <ul>")
-        for json_file in json_files:
-            rel_path = json_file.relative_to(output_dir)
-            html_parts.append(f"        <li><a href='{rel_path}'>{json_file.name}</a></li>")
+        for data_file in data_files:
+            rel_path = data_file.relative_to(output_dir)
+            html_parts.append(f"        <li><a href='{rel_path}'>{data_file.name}</a></li>")
         html_parts.append("    </ul>")
 
     # Add footer with generation timestamp

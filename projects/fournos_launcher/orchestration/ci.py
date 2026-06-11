@@ -51,7 +51,7 @@ def _set_job_owner_from_pull_request():
     logger.info(f"Set job owner from pull request: {user_login}")
 
 
-@click.group()
+@click.group(cls=ci_lib.HelpfulGroup)
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):

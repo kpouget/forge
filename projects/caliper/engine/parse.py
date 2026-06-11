@@ -12,6 +12,10 @@ from projects.caliper.engine.cache import (
     write_test_base_cache,
 )
 from projects.caliper.engine.model import UnifiedRunModel
+from projects.caliper.engine.parameter_matrix import (
+    analyze_parameter_matrix,
+    format_parameter_matrix_summary,
+)
 from projects.caliper.engine.traverse import discover_test_bases
 
 # Validation functions no longer needed - using per-test-base caching
@@ -24,6 +28,7 @@ def run_parse(
     plugin: object,
     use_cache: bool,
     force_report_partial: bool = True,
+    show_parameter_matrix: bool = True,
 ) -> UnifiedRunModel:
     """
     Run full parse or load valid cache.
@@ -94,5 +99,13 @@ def run_parse(
     if all_warnings and force_report_partial:
         for w in all_warnings:
             print(f"[parse warning] {w}")  # noqa: T201 — CLI feedback
+
+    # Show parameter matrix if requested
+    if show_parameter_matrix:
+        print()  # noqa: T201 — CLI feedback
+        matrix_analysis = analyze_parameter_matrix(all_records)
+        matrix_summary = format_parameter_matrix_summary(matrix_analysis)
+        print(matrix_summary)  # noqa: T201 — CLI feedback
+        print()  # noqa: T201 — CLI feedback
 
     return model

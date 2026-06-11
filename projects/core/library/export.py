@@ -111,7 +111,7 @@ def run_caliper_orchestration_export(*, artifact_directory: Path | None):
 )
 @click.pass_context
 @ci_lib.safe_ci_command
-def caliper_export_command(_ctx, artifact_directory: Path | None):
+def caliper_export_entrypoint(_ctx, artifact_directory: Path | None):
     """Export the file artifacts."""
 
     status = run_caliper_orchestration_export(artifact_directory=artifact_directory)

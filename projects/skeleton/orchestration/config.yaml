@@ -39,6 +39,10 @@ caliper:
           parameters: {}
           metrics: {}
 
+  replot:
+    url: null  # Set via /replot.url directive
+    keep: false  # Set to true to keep download directory after replotting
+
   postprocess:
     enabled: true
     artifacts_dir: null
@@ -54,9 +58,9 @@ caliper:
       report_group: null
 
     kpi:
-      enabled: false
+      enabled: true
       generate:
-        enabled: false
+        enabled: true
         output: kpis.jsonl
       export:
         enabled: false

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
 from projects.cluster.toolbox.wait_for_crds import main as wait_for_crds_command
+from projects.core.dsl.utils import slugify_identifier, truncate_k8s_name
 from projects.core.dsl.utils.k8s import (
     oc,
     oc_get_json,
@@ -17,7 +19,6 @@ from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
     main as bootstrap_gpu_clusterpolicy,
 )
 from projects.gpu_operator.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.kserve.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.kserve.toolbox.prepare_hf_model_cache.main import (
     run as prepare_hf_model_cache_toolbox_run,
 )
@@ -26,6 +27,7 @@ from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_ru
 from projects.llm_d.toolbox.capture_prepare_state.main import (
     run as capture_prepare_state_toolbox_run,
 )
+from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.rhoai.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
 from projects.rhoai.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_command,
@@ -235,6 +237,68 @@ def cleanup_previous_run() -> None:
     cleanup_toolbox_run(namespace=namespace)
 
 
+def validate_model_cache(
+    namespace: str, model_key: str, model_uri: str, pvc_name_prefix: str
+) -> bool:
+    """Validate if model cache PVC already exists and is populated.
+
+    Args:
+        namespace: Namespace where the PVC should exist
+        model_key: Model key for cache naming
+        model_uri: Model URI for cache key generation
+        pvc_name_prefix: PVC name prefix from config
+
+    Returns:
+        True if cache is ready, False if toolbox should run
+    """
+    logger.info("Validating model cache for model: %s", model_key)
+
+    # Build expected PVC name (matching toolbox logic)
+    cache_key = hashlib.sha256(model_uri.encode("utf-8")).hexdigest()[:10]
+    pvc_name = truncate_k8s_name(
+        f"{pvc_name_prefix}-{slugify_identifier(model_key, max_length=32)}-{cache_key}"
+    )
+
+    # Check if PVC exists
+    pvc_check = oc(
+        "get",
+        "persistentvolumeclaim",
+        pvc_name,
+        "-n",
+        namespace,
+        "--ignore-not-found",
+        "-oname",
+        check=False,
+        log_stdout=True,
+    )
+
+    if pvc_check.returncode != 0 or not pvc_check.stdout.strip():
+        logger.info("Model cache PVC %s does not exist", pvc_name)
+        return False
+
+    logger.info("Model cache PVC %s exists", pvc_name)
+
+    # Check if PVC has the populated label
+    pvc_data = oc_get_json(
+        "persistentvolumeclaim",
+        name=pvc_name,
+        namespace=namespace,
+    )
+
+    if not pvc_data:
+        return False
+
+    labels = pvc_data.get("metadata", {}).get("labels", {})
+    is_populated = labels.get("forge.openshift.io/model-cache-populated") == "true"
+
+    if is_populated:
+        logger.info("Model cache PVC %s is labeled as populated, ready to use", pvc_name)
+        return True
+    else:
+        logger.info("Model cache PVC %s exists but is not labeled as populated", pvc_name)
+        return False
+
+
 def prepare_model_cache() -> None:
     model = runtime_config.get_model()
     model_cache = runtime_config.get_model_cache_config()
@@ -251,17 +315,29 @@ def prepare_model_cache() -> None:
         logger.info("Skipping cache for PVC-based model: %s", model_uri)
         return
 
+    namespace = runtime_config.get_namespace()
+    model_key = runtime_config.get_model_key()
+    pvc_name_prefix = model_cache["pvc"]["name_prefix"]
+
+    # Quick validation: check if cache is already ready
+    if validate_model_cache(namespace, model_key, model_uri, pvc_name_prefix):
+        logger.info("Model cache validation passed - cache is ready")
+        return
+
+    # Cache not ready, proceed with toolbox preparation
+    logger.info("Model cache validation failed - proceeding with cache preparation")
+
     common_args = {
-        "namespace": runtime_config.get_namespace(),
+        "namespace": namespace,
         "namespace_is_managed": runtime_config.get_namespace_is_managed(),
-        "model_key": runtime_config.get_model_key(),
+        "model_key": model_key,
         "model_uri": model_uri,
         "pvc_size": model_cache_overrides.get("pvc_size", model_cache["pvc"]["size"]),
         "access_mode": model_cache_overrides.get("access_mode", model_cache["pvc"]["access_mode"]),
         "storage_class_name": model_cache_overrides.get(
             "storage_class_name", model_cache["pvc"].get("storage_class_name")
         ),
-        "pvc_name_prefix": model_cache["pvc"]["name_prefix"],
+        "pvc_name_prefix": pvc_name_prefix,
         "model_directory_name": model_cache["pvc"]["model_directory_name"],
     }
 

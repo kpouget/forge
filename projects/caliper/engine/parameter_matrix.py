@@ -1,0 +1,244 @@
+"""Parameter matrix analysis for Caliper results."""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Any
+
+from projects.caliper.engine.model import UnifiedResultRecord
+
+
+def analyze_parameter_matrix(records: list[UnifiedResultRecord]) -> dict[str, Any]:
+    """
+    Analyze the parameter space across all unified result records.
+
+    Args:
+        records: List of unified result records to analyze
+
+    Returns:
+        Dictionary containing parameter matrix analysis
+    """
+    if not records:
+        return {
+            "total_records": 0,
+            "parameter_keys": [],
+            "parameter_values": {},
+            "parameter_combinations": [],
+            "coverage_matrix": {},
+            "summary": "No records to analyze",
+        }
+
+    # Collect all parameter keys and values
+    parameter_keys = set()
+    parameter_values = defaultdict(set)
+    parameter_combinations = []
+
+    for record in records:
+        labels = record.distinguishing_labels
+        parameter_keys.update(labels.keys())
+
+        # Track unique parameter combinations
+        param_combo = dict(labels.items())
+        if param_combo not in parameter_combinations:
+            parameter_combinations.append(param_combo)
+
+        # Track all possible values for each parameter
+        for key, value in labels.items():
+            parameter_values[key].add(str(value))
+
+    # Sort parameter keys for consistent output
+    sorted_parameter_keys = sorted(parameter_keys)
+
+    # Convert sets to sorted lists for JSON serialization
+    parameter_value_lists = {key: sorted(values) for key, values in parameter_values.items()}
+
+    # Create coverage matrix showing which parameter combinations exist
+    coverage_matrix = {}
+    for key in sorted_parameter_keys:
+        coverage_matrix[key] = {}
+        for value in parameter_value_lists[key]:
+            coverage_matrix[key][value] = sum(
+                1 for record in records if str(record.distinguishing_labels.get(key)) == value
+            )
+
+    return {
+        "total_records": len(records),
+        "total_parameter_combinations": len(parameter_combinations),
+        "parameter_keys": sorted_parameter_keys,
+        "parameter_values": parameter_value_lists,
+        "parameter_combinations": parameter_combinations,
+        "coverage_matrix": coverage_matrix,
+        "summary": f"Found {len(records)} records across {len(parameter_combinations)} parameter combinations",
+    }
+
+
+def format_parameter_matrix_summary(analysis: dict[str, Any], max_combinations: int = 20) -> str:
+    """
+    Format parameter matrix analysis into a readable summary.
+
+    Args:
+        analysis: Result from analyze_parameter_matrix()
+        max_combinations: Maximum number of combinations to display
+
+    Returns:
+        Formatted string summary
+    """
+    if analysis["total_records"] == 0:
+        return "📊 Parameter Matrix: No records found"
+
+    lines = []
+    lines.append("📊 Parameter Matrix Summary")
+    lines.append("=" * 50)
+    lines.append(f"Total Records: {analysis['total_records']}")
+    lines.append(f"Parameter Combinations: {analysis['total_parameter_combinations']}")
+    lines.append("")
+
+    # Show parameter keys and their possible values
+    lines.append("🏷️  Parameter Keys:")
+    for key in analysis["parameter_keys"]:
+        values = analysis["parameter_values"][key]
+        if len(values) <= 10:
+            values_str = ", ".join(values)
+        else:
+            values_str = f"{', '.join(values[:10])} ... (+{len(values) - 10} more)"
+        lines.append(f"   {key}: {values_str}")
+
+    lines.append("")
+
+    # Show coverage matrix
+    lines.append("📈 Parameter Value Coverage:")
+    for key in analysis["parameter_keys"]:
+        lines.append(f"   {key}:")
+        coverage = analysis["coverage_matrix"][key]
+        for value, count in coverage.items():
+            lines.append(f"      {value}: {count} records")
+
+    # Show some example parameter combinations
+    lines.append("")
+    combinations = analysis["parameter_combinations"]
+    display_count = min(max_combinations, len(combinations))
+    lines.append(f"🔗 Parameter Combinations (showing {display_count} of {len(combinations)}):")
+
+    for i, combo in enumerate(combinations[:display_count]):
+        combo_str = ", ".join(f"{k}={v}" for k, v in combo.items())
+        lines.append(f"   {i + 1:2d}. {combo_str}")
+
+    if len(combinations) > max_combinations:
+        lines.append(f"   ... ({len(combinations) - max_combinations} more combinations)")
+
+    return "\n".join(lines)
+
+
+def get_unique_parameter_values(
+    records: list[UnifiedResultRecord], parameter_key: str
+) -> list[str]:
+    """
+    Get all unique values for a specific parameter key across all records.
+
+    Args:
+        records: List of unified result records
+        parameter_key: The parameter key to analyze
+
+    Returns:
+        Sorted list of unique values for the parameter
+    """
+    values = set()
+    for record in records:
+        if parameter_key in record.distinguishing_labels:
+            values.add(str(record.distinguishing_labels[parameter_key]))
+    return sorted(values)
+
+
+def filter_records_by_parameters(
+    records: list[UnifiedResultRecord], parameter_filter: dict[str, Any]
+) -> list[UnifiedResultRecord]:
+    """
+    Filter records by parameter values.
+
+    Args:
+        records: List of unified result records to filter
+        parameter_filter: Dictionary of parameter key-value pairs to match
+
+    Returns:
+        Filtered list of records matching the parameter criteria
+    """
+    filtered = []
+    for record in records:
+        matches = True
+        for key, value in parameter_filter.items():
+            if record.distinguishing_labels.get(key) != value:
+                matches = False
+                break
+        if matches:
+            filtered.append(record)
+    return filtered
+
+
+def get_varying_parameters(records: list[UnifiedResultRecord]) -> set[str]:
+    """
+    Get parameter keys that have varying values across records.
+
+    Args:
+        records: List of unified result records to analyze
+
+    Returns:
+        Set of parameter keys that vary across records
+    """
+    if not records:
+        return set()
+
+    varying_params = set()
+
+    # Get all parameter keys
+    all_keys = set()
+    for record in records:
+        all_keys.update(record.distinguishing_labels.keys())
+
+    # Check each parameter to see if it varies
+    for key in all_keys:
+        values = set()
+        for record in records:
+            if key in record.distinguishing_labels:
+                values.add(str(record.distinguishing_labels[key]))
+
+        # If more than one unique value, this parameter varies
+        if len(values) > 1:
+            varying_params.add(key)
+
+    return varying_params
+
+
+def create_legend_name(
+    record: UnifiedResultRecord, varying_params: set[str], max_length: int = 50
+) -> str:
+    """
+    Create a meaningful legend name using only varying parameters.
+
+    Args:
+        record: The record to create a name for
+        varying_params: Set of parameter keys that vary across all records
+        max_length: Maximum length for the legend name
+
+    Returns:
+        Legend name string using format "param1=value1, param2=value2"
+    """
+    if not varying_params:
+        return "default"
+
+    # Get varying parameter values for this record
+    param_pairs = []
+    for key in sorted(varying_params):
+        if key in record.distinguishing_labels:
+            value = record.distinguishing_labels[key]
+            param_pairs.append(f"{key}={value}")
+
+    if not param_pairs:
+        return "default"
+
+    legend_name = ", ".join(param_pairs)
+
+    # Truncate if too long
+    if len(legend_name) > max_length:
+        legend_name = legend_name[: max_length - 3] + "..."
+
+    return legend_name

@@ -1,0 +1,19 @@
+# Example visualize groups configuration for GuideLLM analysis
+# Place this file in your artifacts directory as "visualize-groups.yaml"
+# Use with: caliper visualize --report-group <group_name> --output-dir <output_dir>
+#
+# Report system:
+#   Report 00: GuideLLM Performance Analysis (comprehensive embedded report with all charts)
+
+groups:
+  # Comprehensive analysis - main report with embedded charts (recommended)
+  comprehensive:
+    - report_performance_analysis
+
+  # Performance overview - main report with embedded charts
+  overview:
+    - report_performance_analysis
+
+  # All reports - currently only the main performance analysis report
+  all:
+    - report_performance_analysis

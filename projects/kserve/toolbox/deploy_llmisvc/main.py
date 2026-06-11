@@ -58,6 +58,28 @@ def run(
 
 
 @task
+def copy_manifest_to_src(args, ctx):
+    """Copy inference service manifest to src directory for inspection and use"""
+    import shutil
+
+    # Get the original manifest path
+    original_path = Path(args.inference_service_manifest_path)
+
+    # Ensure the src directory exists
+    src_dir = args.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy the manifest to src directory
+    src_path = src_dir / original_path.name
+    shutil.copy2(original_path, src_path)
+
+    # Store the src path in context for other tasks to use
+    ctx.src_manifest_path = str(src_path)
+
+    return f"Copied manifest from {original_path} to {src_path}"
+
+
+@task
 def delete_existing_service(args, ctx):
     """Delete existing LLMInferenceService"""
 
@@ -93,10 +115,13 @@ def wait_old_pods_gone(args, ctx):
 def apply_inference_service(args, ctx):
     """Apply the LLMInferenceService manifest"""
 
-    # Load and apply the provided manifest
-    manifest = load_yaml(Path(args.inference_service_manifest_path))
-    oc_apply(args.inference_service_manifest_path, manifest)
-    return f"Applied LLMInferenceService manifest for {ctx.service_name}"
+    # Use the manifest copied to src directory
+    src_manifest_path = ctx.src_manifest_path
+
+    # Load and apply the manifest from src
+    manifest = load_yaml(Path(src_manifest_path))
+    oc_apply(src_manifest_path, manifest)
+    return f"Applied LLMInferenceService manifest from {src_manifest_path} for {ctx.service_name}"
 
 
 @retry(attempts=120, delay=5, backoff=1.0)

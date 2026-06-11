@@ -25,9 +25,79 @@ from projects.caliper.orchestration.postprocess_config import (
 from projects.caliper.orchestration.postprocess_outcome import TestPhaseOutcome
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env
+from projects.core.library.dict import get_nested, set_nested
 from projects.core.library.reports_index import generate_caliper_reports_index
+from projects.core.library.status_to_html import convert_status_yaml_to_html
 
 logger = logging.getLogger(__name__)
+
+
+def write_test_labels(directory: Path, labels: dict[str, str], *, version: str = "1") -> Path:
+    """Write a __test_labels__.yaml file to mark a directory as a Caliper test base.
+
+    Args:
+        directory: Directory to create the test labels file in
+        labels: Dictionary of label key-value pairs
+        version: Version string for the test labels format (default: "1")
+
+    Returns:
+        Path to the created __test_labels__.yaml file
+
+    Example:
+        write_test_labels(
+            test_dir,
+            {
+                "model": "llama-3",
+                "deployment": "single-zone",
+                "rate": "10"
+            }
+        )
+    """
+    test_labels_path = directory / "__test_labels__.yaml"
+    payload = {
+        "version": version,
+        "labels": labels,
+    }
+
+    # Create directory and write YAML
+    test_labels_path.parent.mkdir(parents=True, exist_ok=True)
+    with test_labels_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(payload, handle, sort_keys=False)
+
+    return test_labels_path
+
+
+def generate_postprocess_status_report(
+    status: dict, output_dir: Path | str, filename: str = "postprocess_status.html"
+) -> str:
+    """Generate an HTML report from Caliper postprocessing status.
+
+    Args:
+        status: Postprocessing status dictionary from orchestration
+        output_dir: Directory to write the report
+        filename: Name of the HTML file to generate
+
+    Returns:
+        Path to the generated HTML report
+    """
+    output_dir = Path(output_dir)
+    output_file = output_dir / filename
+
+    # Write the status as a temporary YAML file
+    temp_yaml = output_dir / f"{filename}.temp.yaml"
+    temp_yaml.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(temp_yaml, "w", encoding="utf-8") as f:
+            yaml.dump(status, f, indent=2, default_flow_style=False)
+
+        # Use the better organized convert_status_yaml_to_html function
+        return convert_status_yaml_to_html(temp_yaml, output_file)
+
+    finally:
+        # Clean up temp file
+        if temp_yaml.exists():
+            temp_yaml.unlink()
 
 
 def run_and_postprocess(test_func, *args, **kwargs):
@@ -82,8 +152,9 @@ def run_and_postprocess(test_func, *args, **kwargs):
             status = run_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
 
             # Check if postprocessing failed
-            final_status = status.get("final_status")
-            if final_status and "failed" in final_status:
+            success = status.get("success", False)
+            if not success:
+                final_status = status.get("final_status", "unknown")
                 if original_exc is not None:
                     # Both test and postprocess failed: log both issues
                     logger.error(
@@ -158,14 +229,6 @@ def run_postprocess_after_test(
             yaml.dump(status, indent=2, default_flow_style=False, sort_keys=False),
         )
 
-        # Generate reports index if visualization was successful
-        try:
-            index_path = generate_caliper_reports_index(status, workspace, "reports_index.html")
-            if index_path:
-                logger.info("Generated reports index at %s", index_path)
-        except Exception as e:
-            logger.warning("Failed to generate reports index: %s", e)
-
     return status
 
 
@@ -213,6 +276,17 @@ def run_orchestration_postprocess(
         postprocess_config=postprocess_config,
     )
 
+    # Resolve visualize_config path from FORGE_HOME if it's relative
+    visualize_config_path = get_nested(postprocess_config_raw, "visualize.visualize_config")
+    if visualize_config_path:
+        config_path = Path(visualize_config_path)
+        if not config_path.is_absolute():
+            resolved_path = env.FORGE_HOME / config_path
+            set_nested(postprocess_config_raw, "visualize.visualize_config", str(resolved_path))
+            logger.info(
+                "Resolved visualize_config path from %s to %s", visualize_config_path, resolved_path
+            )
+
     result = run_postprocess_from_orchestration_config(
         postprocess_config_raw,
         artifacts_dir=artifacts_dir,
@@ -235,6 +309,17 @@ def run_orchestration_postprocess(
     except OSError as e:
         logger.warning("Could not write %s: %s", status_path, e)
 
+    # Generate HTML reports
+    try:
+        generate_caliper_reports_index(result, Path(status_base), "reports_index.html")
+    except Exception as e:
+        logger.warning("Failed to generate reports index: %s", e)
+
+    try:
+        generate_postprocess_status_report(result, Path(status_base), "postprocess_status.html")
+    except Exception as e:
+        logger.warning("Failed to generate postprocessing status report: %s", e)
+
     return result
 
 
@@ -243,27 +328,26 @@ def run_orchestration_postprocess(
     "--artifact-dir",
     "artifact_dir",
     type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
-    default=None,
+    required=True,
     help=(
         "Caliper artifact tree root (directories with __test_labels__.yaml). "
-        "Overrides caliper.postprocess.artifacts_dir and ARTIFACT_BASE_DIR when set."
+        "Required parameter for post-processing."
     ),
 )
 @click.option(
     "--output-dir",
     "output_dir",
     type=click.Path(path_type=Path, exists=False, file_okay=False, dir_okay=True),
-    default=None,
+    required=True,
     help=(
         "Output directory, where the post processing results will be stored. "
-        "Overrides caliper.postprocess.artifacts_dir and ARTIFACT_BASE_DIR when set."
+        "Required parameter for post-processing."
     ),
 )
 @click.pass_context
 @ci_lib.safe_ci_command
-def postprocess_command(_ctx, artifact_dir: Path | None, output_dir: Path | None):
+def postprocess_command(_ctx, artifact_dir: Path, output_dir: Path):
     """Run the post-processing pipeline."""
-
     status = run_orchestration_postprocess(
         artifact_dir=artifact_dir,
         test_outcome=TestPhaseOutcome("NOT_AVAILABLE"),
@@ -271,13 +355,13 @@ def postprocess_command(_ctx, artifact_dir: Path | None, output_dir: Path | None
     )
     logger.info("Caliper postprocess status:\n" + yaml.dump(status, indent=2))
 
-    # Generate reports index if output directory is specified
-    if output_dir:
-        try:
-            index_path = generate_caliper_reports_index(status, output_dir, "reports_index.html")
-            if index_path:
-                logger.info("Generated reports index at %s", index_path)
-        except Exception as e:
-            logger.warning("Failed to generate reports index: %s", e)
+    # Check success flag and return appropriate exit code
+    success = status.get("success", False)
+    if not success:
+        logger.error(
+            "Postprocessing failed (final_status: %s) - returning exit code 1",
+            status.get("final_status", "unknown"),
+        )
+        return 1
 
     return 0
