@@ -72,10 +72,6 @@ def validate_parameters(args, ctx):
     ctx.benchmark_name = args.name
     ctx.full_image = f"{args.image}:{args.version}"
 
-    # Scale retry attempts to match the caller's timeout
-    delay = wait_guidellm_benchmark_task._retry_config.get("delay", 10)
-    wait_guidellm_benchmark_task._retry_config["attempts"] = max(1, args.timeout // delay)
-
     return f"Validated parameters for benchmark {ctx.benchmark_name} in namespace {ctx.target_namespace}"
 
 

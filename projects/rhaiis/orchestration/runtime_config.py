@@ -79,20 +79,30 @@ def merge_env_vars(accelerator: str, model: dict) -> dict:
     return base
 
 
+def _format_arg_value(value: object) -> str:
+    if isinstance(value, list):
+        return ",".join(str(v) for v in value)
+    return str(value)
+
+
 def build_guidellm_args(
     *,
     benchmark_cfg: dict,
     model_id: str,
     data: str,
-    rates_str: str,
+    rates: list[int],
     max_seconds: int,
 ) -> list[str]:
-    args = dict(benchmark_cfg.get("args", {}))
-    args["model"] = model_id
-    args["data"] = data
-    args["rate"] = rates_str
-    args["max-seconds"] = max_seconds
-    return [f"--{k}={v}" for k, v in args.items()]
+    guidellm_args = []
+    for key, value in benchmark_cfg.get("args", {}).items():
+        cli_key = key.replace("_", "-")
+        guidellm_args.append(f"--{cli_key}={_format_arg_value(value)}")
+
+    guidellm_args.append(f"--model={model_id}")
+    guidellm_args.append(f"--data={data}")
+    guidellm_args.append(f"--rate={_format_arg_value(rates)}")
+    guidellm_args.append(f"--max-seconds={max_seconds}")
+    return guidellm_args
 
 
 def split_image_tag(full_image: str) -> tuple[str, str]:
