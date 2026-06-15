@@ -1,0 +1,73 @@
+__multiple: true
+
+# Llama 3.1 8B
+llama-8b:
+  tests.rhaiis.model_key: llama-3-1-8b-fp8
+
+# Llama 3.3 70B
+llama-70b:
+  tests.rhaiis.model_key: llama-3-3-70b-fp8
+
+# Llama 3.1 405B
+llama-405b:
+  tests.rhaiis.model_key: llama-3-1-405b-fp8
+
+# Llama 4 Scout
+llama-4-scout:
+  tests.rhaiis.model_key: llama-4-scout-fp8
+
+# Llama 4 Maverick
+llama-4-maverick:
+  tests.rhaiis.model_key: llama-4-maverick-fp8
+
+# Granite 8B
+granite-8b:
+  tests.rhaiis.model_key: granite-3-1-8b-fp8
+
+# Mistral Small 3.1
+mistral-24b:
+  tests.rhaiis.model_key: mistral-2503-fp8
+
+# Phi 4
+phi-4:
+  tests.rhaiis.model_key: phi-4-fp8
+
+# Qwen 2.5 7B
+qwen25-7b:
+  tests.rhaiis.model_key: qwen25-7b-fp8
+
+# Qwen3 235B
+qwen3-235b:
+  tests.rhaiis.model_key: qwen3-235b-instruct-fp8
+
+# DeepSeek R1
+deepseek-r1:
+  tests.rhaiis.model_key: deepseek-r1-0528
+
+# DeepSeek V3.2
+deepseek-v3:
+  tests.rhaiis.model_key: deepseek-v3-2
+
+# GPT-OSS 120B
+gpt-oss:
+  tests.rhaiis.model_key: gpt-oss-120b-fp8
+
+# Workload profiles
+profile1:
+  tests.rhaiis.workload_key: profile1
+
+profile2:
+  tests.rhaiis.workload_key: profile2
+
+profile3:
+  tests.rhaiis.workload_key: profile3
+
+profile4:
+  tests.rhaiis.workload_key: profile4
+
+# Accelerator
+nvidia:
+  rhaiis.accelerator: nvidia
+
+amd:
+  rhaiis.accelerator: amd

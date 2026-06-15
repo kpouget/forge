@@ -1,0 +1,33 @@
+namespace: forge-rhaiis
+accelerator: nvidia
+
+images:
+  nvidia: quay.io/aipcc/rhaiis/cuda-ubi9:3.4.0-ea.2-1773886296
+  amd: quay.io/aipcc/rhaiis/rocm-ubi9:3.2.5-1766067105
+
+deploy:
+  replicas: 1
+  cpu_request: "4"
+  memory_request: "16Gi"
+  storage_source: hf
+  storage_pvc: model-pvc-2
+  image_pull_secret: ""
+  service_account_name: ""
+  ready_timeout: 3600
+  health_check_timeout: 120
+
+vllm_args:
+  gpu-memory-utilization: 0.92
+  trust-remote-code: true
+  no-enable-log-requests: true
+  no-enable-prefix-caching: true
+  uvicorn-log-level: debug
+  max-model-len: 8192
+  tensor-parallel-size: 1
+
+env_vars: {}
+
+accelerator_env_vars:
+  nvidia: {}
+  amd:
+    VLLM_ROCM_USE_AITER: "1"

@@ -1,0 +1,43 @@
+vaults:
+- psap-forge-notifications
+- psap-forge-mlflow-export
+
+benchmarks:
+  guidellm:
+    enabled: true
+    name: guidellm-benchmark
+    image: ghcr.io/vllm-project/guidellm:v0.6.0
+    timeout: 14400
+    pvc_size: 10Gi
+    args:
+      backend_type: openai_http
+      rate_type: concurrent
+      output_dir: /results
+      outputs: json
+
+tests:
+  rhaiis:
+    model_key: qwen3-0_6b
+    workload_key: profile1
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: aws.credentials
+        config:
+          experiment: forge-rhaiis
+          run_name: null
+          description: "Caliper export from FORGE rhaiis benchmarks"
+          source_script: rhaiis project
+          tags: {}
+          parameters: {}
+          metrics: {}
