@@ -6,7 +6,12 @@ import click
 import prepare_rhaiis
 import test_rhaiis
 
-from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
+try:
+    from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
+except ImportError:
+    from projects.core.ci_entrypoint.fournos_resolve import (
+        create_fournos_resolve_command as create_fournos_resolve_entrypoint,
+    )
 from projects.core.library import ci as ci_lib
 from projects.core.library import vault
 from projects.core.library.export import caliper_export_entrypoint
@@ -73,7 +78,7 @@ def pre_cleanup(ctx):
 
 main.add_command(caliper_export_entrypoint)
 main.add_command(
-    create_fournos_resolve_command(
+    create_fournos_resolve_entrypoint(
         vault_list_func=list_vaults,
         hardware_resolver_func=resolve_hardware_request,
     )
