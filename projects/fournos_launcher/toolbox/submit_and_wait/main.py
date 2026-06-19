@@ -249,7 +249,10 @@ def capture_final_job_status(args, ctx):
     if not hasattr(ctx, "final_job_name"):
         return "No job name available - skipping status capture"
 
-    job_file = args.artifact_dir / "artifacts" / f"{ctx.final_job_name}-final-status.yaml"
+    # Save to fournos_jobs directory for notification pickup
+    fournos_jobs_dir = args.artifact_dir / "fournos_jobs"
+    shell.mkdir(fournos_jobs_dir)
+    job_file = fournos_jobs_dir / f"{ctx.final_job_name}-final-status.yaml"
 
     # Get full job details
     result = shell.run(
