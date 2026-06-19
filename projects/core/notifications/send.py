@@ -202,11 +202,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
         except Exception as e:
             logger.warning("Failed to parse caliper_postprocess_status.yaml: %s", e)
             message += """
-• No reports generated...
-"""
-    else:
-        message += """
-• No reports generated...
+• Failed to parse caliper_postprocess_status.yaml ...
 """
 
     # Include fournos_launcher generated notification content
@@ -251,8 +247,50 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No test configuration (`variable_overrides.yaml/pr_config.txt`) available.
 """
 
-    if (failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES").exists():
-        with open(failures) as f:
+    # Check for FAILURE_REVIEW files first
+    artifact_dir = pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
+    failure_review_files = list(artifact_dir.glob("FAILURE_REVIEW_*"))
+    failures_file = artifact_dir / "FAILURES"
+
+    if failure_review_files:
+        # FAILURE_REVIEW files found - include their content and link to FAILURES
+        message += f"""
+{get_bold("Failure Analysis")}:
+"""
+        for review_file in failure_review_files:
+            try:
+                with open(review_file, encoding="utf-8") as f:
+                    review_content = f.read().strip()
+                if review_content:
+                    # Format as quote blocks for better text wrapping
+                    quoted_content = "\n".join(
+                        f"> {line}" if line.strip() else ">" for line in review_content.split("\n")
+                    )
+                    message += f"""
+{quoted_content}
+"""
+            except Exception as e:
+                logger.warning(f"Failed to read {review_file}: {e}")
+                message += f"""
+• Error reading {review_file.name}
+"""
+
+        # Add link to HTML report if it exists
+        html_report_file = artifact_dir / "failure_analysis_report.html"
+        if html_report_file.exists():
+            message += f"""
+• {get_link("Detailed failure analysis report", "failure_analysis_report.html")}
+"""
+
+        # Add link to FAILURES file if it exists (but don't include content)
+        if failures_file.exists():
+            message += f"""
+• {get_link("Raw failure details", "FAILURES", is_raw_file=True)}
+"""
+
+    elif failures_file.exists():
+        # No FAILURE_REVIEW files - fallback to current FAILURES behavior
+        with open(failures_file) as f:
             DEFAULT_HEAD = 10
             lines = f.readlines()
             try:
