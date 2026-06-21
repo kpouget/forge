@@ -1,0 +1,33 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: qwen3-vl-30b-a3b-instruct
+    serving.kserve.io/deploymentMode: RawDeployment
+    storage.kserve.io/readonly: "false"
+  labels:
+    networking.kserve.io/visibility: exposed
+    opendatahub.io/dashboard: "true"
+    forge.openshift.io/project: llamastack
+  name: qwen3-vl-30b-a3b-instruct
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    minReplicas: 1
+    maxReplicas: 1
+    securityContext:
+      fsGroup: 0
+    model:
+      modelFormat:
+        name: pytorch
+      name: ""
+      resources:
+        limits:
+          memory: 24Gi
+          nvidia.com/gpu: "2"
+        requests:
+          cpu: "2"
+          memory: 24Gi
+          nvidia.com/gpu: "2"
+      runtime: rhaiis-qwen3vl
+      storageUri: pvc://qwen3-vl-model-pvc

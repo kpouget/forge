@@ -1,0 +1,18 @@
+default_preset: smoke
+selected_preset: smoke
+job_name: null
+namespace_override: null
+namespace: llamastack-bench
+
+# Workload parameters
+user_class: ResponsesSimpleUser
+users: 10
+spawn_rate: 1
+duration_seconds: 60
+warmup_seconds: 300
+input_tokens: 0
+output_tokens: 0
+load_shape: steady
+
+# Model selection (key into models config)
+model_key: qwen3-vl-30b

@@ -1,0 +1,11 @@
+# Scheduling configuration for pod placement
+# GPU worker node: all benchmark workloads (LlamaStack, inference, Locust, Postgres)
+# The non-GPU worker is fully consumed by OpenShift platform pods.
+
+gpu_node:
+  node_selector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule

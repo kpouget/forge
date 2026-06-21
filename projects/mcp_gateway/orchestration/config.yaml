@@ -1,0 +1,47 @@
+vaults:
+  all: []
+  all-optional:
+  - psap-forge-notifications
+  - psap-forge-mlflow-export
+  prepare: []
+  test: []
+
+metrics:
+  enabled: true
+  namespaces:
+    - mcp-gw-bench
+    - mcp-system
+    - gateway-system
+    - istio-system
+  step_seconds: 15
+  queries:
+    - cpu
+    - memory
+    - network
+    - throttling
+    - node_cpu
+    - node_memory
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: null
+        config:
+          experiment: mcp-gateway-cpt
+          workspace: ashtarkb
+          run_name:
+          description: >
+            MCP Gateway performance test results
+          source_script: mcp_gateway project
+          tags: {}
+          parameters: {}
+          metrics: {}

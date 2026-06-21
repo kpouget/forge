@@ -1,0 +1,6 @@
+servers: [1]
+concurrency: [16]
+target: [gateway]
+duration_seconds: 60
+warmup_seconds: 10
+tools_per_server: 10

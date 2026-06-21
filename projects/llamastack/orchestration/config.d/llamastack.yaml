@@ -1,0 +1,18 @@
+distribution_name: llamastack-benchmark
+distribution: rh-dev
+replicas: 1
+port: 8321
+disable_otel: false
+enable_hpa: false
+mcp_server_url: null
+
+hpa:
+  min_replicas: 1
+  max_replicas: 4
+  memory_target: 75
+
+postgres:
+  service_name: postgres-db
+  port: 5432
+  database: llamastack
+  user: llamastack

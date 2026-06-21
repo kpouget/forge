@@ -1,0 +1,3 @@
+perf-mock-server:
+  image: quay.io/rh-ee-aharush/perf-mock-server:latest
+  tools_per_server: 10

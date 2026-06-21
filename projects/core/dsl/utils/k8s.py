@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -236,3 +237,65 @@ def is_valid_k8s_name(name: str) -> bool:
     # Check pattern: lowercase alphanumeric and hyphens, start/end with alphanumeric
     pattern = r"^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$"
     return bool(re.match(pattern, name))
+
+
+def capture_pod_logs(*, namespace: str, output_dir: Path) -> None:
+    """Capture logs from all pods in a namespace to individual files.
+
+    Args:
+        namespace: Kubernetes namespace to collect from
+        output_dir: Directory to write pod log files into
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    result = oc(
+        "get",
+        "pods",
+        "-n",
+        namespace,
+        "-o",
+        'jsonpath={range .items[*]}{.metadata.name}{"\\n"}{end}',
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        logger.warning("Could not list pods in namespace %s", namespace)
+        return
+
+    pod_names = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+    logger.info("Capturing logs from %d pods in %s", len(pod_names), namespace)
+
+    for pod_name in pod_names:
+        log_result = oc(
+            "logs",
+            pod_name,
+            "-n",
+            namespace,
+            "--all-containers=true",
+            check=False,
+            log_stdout=False,
+        )
+        log_file = output_dir / f"{pod_name}.log"
+        if log_result.returncode == 0 and log_result.stdout:
+            log_file.write_text(log_result.stdout, encoding="utf-8")
+        else:
+            log_file.write_text(
+                f"(failed to collect logs: exit_code={log_result.returncode})\n"
+                f"{log_result.stderr or ''}",
+                encoding="utf-8",
+            )
+
+
+def best_effort_oc(*oc_args: str, description: str | None = None) -> None:
+    """Run an oc command, swallowing timeout and other errors.
+
+    Useful in cleanup paths where partial failure should not abort the
+    remaining cleanup steps.
+    """
+    label = description or f"oc {' '.join(oc_args)}"
+    try:
+        oc(*oc_args, check=False)
+    except subprocess.TimeoutExpired:
+        logger.warning("Timed out: %s", label)
+    except Exception as exc:
+        logger.warning("Error: %s: %s", label, exc)

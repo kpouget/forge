@@ -1,0 +1,41 @@
+__multiple: true
+
+smoke:
+  runtime.selected_preset: smoke
+  runtime.mock_server: perf-mock-server
+  experiment.servers: [1]
+  experiment.concurrency: [4]
+  experiment.target: [server]
+  experiment.duration_seconds: 30
+  experiment.warmup_seconds: 5
+  experiment.tools_per_server: 10
+
+baseline:
+  runtime.selected_preset: baseline
+  runtime.mock_server: perf-mock-server
+  experiment.servers: [1]
+  experiment.concurrency: [16, 64, 128, 256]
+  experiment.target: [server, gateway]
+  experiment.duration_seconds: 300
+  experiment.warmup_seconds: 60
+  experiment.tools_per_server: 10
+
+scale-out:
+  runtime.selected_preset: scale-out
+  runtime.mock_server: perf-mock-server
+  experiment.servers: [1, 10, 25, 50, 100]
+  experiment.concurrency: [50, 200, 500]
+  experiment.target: [gateway]
+  experiment.duration_seconds: 240
+  experiment.warmup_seconds: 60
+  experiment.tools_per_server: 10
+
+demo:
+  runtime.selected_preset: demo
+  runtime.mock_server: perf-mock-server
+  experiment.servers: [150]
+  experiment.concurrency: [500]
+  experiment.target: [gateway]
+  experiment.duration_seconds: 240
+  experiment.warmup_seconds: 60
+  experiment.tools_per_server: 10

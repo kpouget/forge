@@ -1,0 +1,22 @@
+qwen3-vl-30b:
+  name: qwen3-vl-30b-a3b-instruct
+  model_id: vllm-inference/qwen3-vl-30b-a3b-instruct
+  tokenizer: Qwen/Qwen3-VL-30B-A3B-Instruct
+  image: registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.1
+  runtime: rhaiis-qwen3vl
+  pvc_name: qwen3-vl-model-pvc
+  pvc_size: 120Gi
+  deploy_timeout: 900
+  gpus: 2
+
+llama-3.2-3b:
+  name: llama-32-3b-instruct
+  model_id: vllm-inference/llama-32-3b-instruct
+  tokenizer: meta-llama/Llama-3.2-3B-Instruct
+  image: quay.io/vllm/vllm-cuda:0.14.1_rhai0
+  runtime: vllm-community
+  modelcar: quay.io/redhat-ai-services/modelcar-catalog:llama-3.2-3b-instruct
+  pvc_name: null
+  pvc_size: null
+  deploy_timeout: 600
+  gpus: 1

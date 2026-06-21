@@ -163,3 +163,12 @@ temp/
 
 # FORGE launcher configuration (personal settings)
 projects/core/launcher/launcher_config.yaml
+
+# FORGE vault secrets (never commit credentials)
+vaults/*/
+!vaults/.gitkeep
+**/mlflow-secret.yaml
+**/aws.credentials
+
+# FORGE Observability secrets
+projects/observability/secrets.env

@@ -1,0 +1,85 @@
+__multiple: true
+
+smoke:
+  experiment.type: lls_overhead
+  runtime.selected_preset: smoke
+  runtime.user_class: ResponsesSimpleUser
+  runtime.users: 10
+  runtime.spawn_rate: 10
+  runtime.duration_seconds: 30
+  runtime.warmup_seconds: 10
+  runtime.model_key: qwen3-vl-30b
+  llamastack.replicas: 1
+  llamastack.disable_otel: true
+
+overhead-simple:
+  experiment.type: lls_overhead
+  runtime.selected_preset: overhead-simple
+  runtime.user_class: ResponsesSimpleUser
+  runtime.users: 100
+  runtime.spawn_rate: 100
+  runtime.duration_seconds: 30
+  runtime.warmup_seconds: 30
+  runtime.input_tokens: 50
+  runtime.output_tokens: 50
+  llamastack.disable_otel: true
+
+overhead-sweep:
+  experiment.type: lls_overhead
+  runtime.selected_preset: overhead-sweep
+  runtime.user_class: ResponsesSimpleUser
+  runtime.duration_seconds: 300
+  runtime.warmup_seconds: 60
+  runtime.input_tokens: 50
+  runtime.output_tokens: 50
+  llamastack.disable_otel: true
+  experiment.replica_levels: [1, 2, 4]
+  experiment.concurrency_sweep.levels: [1, 2, 4, 8, 16, 32, 64, 128]
+
+test-sweep:
+  experiment.type: lls_overhead
+  runtime.selected_preset: overhead-sweep
+  runtime.user_class: ResponsesSimpleUser
+  runtime.duration_seconds: 60
+  runtime.warmup_seconds: 30
+  runtime.input_tokens: 50
+  runtime.output_tokens: 50
+  llamastack.disable_otel: true
+  experiment.replica_levels: [1, 2]
+  experiment.concurrency_sweep.levels: [64, 128]
+
+overhead-4r-128u:
+  experiment.type: lls_overhead
+  runtime.selected_preset: overhead-4-replicas
+  runtime.user_class: ResponsesSimpleUser
+  runtime.users: 128
+  runtime.spawn_rate: 128
+  runtime.duration_seconds: 300
+  runtime.warmup_seconds: 60
+  llamastack.replicas: 4
+  llamastack.disable_otel: true
+  runtime.input_tokens: 50
+  runtime.output_tokens: 50
+
+direct-128u:
+  experiment.type: rhaiis_direct
+  runtime.selected_preset: baseline-direct
+  runtime.user_class: ChatCompletionsUser
+  runtime.users: 128
+  runtime.spawn_rate: 128
+  runtime.duration_seconds: 300
+  runtime.warmup_seconds: 60
+  runtime.input_tokens: 50
+  runtime.output_tokens: 50
+
+mcp-benchmark:
+  experiment.type: lls_overhead
+  runtime.selected_preset: mcp-benchmark
+  runtime.user_class: ResponsesMCPBenchmarkUser
+  runtime.users: 10
+  runtime.spawn_rate: 1
+  runtime.duration_seconds: 60
+  runtime.warmup_seconds: 300
+  llamastack.disable_otel: true
+  llamastack.deploy_mcp_server: true
+  llamastack.mcp_server_url: "http://benchmark-mcp-server.{namespace}.svc.cluster.local:8000/sse"

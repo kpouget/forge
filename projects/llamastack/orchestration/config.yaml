@@ -1,0 +1,47 @@
+vaults:
+  all: []
+  all-optional:
+  - psap-forge-notifications
+  - psap-forge-mlflow-export
+  prepare: []
+  prepare-optional: []
+  test: []
+  test-optional: []
+
+metrics:
+  enabled: true
+  namespaces:
+    - llamastack-bench
+  step_seconds: 15
+  queries:
+    - cpu
+    - memory
+    - network
+    - throttling
+    - node_cpu
+    - node_memory
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: null
+        config:
+          experiment: llamastack-cpt
+          workspace: ashtarkb
+          run_name:
+          description: >
+            Llama Stack performance benchmark results — measures routing overhead,
+            agentic MCP tool-calling latency, and scaling behavior.
+          source_script: llamastack project
+          tags: {}
+          parameters: {}
+          metrics: {}

@@ -1,0 +1,98 @@
+---
+# Headless service: lets workers discover the master by DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: __JOB_NAME__-master
+  namespace: __NAMESPACE__
+spec:
+  selector:
+    app: __JOB_NAME__-master
+  ports:
+  - port: 5557
+    name: locust
+  clusterIP: None
+---
+# Locust master: coordinates workers, collects stats, writes CSV.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__-master
+  namespace: __NAMESPACE__
+spec:
+  template:
+    metadata:
+      labels:
+        app: __JOB_NAME__-master
+    spec:
+      containers:
+      - name: locust
+        image: __LOCUST_IMAGE__
+        ports:
+        - containerPort: 5557
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          locust -f /scripts/__LOCUSTFILE__ \
+            --master \
+            --expect-workers=__NUM_WORKERS__ \
+            --host __HOST_URL__ \
+            --headless \
+            -u __USERS__ \
+            -r __SPAWN_RATE__ \
+            -t __DURATION__s \
+            --stop-timeout 10 \
+            --csv /tmp/results \
+            --csv-full-history \
+            2>&1
+          echo "===CSV_STATS==="
+          cat /tmp/results_stats.csv 2>/dev/null
+          echo "===CSV_STATS_HISTORY==="
+          cat /tmp/results_stats_history.csv 2>/dev/null
+          echo "===CSV_FAILURES==="
+          cat /tmp/results_failures.csv 2>/dev/null
+          echo "===CSV_END==="
+          sleep 15
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: __CONFIGMAP_NAME__
+      restartPolicy: Never
+  backoffLimit: 0
+---
+# Locust workers: each handles a slice of the total users.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__-workers
+  namespace: __NAMESPACE__
+spec:
+  parallelism: __NUM_WORKERS__
+  completions: __NUM_WORKERS__
+  template:
+    metadata:
+      labels:
+        app: __JOB_NAME__-workers
+    spec:
+      containers:
+      - name: locust
+        image: __LOCUST_IMAGE__
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          locust -f /scripts/__LOCUSTFILE__ \
+            --worker \
+            --master-host __JOB_NAME__-master \
+            2>&1
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: __CONFIGMAP_NAME__
+      restartPolicy: Never
+  backoffLimit: 0

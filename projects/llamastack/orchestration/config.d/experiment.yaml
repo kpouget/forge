@@ -1,0 +1,11 @@
+# Experiment type: lls_overhead | rhaiis_direct
+type: lls_overhead
+
+# Sweep levels (null = use single values from llamastack.replicas / runtime.users)
+concurrency_sweep:
+  levels: null
+
+replica_levels: null
+
+overhead_study:
+  mlflow_experiment: Rhaiis_llamastack_overhead

@@ -1,0 +1,51 @@
+apiVersion: llamastack.io/v1alpha1
+kind: LlamaStackDistribution
+metadata:
+  name: llamastack-benchmark
+spec:
+  replicas: 1
+  server:
+    containerSpec:
+      env:
+        - name: VLLM_URL
+          value: "http://llama-32-3b-instruct-predictor:80/v1"
+        - name: INFERENCE_MODEL
+          value: "llama-32-3b-instruct"
+        - name: VLLM_TLS_VERIFY
+          value: "false"
+        - name: ENABLE_SENTENCE_TRANSFORMERS
+          value: "true"
+        - name: EMBEDDING_PROVIDER
+          value: "sentence-transformers"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector-collector:4318"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: OTEL_SERVICE_NAME
+          value: "llamastack"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "k8s.namespace.name=NAMESPACE_PLACEHOLDER"
+        - name: POSTGRES_HOST
+          value: "postgres-db"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "llamastack"
+        - name: POSTGRES_USER
+          value: "llamastack"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+      name: llama-stack
+      port: 8321
+    distribution:
+      name: rh-dev
+    storage:
+      size: 20Gi
+  network:
+    allowedFrom:
+      namespaces:
+        - "NAMESPACE_PLACEHOLDER"
+        - "tekton-llamastack"

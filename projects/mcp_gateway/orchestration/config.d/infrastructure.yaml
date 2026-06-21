@@ -1,0 +1,70 @@
+gateway_url: "http://mcp-gateway-istio.gateway-system.svc.cluster.local:8080"
+server_url_template: "http://{mock_server}.{namespace}.svc.cluster.local:8080"
+host_header: "perf-mock.mcp.local"
+tool_prefix: "mock_"
+api_group: "mcp.kuadrant.io"
+
+install_platform: true
+cleanup_platform: true
+
+platform:
+  mcp_gateway_namespace: mcp-system
+  gateway_namespace: gateway-system
+  gateway_class_name: istio
+
+  mcp_gateway_controller:
+    catalog_image: "ghcr.io/kuadrant/mcp-controller-catalog:main"
+    channel: preview
+    install_productized: true
+
+  mcp_gateway_instance:
+    chart_ref: "oci://ghcr.io/kuadrant/charts/mcp-gateway"
+    version: null
+
+  kustomize_base: null
+  platform_repo: https://github.com/Kuadrant/mcp-gateway.git
+  platform_repo_subdir: config/openshift
+
+  steps:
+    - name: service-mesh-operator
+      type: kustomize
+      path: kustomize/service-mesh/operator/base
+      wait_for_crds:
+        - istios.sailoperator.io
+        - istiocnis.sailoperator.io
+
+    - name: service-mesh-instance
+      type: kustomize
+      path: kustomize/service-mesh/instance/base
+      wait_for_ready:
+        kind: istio
+        name: default
+        namespace: istio-system
+        timeout_seconds: 600
+
+    - name: connectivity-link-operator
+      type: kustomize
+      path: kustomize/connectivity-link/operator/base
+      wait_for_crds:
+        - kuadrants.kuadrant.io
+
+    - name: mcp-gateway-controller
+      type: olm
+      wait_for_crds:
+        - mcpgatewayextensions.mcp.kuadrant.io
+        - mcpserverregistrations.mcp.kuadrant.io
+
+    - name: connectivity-link-instance
+      type: kuadrant_cr
+      namespace: mcp-system
+
+    - name: mcp-gateway-instance
+      type: helm
+
+scheduling:
+  node_selector:
+    workload: mcp-bench
+
+locust:
+  image: locustio/locust:2.32.7
+  configmap_name: locust-scripts-mcp
