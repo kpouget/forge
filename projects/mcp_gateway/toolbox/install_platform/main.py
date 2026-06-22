@@ -243,8 +243,7 @@ def install_mcp_gateway_instance(args, ctx):
     if not step:
         return "Step mcp-gateway-instance not found, skipping"
 
-    if not shutil.which("helm"):
-        raise RuntimeError("Required command not found: helm")
+    _ensure_helm()
 
     chart_ref = ctx.inst.get("chart_ref", "oci://ghcr.io/kuadrant/charts/mcp-gateway")
     chart_version = ctx.inst.get("version")
@@ -441,6 +440,43 @@ def capture_platform_state(args, ctx):
 
 
 # --- Helper functions ---
+
+
+def _ensure_helm() -> None:
+    """Download helm to /tmp if not already in PATH."""
+    if shutil.which("helm"):
+        return
+
+    import os
+    import platform
+    import tarfile
+    import urllib.request
+
+    system = platform.system().lower()
+    arch = platform.machine()
+    arch_map = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
+    arch = arch_map.get(arch, arch)
+
+    url = f"https://get.helm.sh/helm-v3.17.3-{system}-{arch}.tar.gz"
+    logger.info("Helm not found in PATH, downloading from %s", url)
+
+    tar_path = Path("/tmp/helm.tar.gz")
+    urllib.request.urlretrieve(url, tar_path)
+
+    with tarfile.open(tar_path) as tf:
+        for member in tf.getmembers():
+            if member.name.endswith("/helm"):
+                member.name = "helm"
+                tf.extract(member, "/tmp")
+                break
+
+    Path("/tmp/helm").chmod(0o755)
+    tar_path.unlink(missing_ok=True)
+
+    if "/tmp" not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"/tmp:{os.environ.get('PATH', '')}"
+
+    logger.info("Helm installed to /tmp/helm")
 
 
 def _get_mcp_host() -> str:

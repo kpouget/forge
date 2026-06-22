@@ -26,7 +26,7 @@ caliper:
         enabled: true
         secrets:
           vault:
-            name: psap-forge-mlflow-export
+            name: psap-forge-mcp-gw-mlflow
             mlflow_secret: mlflow-secret.yaml
             aws_secret: null
         config:
