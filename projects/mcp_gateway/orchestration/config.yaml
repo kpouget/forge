@@ -14,13 +14,7 @@ metrics:
     - gateway-system
     - istio-system
   step_seconds: 15
-  queries:
-    - cpu
-    - memory
-    - network
-    - throttling
-    - node_cpu
-    - node_memory
+  query_keys: []  # empty = all queries from queries.yaml
 
 caliper:
   export:

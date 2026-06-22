@@ -1,0 +1,303 @@
+# PromQL query definitions for Prometheus metrics capture.
+#
+# Each key is a unique query identifier that projects can reference
+# in their config to select a subset.  If no subset is specified,
+# ALL queries defined here are executed.
+#
+# Template variable:
+#   {ns}  – replaced at runtime with a pipe-separated namespace regex
+#           e.g. "ns1|ns2|ns3"
+
+queries:
+
+  # ── CPU ──────────────────────────────────────────────────────────────
+
+  cpu_usage:
+    category: cpu
+    promql: >-
+      sum(rate(container_cpu_usage_seconds_total
+      {namespace=~"{ns}",container!="POD",container!=""}[1m]))
+      by (namespace, pod)
+    unit: cores
+    description: CPU usage per pod
+
+  cpu_requests:
+    category: cpu
+    promql: >-
+      sum(kube_pod_container_resource_requests
+      {namespace=~"{ns}",resource="cpu"})
+      by (namespace, pod)
+    unit: cores
+    description: CPU resource requests per pod
+
+  cpu_limits:
+    category: cpu
+    promql: >-
+      sum(kube_pod_container_resource_limits
+      {namespace=~"{ns}",resource="cpu"})
+      by (namespace, pod)
+    unit: cores
+    description: CPU resource limits per pod
+
+  cpu_throttling:
+    category: cpu
+    promql: >-
+      sum(rate(container_cpu_cfs_throttled_periods_total
+      {namespace=~"{ns}",container!="POD",container!=""}[5m]))
+      by (namespace, pod)
+      /
+      sum(rate(container_cpu_cfs_periods_total
+      {namespace=~"{ns}",container!="POD",container!=""}[5m]))
+      by (namespace, pod) * 100
+    unit: percent
+    description: CPU throttle percentage per pod
+
+  # ── Memory ───────────────────────────────────────────────────────────
+
+  memory_usage:
+    category: memory
+    promql: >-
+      sum(container_memory_working_set_bytes
+      {namespace=~"{ns}",container!="POD",container!=""})
+      by (namespace, pod)
+    unit: bytes
+    description: Memory working set per pod
+
+  memory_rss:
+    category: memory
+    promql: >-
+      sum(container_memory_rss
+      {namespace=~"{ns}",container!="POD",container!=""})
+      by (namespace, pod)
+    unit: bytes
+    description: Resident set size per pod
+
+  memory_requests:
+    category: memory
+    promql: >-
+      sum(kube_pod_container_resource_requests
+      {namespace=~"{ns}",resource="memory"})
+      by (namespace, pod)
+    unit: bytes
+    description: Memory resource requests per pod
+
+  memory_limits:
+    category: memory
+    promql: >-
+      sum(kube_pod_container_resource_limits
+      {namespace=~"{ns}",resource="memory"})
+      by (namespace, pod)
+    unit: bytes
+    description: Memory resource limits per pod
+
+  memory_oom_kills:
+    category: memory
+    promql: >-
+      sum(increase(kube_pod_container_status_last_terminated_reason
+      {namespace=~"{ns}",reason="OOMKilled"}[5m]))
+      by (namespace, pod, container)
+    unit: count
+    description: OOM kill events per container
+
+  # ── Network ──────────────────────────────────────────────────────────
+
+  network_rx_bytes:
+    category: network
+    promql: >-
+      sum(rate(container_network_receive_bytes_total
+      {namespace=~"{ns}"}[1m]))
+      by (namespace, pod)
+    unit: bytes/s
+    description: Network receive throughput per pod
+
+  network_tx_bytes:
+    category: network
+    promql: >-
+      sum(rate(container_network_transmit_bytes_total
+      {namespace=~"{ns}"}[1m]))
+      by (namespace, pod)
+    unit: bytes/s
+    description: Network transmit throughput per pod
+
+  network_rx_packets:
+    category: network
+    promql: >-
+      sum(rate(container_network_receive_packets_total
+      {namespace=~"{ns}"}[1m]))
+      by (namespace, pod)
+    unit: packets/s
+    description: Network receive packet rate per pod
+
+  network_tx_packets:
+    category: network
+    promql: >-
+      sum(rate(container_network_transmit_packets_total
+      {namespace=~"{ns}"}[1m]))
+      by (namespace, pod)
+    unit: packets/s
+    description: Network transmit packet rate per pod
+
+  network_rx_errors:
+    category: network
+    promql: >-
+      sum(rate(container_network_receive_errors_total
+      {namespace=~"{ns}"}[5m]))
+      by (namespace, pod)
+    unit: errors/s
+    description: Network receive error rate per pod
+
+  network_tx_drops:
+    category: network
+    promql: >-
+      sum(rate(container_network_transmit_packets_dropped_total
+      {namespace=~"{ns}"}[5m]))
+      by (namespace, pod)
+    unit: drops/s
+    description: Network transmit drop rate per pod
+
+  # ── Reliability ──────────────────────────────────────────────────────
+
+  container_restarts:
+    category: reliability
+    promql: >-
+      sum(kube_pod_container_status_restarts_total
+      {namespace=~"{ns}"})
+      by (namespace, pod, container)
+    unit: count
+    description: Container restart count
+
+  pod_not_ready:
+    category: reliability
+    promql: >-
+      sum(kube_pod_status_ready
+      {namespace=~"{ns}",condition="false"})
+      by (namespace, pod)
+    unit: count
+    description: Pods in not-ready state
+
+  container_waiting:
+    category: reliability
+    promql: >-
+      sum(kube_pod_container_status_waiting
+      {namespace=~"{ns}"})
+      by (namespace, pod, container)
+    unit: count
+    description: Containers in waiting state
+
+  # ── HTTP (Istio / Envoy service mesh) ────────────────────────────────
+
+  http_request_rate:
+    category: http
+    promql: >-
+      sum(rate(istio_requests_total
+      {destination_workload_namespace=~"{ns}"}[1m]))
+      by (destination_workload, response_code)
+    unit: req/s
+    description: HTTP request rate by workload and status code
+
+  http_error_rate:
+    category: http
+    promql: >-
+      sum(rate(istio_requests_total
+      {destination_workload_namespace=~"{ns}",response_code=~"5.."}[1m]))
+      by (destination_workload)
+    unit: req/s
+    description: HTTP 5xx error rate by workload
+
+  http_latency_p50:
+    category: http
+    promql: >-
+      histogram_quantile(0.50,
+      sum(rate(istio_request_duration_milliseconds_bucket
+      {destination_workload_namespace=~"{ns}"}[1m]))
+      by (destination_workload, le))
+    unit: ms
+    description: HTTP latency p50 by workload
+
+  http_latency_p95:
+    category: http
+    promql: >-
+      histogram_quantile(0.95,
+      sum(rate(istio_request_duration_milliseconds_bucket
+      {destination_workload_namespace=~"{ns}"}[1m]))
+      by (destination_workload, le))
+    unit: ms
+    description: HTTP latency p95 by workload
+
+  http_latency_p99:
+    category: http
+    promql: >-
+      histogram_quantile(0.99,
+      sum(rate(istio_request_duration_milliseconds_bucket
+      {destination_workload_namespace=~"{ns}"}[1m]))
+      by (destination_workload, le))
+    unit: ms
+    description: HTTP latency p99 by workload
+
+  # ── Node-level ───────────────────────────────────────────────────────
+
+  node_cpu:
+    category: node
+    promql: instance:node_cpu_utilisation:rate5m
+    unit: ratio
+    description: Node CPU utilization (0-1 ratio)
+
+  node_memory:
+    category: node
+    promql: instance:node_memory_utilisation:ratio
+    unit: ratio
+    description: Node memory utilization (0-1 ratio)
+
+  node_network_rx:
+    category: node
+    promql: instance:node_network_receive_bytes_excluding_lo:rate5m
+    unit: bytes/s
+    description: Node network receive rate
+
+  node_disk_read:
+    category: node
+    promql: >-
+      sum(rate(node_disk_read_bytes_total[5m]))
+      by (instance)
+    unit: bytes/s
+    description: Node disk read throughput
+
+  node_disk_write:
+    category: node
+    promql: >-
+      sum(rate(node_disk_written_bytes_total[5m]))
+      by (instance)
+    unit: bytes/s
+    description: Node disk write throughput
+
+  # ── GPU (DCGM exporter) ─────────────────────────────────────────────
+
+  gpu_utilization:
+    category: gpu
+    promql: DCGM_FI_DEV_GPU_UTIL
+    unit: percent
+    description: GPU compute utilization
+
+  gpu_memory_used:
+    category: gpu
+    promql: DCGM_FI_DEV_FB_USED
+    unit: MiB
+    description: GPU framebuffer memory used
+
+  gpu_memory_free:
+    category: gpu
+    promql: DCGM_FI_DEV_FB_FREE
+    unit: MiB
+    description: GPU framebuffer memory free
+
+  gpu_power:
+    category: gpu
+    promql: DCGM_FI_DEV_POWER_USAGE
+    unit: watts
+    description: GPU power draw
+
+  gpu_temperature:
+    category: gpu
+    promql: DCGM_FI_DEV_GPU_TEMP
+    unit: celsius
+    description: GPU temperature

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from projects.caliper.metrics.queries import resolve_queries
+from projects.caliper.prometheus_metrics.queries import load_queries
 
 logger = logging.getLogger(__name__)
 
@@ -110,41 +110,33 @@ def capture_metrics(
     start_time: datetime,
     end_time: datetime,
     step_seconds: int = 15,
-    queries: list[str] | None = None,
-    include_gpu: bool = False,
+    query_keys: list[str] | None = None,
     artifact_dir: Path,
     job_name: str,
 ) -> Path:
     """
-    Query Prometheus for resource utilization metrics and save raw results.
+    Query Prometheus for metrics and save raw results as JSON.
 
     Args:
-        namespaces: Kubernetes namespaces to query pod metrics for.
+        namespaces: Kubernetes namespaces to scope pod-level queries.
         start_time: Start of the query window (UTC).
         end_time: End of the query window (UTC).
         step_seconds: Query resolution step.
-        queries: List of metric category names to capture (None = defaults).
-        include_gpu: Whether to include DCGM GPU queries.
+        query_keys: Subset of query keys from queries.yaml to execute.
+            None or empty list means execute all available queries.
         artifact_dir: Root artifact directory for this run.
         job_name: Test job name (used for subdirectory).
 
     Returns:
         Path to the metrics output directory.
     """
-    if queries is None:
-        queries = ["cpu", "memory", "network", "throttling", "node_cpu", "node_memory"]
-
     metrics_dir = artifact_dir / "artifacts" / "results" / job_name / "metrics" / "raw"
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
-    query_specs = resolve_queries(
-        categories=queries,
-        namespaces=namespaces,
-        include_gpu=include_gpu,
-    )
+    query_specs = load_queries(namespaces=namespaces, keys=query_keys or None)
 
     if not query_specs:
-        logger.warning("No query specs resolved for categories: %s", queries)
+        logger.warning("No query specs resolved for keys: %s", query_keys)
         return metrics_dir
 
     logger.info(
@@ -167,7 +159,7 @@ def capture_metrics(
         response = _query_range(
             url=url,
             token=token,
-            query=spec.promql_template,
+            query=spec.promql,
             start=start_time,
             end=end_time,
             step_seconds=step_seconds,
@@ -178,7 +170,7 @@ def capture_metrics(
             "category": spec.category,
             "description": spec.description,
             "unit": spec.unit,
-            "promql": spec.promql_template,
+            "promql": spec.promql,
             "start": start_time.isoformat(),
             "end": end_time.isoformat(),
             "step_seconds": step_seconds,

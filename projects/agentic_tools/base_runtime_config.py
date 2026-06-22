@@ -1,14 +1,14 @@
 """
-Base runtime configuration for FORGE projects.
+Base runtime configuration for agentic testing projects.
 
-Provides the shared foundation that every FORGE project's runtime_config.py
+Provides the shared foundation that every agentic project's runtime_config.py
 needs: initialization, artifact directory setup, namespace derivation, and
 common config accessors.  Each project subclasses this with project-specific
 accessors and exposes a module-level ``cfg`` singleton.
 
 Usage in a project's ``runtime_config.py``::
 
-    from projects.core.library.base_runtime_config import BaseRuntimeConfig
+    from projects.agentic_tools.base_runtime_config import BaseRuntimeConfig
 
     class MyProjectConfig(BaseRuntimeConfig):
         def __init__(self) -> None:
@@ -44,7 +44,7 @@ _ARTIFACT_SUBDIRS = ("src", "artifacts", "artifacts/results")
 
 
 class BaseRuntimeConfig:
-    """Shared runtime configuration logic for FORGE projects.
+    """Shared runtime configuration logic for agentic testing projects.
 
     Args:
         orchestration_dir: Absolute path to the project's ``orchestration/`` directory.

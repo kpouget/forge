@@ -5,8 +5,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from projects.agentic_tools.base_runtime_config import BaseRuntimeConfig
 from projects.core.library import config
-from projects.core.library.base_runtime_config import BaseRuntimeConfig
 
 logger = logging.getLogger(__name__)
 

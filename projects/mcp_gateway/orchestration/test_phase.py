@@ -23,9 +23,8 @@ from projects.agentic_tools.locust.toolbox.run_distributed.main import (
     cleanup_job as cleanup_locust_job,
 )
 from projects.agentic_tools.mcp.toolbox.deploy_mock_servers import main as deploy_mock_servers
-from projects.caliper.metrics.capture import capture_metrics
-from projects.caliper.metrics.config import MetricsCaptureConfig
-from projects.caliper.metrics.plot import generate_plots
+from projects.caliper.prometheus_metrics.capture import capture_metrics
+from projects.caliper.prometheus_metrics.config import MetricsCaptureConfig
 from projects.core.dsl.utils import write_json
 from projects.core.library import env
 from projects.mcp_gateway.orchestration.runtime_config import cfg
@@ -103,19 +102,18 @@ def run() -> int:
                 all_summaries.append(summary)
 
                 if metrics_cfg.enabled:
-                    raw_dir = capture_metrics(
+                    capture_metrics(
                         namespaces=metrics_cfg.namespaces,
                         start_time=test_start_time,
                         end_time=test_end_time,
                         step_seconds=metrics_cfg.step_seconds,
-                        queries=metrics_cfg.queries,
-                        include_gpu=metrics_cfg.include_gpu,
+                        query_keys=metrics_cfg.query_keys or None,
                         artifact_dir=env.ARTIFACT_DIR,
                         job_name=job_name,
                     )
-                    generate_plots(metrics_dir=raw_dir)
 
-                mlflow_run_name = f"mcpgw-v{version}-s{num_servers}-u{users}"
+                ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+                mlflow_run_name = f"mcpgw-v{version}-s{num_servers}-u{users}-{ts}"
                 export_to_mlflow(run_name=mlflow_run_name)
 
         _cleanup_servers(namespace=namespace, num_servers=num_servers, mock_server=mock_server)

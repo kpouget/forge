@@ -64,10 +64,8 @@ caliper = [
     "boto3>=1.28.0",
     "mlflow>=2.10.0",
 ]
-metrics = [
-    "prometheus_api_client>=0.5.0",
-    "plotly>=5.17.0",
-    "pandas>=2.0.0",
+prometheus_metrics = [
+    "pyyaml>=6.0",
 ]
 matrix_benchmarking = [
     "pandas",
