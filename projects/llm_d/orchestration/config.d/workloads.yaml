@@ -1,3 +1,8 @@
+job_name: guidellm-benchmark
+image: ghcr.io/vllm-project/guidellm:v0.5.4
+pvc_size: 1Gi
+timeout_seconds: 3600
+
 smoke_requests:
   default:
     prompt: San Francisco is a
@@ -6,10 +11,6 @@ smoke_requests:
 
 benchmarks:
   short:
-    job_name: guidellm-benchmark
-    image: ghcr.io/vllm-project/guidellm
-    version: v0.5.4
-    pvc_size: 1Gi
     timeout_seconds: 900
     outputs: json
     args:
@@ -21,10 +22,6 @@ benchmarks:
       data: prompt_tokens=256,output_tokens=128
 
   concurrent-1k-1k:
-    job_name: guidellm-benchmark
-    image: ghcr.io/vllm-project/guidellm:v0.5.4
-    pvc_size: 1Gi
-    timeout_seconds: 3600
     args:
       backend_type: openai_http
       rate_type: concurrent
@@ -33,10 +30,6 @@ benchmarks:
       max_seconds: 600
 
   heavy-heterogeneous:
-    job_name: guidellm-benchmark
-    image: ghcr.io/vllm-project/guidellm:v0.5.4
-    pvc_size: 1Gi
-    timeout_seconds: 3600
     args:
       backend_type: openai_http
       rate_type: concurrent
@@ -45,10 +38,6 @@ benchmarks:
       max_seconds: 600
 
   multi-turn:
-    job_name: guidellm-benchmark
-    image: ghcr.io/vllm-project/guidellm:v0.5.4
-    pvc_size: 1Gi
-    timeout_seconds: 3600
     args:
       backend_type: openai_http
       rate_type: concurrent

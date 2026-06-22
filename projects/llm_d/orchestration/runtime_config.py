@@ -115,7 +115,13 @@ def get_benchmark_config() -> dict[str, Any] | None:
     benchmark_name = config.project.get_config("runtime.benchmark_key", None)
     if not benchmark_name:
         return None
-    return copy.deepcopy(config.project.get_config(f"workloads.benchmarks.{benchmark_name}"))
+    benchmark = copy.deepcopy(config.project.get_config(f"workloads.benchmarks.{benchmark_name}"))
+    workload_defaults = copy.deepcopy(config.project.get_config("workloads"))
+    default_keys = ("job_name", "image", "pvc_size", "timeout_seconds")
+    for key in default_keys:
+        if key in workload_defaults and key not in benchmark:
+            benchmark[key] = workload_defaults[key]
+    return benchmark
 
 
 def get_scheduler_profile() -> dict[str, Any] | None:

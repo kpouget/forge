@@ -65,7 +65,6 @@ def test_benchmark_workloads_are_available() -> None:
     multi_turn = core_config.project.get_config("workloads.benchmarks.multi-turn", print=False)
 
     assert concurrent["args"]["rates"] == [300, 200, 100, 50, 1]
-    assert concurrent["timeout_seconds"] == 3600
     assert heavy["args"]["max_seconds"] == 600
     assert "prompt_tokens_stdev=8500" in heavy["args"]["data"]
     assert "output_tokens_max=8000" in heavy["args"]["data"]
@@ -73,3 +72,23 @@ def test_benchmark_workloads_are_available() -> None:
     assert "turns=5" in multi_turn["args"]["data"]
     assert "prefix_count={2*rate}" in multi_turn["args"]["data"]
     assert multi_turn["args"]["max_requests"] == "{10*rate}"
+
+
+def test_benchmark_resolution_applies_workload_defaults_and_per_benchmark_overrides() -> None:
+    _init_project_config()
+
+    core_config.project.set_config("runtime.benchmark_key", "concurrent-1k-1k")
+    concurrent = runtime_config.get_benchmark_config()
+    assert concurrent is not None
+    assert concurrent["job_name"] == "guidellm-benchmark"
+    assert concurrent["image"] == "ghcr.io/vllm-project/guidellm:v0.5.4"
+    assert concurrent["pvc_size"] == "1Gi"
+    assert concurrent["timeout_seconds"] == 3600
+
+    core_config.project.set_config("runtime.benchmark_key", "multi-turn")
+    multi_turn = runtime_config.get_benchmark_config()
+    assert multi_turn is not None
+    assert multi_turn["job_name"] == "guidellm-benchmark"
+    assert multi_turn["image"] == "ghcr.io/vllm-project/guidellm:v0.5.4"
+    assert multi_turn["pvc_size"] == "1Gi"
+    assert multi_turn["timeout_seconds"] == 3600

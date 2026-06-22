@@ -261,7 +261,6 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         name=benchmark.get("job_name"),
         namespace=namespace,
         image=benchmark.get("image"),
-        version=benchmark.get("version"),
         timeout=benchmark.get("timeout_seconds"),
         pvc_size=benchmark.get("pvc_size"),
         guidellm_args=guidellm_args,

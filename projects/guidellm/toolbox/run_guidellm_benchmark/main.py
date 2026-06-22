@@ -29,8 +29,7 @@ def run(
     endpoint_url: str,
     name: str = "guidellm-benchmark",
     namespace: str = "",
-    image: str = "ghcr.io/vllm-project/guidellm",
-    version: str = "v0.6.0",
+    image: str = "ghcr.io/vllm-project/guidellm:v0.6.0",
     timeout: int = 900,
     pvc_size: str = "1Gi",
     guidellm_args: list[str] | None = None,
@@ -42,8 +41,7 @@ def run(
         endpoint_url: Endpoint URL for the LLM inference service to benchmark
         name: Name of the benchmark job
         namespace: Namespace to run the benchmark job in (empty string auto-detects current namespace)
-        image: Container image for the benchmark
-        version: Version tag for the benchmark image
+        image: Full container image reference for the benchmark
         timeout: Timeout in seconds to wait for job completion
         pvc_size: Size of the PersistentVolumeClaim for storing results
         guidellm_args: List of additional guidellm arguments (e.g., ["--rate=10", "--max-seconds=30"])
@@ -72,7 +70,7 @@ def validate_parameters(args, ctx):
         ctx.target_namespace = args.namespace
 
     ctx.benchmark_name = args.name
-    ctx.full_image = f"{args.image}:{args.version}"
+    ctx.image = args.image
 
     return f"Validated parameters for benchmark {ctx.benchmark_name} in namespace {ctx.target_namespace}"
 
@@ -138,7 +136,7 @@ def create_guidellm_resources_task(args, ctx):
         render_guidellm_job_from_parts(
             namespace=ctx.target_namespace,
             name=ctx.benchmark_name,
-            image=ctx.full_image,
+            image=ctx.image,
             endpoint_url=args.endpoint_url,
             guidellm_args=ctx.guidellm_args,
         ),
