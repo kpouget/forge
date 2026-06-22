@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 
+from projects.core.library import config
 from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.mcp_gateway.orchestration.runtime_config import cfg
 from projects.mcp_gateway.toolbox.install_platform import main as install_platform_mod
@@ -23,11 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def run() -> int:
-    version = os.environ.get("MCP_GATEWAY_VERSION")
+    version = config.project.get_config(
+        "infrastructure.mcp_gateway_version", None, print=False, warn=False
+    ) or os.environ.get("MCP_GATEWAY_VERSION")
     if not version:
         raise RuntimeError(
-            "MCP_GATEWAY_VERSION environment variable must be set. "
-            "Example: MCP_GATEWAY_VERSION=0.7.0 python -m ... prepare"
+            "MCP Gateway version not set. Use /version directive in PR comment, "
+            "set infrastructure.mcp_gateway_version in config, or set "
+            "MCP_GATEWAY_VERSION environment variable."
         )
 
     namespace = cfg.get_namespace()
