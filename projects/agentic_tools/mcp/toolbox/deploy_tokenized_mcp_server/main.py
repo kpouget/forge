@@ -111,7 +111,7 @@ def deploy_server(args, ctx):
     labels.setdefault("app", args.name)
     labels.setdefault("forge.openshift.io/component", "tokenized-mcp-server")
 
-    label_str = ",".join(f'{k}: "{v}"' for k, v in labels.items())
+    label_str = "\n    ".join(f'{k}: "{v}"' for k, v in labels.items())
     selector_labels = f"app: {args.name}"
 
     manifest = f"""apiVersion: apps/v1
