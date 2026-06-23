@@ -21,6 +21,22 @@ tests:
     workload_key: profile1
 
 caliper:
+  postprocess:
+    enabled: true
+    plugin_module: projects.rhaiis.postprocess.plugin
+    parse:
+      enabled: true
+      no_cache: false
+    visualize:
+      enabled: false
+    kpi:
+      enabled: true
+      generate:
+        enabled: true
+        output: kpis.jsonl
+      export:
+        enabled: false
+
   export:
     from: null
     verbose: true

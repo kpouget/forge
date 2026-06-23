@@ -24,6 +24,13 @@ def get_accelerator() -> str:
     return config.project.get_config("rhaiis.accelerator")
 
 
+def get_gpu_type(accelerator: str) -> str | None:
+    gpu_types = config.project.get_config("rhaiis.gpu_types", None)
+    if gpu_types and accelerator in gpu_types:
+        return gpu_types[accelerator]
+    return None
+
+
 def get_deploy_config() -> dict:
     return dict(config.project.get_config("rhaiis.deploy"))
 

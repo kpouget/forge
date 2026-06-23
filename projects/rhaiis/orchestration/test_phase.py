@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from projects.core.library import env
+from projects.core.library.postprocess import run_and_postprocess, write_test_labels
 from projects.rhaiis.orchestration import runtime_config
 
 logger = logging.getLogger(__name__)
@@ -13,7 +15,39 @@ def run(
     workload_key: str,
     namespace: str,
     deployment_name: str | None = None,
-) -> None:
+) -> int:
+    return run_and_postprocess(
+        do_test,
+        model_key=model_key,
+        workload_key=workload_key,
+        namespace=namespace,
+        deployment_name=deployment_name,
+    )
+
+
+def do_test(
+    *,
+    model_key: str,
+    workload_key: str,
+    namespace: str,
+    deployment_name: str | None = None,
+) -> int:
+    with env.NextArtifactDir("testing"):
+        return _run_test(
+            model_key=model_key,
+            workload_key=workload_key,
+            namespace=namespace,
+            deployment_name=deployment_name,
+        )
+
+
+def _run_test(
+    *,
+    model_key: str,
+    workload_key: str,
+    namespace: str,
+    deployment_name: str | None = None,
+) -> int:
     model_cfg = runtime_config.get_model(model_key)
     workload = runtime_config.get_workload(workload_key)
     accelerator = runtime_config.get_accelerator()
@@ -30,6 +64,8 @@ def run(
 
     rates = workload.get("rates", [1])
     max_seconds = workload.get("max_seconds", 180)
+
+    _create_test_labels(model_key, workload_key, accelerator, vllm_args)
 
     logger.info(
         "Testing model=%s workload=%s accelerator=%s", model_cfg["name"], workload_key, accelerator
@@ -101,6 +137,123 @@ def run(
         )
     finally:
         _capture_and_cleanup(deployment_name, namespace)
+
+    try:
+        _generate_psap_payload(model_cfg, accelerator, vllm_image, vllm_args, workload_key)
+    except Exception:
+        logger.warning("PSAP payload generation failed; continuing", exc_info=True)
+
+    try:
+        _set_mlflow_metadata(
+            model_key,
+            workload_key,
+            model_cfg,
+            accelerator,
+            vllm_image,
+            vllm_args,
+            benchmark_cfg,
+            rates,
+            max_seconds,
+            namespace,
+            deployment_name,
+        )
+    except Exception:
+        logger.warning("Setting MLflow metadata failed; continuing", exc_info=True)
+
+    return 0
+
+
+def _create_test_labels(
+    model_key: str, workload_key: str, accelerator: str, vllm_args: dict
+) -> None:
+    labels = {
+        "model_key": model_key,
+        "workload_key": workload_key,
+        "accelerator": accelerator,
+        "tensor_parallel_size": str(vllm_args.get("tensor-parallel-size", 1)),
+    }
+    write_test_labels(env.ARTIFACT_DIR, labels)
+    logger.info("Created test labels: %s", labels)
+
+
+def _set_mlflow_metadata(
+    model_key: str,
+    workload_key: str,
+    model_cfg: dict,
+    accelerator: str,
+    vllm_image: str,
+    vllm_args: dict,
+    benchmark_cfg: dict,
+    rates: list[int],
+    max_seconds: int,
+    namespace: str,
+    deployment_name: str,
+) -> None:
+    from projects.core.library import config
+
+    image_name, image_tag = runtime_config.split_image_tag(vllm_image)
+    guidellm_image = benchmark_cfg.get("image", "ghcr.io/vllm-project/guidellm:v0.6.0")
+    benchmark_args = benchmark_cfg.get("args", {})
+
+    tags = {
+        "project": "rhaiis",
+        "model_key": model_key,
+        "hf_model_id": model_cfg["hf_model_id"],
+        "accelerator": accelerator,
+        "tensor_parallel_size": str(vllm_args.get("tensor-parallel-size", 1)),
+        "vllm_image": vllm_image,
+        "vllm_version": image_tag,
+        "workload_key": workload_key,
+        "rates": ",".join(str(r) for r in rates),
+        "max_seconds": str(max_seconds),
+        "guidellm_image": guidellm_image,
+        "namespace": namespace,
+        "deployment_name": deployment_name,
+    }
+    for key, value in benchmark_args.items():
+        tags[f"guidellm_{key}"] = str(value)
+
+    config.project.set_config("caliper.export.backend.mlflow.config.tags", tags)
+    logger.info("Set MLflow tags: %s", list(tags.keys()))
+
+
+def _generate_psap_payload(
+    model_cfg: dict,
+    accelerator: str,
+    vllm_image: str,
+    vllm_args: dict,
+    workload_key: str,
+) -> None:
+    from pathlib import Path
+
+    from projects.rhaiis.postprocess.parser import generate_psap_payload, write_psap_payload
+
+    matches = list(
+        Path(env.ARTIFACT_DIR).glob("*__run_guidellm_benchmark/artifacts/results/benchmarks.json")
+    )
+    if not matches:
+        logger.warning(
+            "benchmarks.json not found under %s, skipping PSAP payload", env.ARTIFACT_DIR
+        )
+        return
+    benchmarks_json = matches[0]
+
+    payload = generate_psap_payload(
+        benchmarks_json_path=benchmarks_json,
+        model_id=model_cfg["hf_model_id"],
+        vllm_image=vllm_image,
+        vllm_args=vllm_args,
+        accelerator=accelerator,
+        workload_key=workload_key,
+    )
+    output_dir = Path(env.ARTIFACT_DIR) / "artifacts" / "results"
+    write_psap_payload(
+        payload=payload,
+        output_dir=output_dir,
+        accelerator=accelerator,
+        model_id=model_cfg["hf_model_id"],
+        workload_key=workload_key,
+    )
 
 
 def _capture_and_cleanup(deployment_name: str, namespace: str) -> None:
