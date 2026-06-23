@@ -29,6 +29,7 @@ def init():
     env.init()
     run.init()
     config.init(Path(__file__).parent)
+    config.project.save_config_overrides()
 
     preset_name = config.project.get_config("runtime.default_preset", None)
     if not preset_name:

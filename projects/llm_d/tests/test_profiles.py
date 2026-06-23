@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from projects.core.library import config as core_config
 from projects.core.library import env
@@ -167,17 +168,18 @@ def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> Non
 
 
 def test_ci_init_applies_default_preset_before_runtime_resolution() -> None:
-    _init_project_config()
-
-    core_config.project.config["overrides"] = {
-        "runtime.benchmark_key": "multi-turn",
-        "runtime.default_preset": "gpt-oss-120b-inference-scheduling-release",
-    }
-    core_config.project.set_config(
-        "runtime.default_preset",
-        "gpt-oss-120b-inference-scheduling-release",
+    variable_overrides_path = env.ARTIFACT_DIR / "000__ci_metadata" / "variable_overrides.yaml"
+    variable_overrides_path.parent.mkdir(parents=True, exist_ok=True)
+    variable_overrides_path.write_text(
+        yaml.safe_dump(
+            {
+                "runtime.benchmark_key": "multi-turn",
+                "runtime.default_preset": "gpt-oss-120b-inference-scheduling-release",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
     )
-    core_config.project.set_config("runtime.benchmark_key", "multi-turn")
 
     llmd_ci.init()
 
