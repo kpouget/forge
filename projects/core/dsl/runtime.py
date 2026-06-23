@@ -346,6 +346,15 @@ def _execute_single_task(task_info, args, shared_context):
 
         task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
 
+        # Call failure handler if one is configured
+        failure_handler = task_info.get("on_failure_handler")
+        if failure_handler:
+            try:
+                readonly_args, context = create_task_parameters(args, shared_context)
+                failure_handler(readonly_args, context, e)
+            except Exception as handler_error:
+                logger.warning(f"Failure handler for task {task_name} failed: {handler_error}")
+
         # Wrap in custom exception with context
         task_error = TaskExecutionError(
             task_name=task_name,

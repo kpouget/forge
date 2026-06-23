@@ -415,6 +415,42 @@ def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
     return decorator
 
 
+@task_only
+def on_failure(failure_handler_func):
+    """
+    On failure decorator for @task functions.
+
+    Must be applied to a function that is already decorated with @task.
+    The failure handler function will be called when the task fails.
+
+    Args:
+        failure_handler_func: Function to call on failure. Should accept (args, ctx, exception) parameters.
+
+    Usage:
+        def handle_deploy_failure(args, ctx, exception):
+            # Generate failure report
+            pass
+
+        @on_failure(handle_deploy_failure)
+        @task
+        def deploy_service(args, ctx):
+            # Task implementation
+            pass
+    """
+
+    def decorator(func):
+        # Store failure handler config on function
+        func._on_failure_handler = failure_handler_func
+
+        # If this is already a registered task, update its failure handler
+        if hasattr(func, "_task_info"):
+            func._task_info["on_failure_handler"] = failure_handler_func
+
+        return func
+
+    return decorator
+
+
 def entrypoint(func):
     """
     Mark a function as a DSL entrypoint, automatically adding artifact directory parameters
