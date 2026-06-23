@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Shared toolbox: parse Locust CSV stats into structured metrics.
+Parse Locust CSV stats into structured metrics.
 
 This is a generic Locust results parser that works with any Locust CSV output.
 Project-specific summary generation (KPIs, labels) should be done by the

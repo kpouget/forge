@@ -47,8 +47,18 @@ def clone_platform_repo(
     result_path = repo_dir / subdir
 
     if result_path.is_dir():
-        logger.info("Platform manifests already cloned at %s, reusing", result_path)
-        return result_path
+        cached_ref = _get_cached_ref(repo_dir)
+        requested_ref = _resolve_git_ref(repo_url, version)
+        if cached_ref and cached_ref != requested_ref:
+            logger.info(
+                "Cached clone ref (%s) differs from requested (%s), re-cloning",
+                cached_ref,
+                requested_ref,
+            )
+            shutil.rmtree(str(_PLATFORM_CLONE_DIR), ignore_errors=True)
+        else:
+            logger.info("Platform manifests already cloned at %s, reusing", result_path)
+            return result_path
 
     _PLATFORM_CLONE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -101,6 +111,22 @@ def cleanup_platform_clone() -> None:
     if _PLATFORM_CLONE_DIR.exists():
         shutil.rmtree(str(_PLATFORM_CLONE_DIR), ignore_errors=True)
         logger.info("Cleaned up platform clone at %s", _PLATFORM_CLONE_DIR)
+
+
+def _get_cached_ref(repo_dir: Path) -> str | None:
+    """Return the current HEAD ref of a cached clone, or None if unreadable."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        return result.stdout.strip() or None
+    except (subprocess.SubprocessError, OSError):
+        return None
 
 
 def _resolve_git_ref(repo_url: str, version: str) -> str:

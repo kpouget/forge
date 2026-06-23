@@ -39,3 +39,13 @@ demo:
   experiment.duration_seconds: 240
   experiment.warmup_seconds: 60
   experiment.tools_per_server: 10
+
+matrix-demo-1:
+  runtime.selected_preset: matrix-demo-1
+  runtime.mock_server: perf-mock-server
+  experiment.servers: [1,2]
+  experiment.concurrency: [16,32]
+  experiment.target: [gateway]
+  experiment.duration_seconds: 30
+  experiment.warmup_seconds: 5
+  experiment.tools_per_server: 10

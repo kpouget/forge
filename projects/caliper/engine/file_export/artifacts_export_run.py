@@ -172,10 +172,12 @@ def run_artifacts_export(
         mlflow_experiment = merged_ml.get("experiment")
         mlflow_run_id = merged_ml.get("run_id")
         mlflow_run_name = merged_ml.get("run_name")
+        mlflow_workspace = merged_ml.get("workspace")
         meta = project_metadata_fields(merged_ml)
         mlflow_run_metadata = meta if meta else None
     else:
         mlflow_run_metadata = None
+        mlflow_workspace = None
 
     # Ensure CLI insecure TLS flag is applied to connection
     if mlflow_insecure_tls:
@@ -232,6 +234,7 @@ def run_artifacts_export(
             verbose=verbose,
             upload_workers=upload_workers,
             mlflow_run_metadata=mlflow_run_metadata,
+            mlflow_workspace=mlflow_workspace,
         )
     except Exception as e:  # noqa: BLE001
         traceback.print_exception(e, file=sys.stderr)

@@ -43,6 +43,7 @@ def run_file_export(
     verbose: bool = False,
     upload_workers: int = 10,
     mlflow_run_metadata: dict[str, Any] | None = None,
+    mlflow_workspace: str | None = None,
 ) -> list[FileExportBackendResult]:
     if source.is_file():
         paths = [source]
@@ -97,6 +98,7 @@ def run_file_export(
                 verbose=verbose,
                 upload_workers=upload_workers,
                 run_metadata=mlflow_run_metadata,
+                workspace=mlflow_workspace,
             )
             results.append(
                 FileExportBackendResult(

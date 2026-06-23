@@ -16,6 +16,7 @@ MLFLOW_CONFIG_RUN_KEYS = frozenset(
         "experiment",
         "run_name",
         "run_id",
+        "workspace",
     }
 )
 
@@ -66,6 +67,7 @@ def validate_mlflow_config(data: dict[str, Any]) -> None:
         "experiment",
         "run_name",
         "run_id",
+        "workspace",
         "description",
         "source_script",
         "source_name",

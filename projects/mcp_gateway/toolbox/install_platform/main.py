@@ -458,10 +458,21 @@ def _ensure_helm() -> None:
     arch = arch_map.get(arch, arch)
 
     url = f"https://get.helm.sh/helm-v3.17.3-{system}-{arch}.tar.gz"
+    checksum_url = f"{url}.sha256sum"
     logger.info("Helm not found in PATH, downloading from %s", url)
 
     tar_path = Path("/tmp/helm.tar.gz")
     urllib.request.urlretrieve(url, tar_path)
+
+    import hashlib
+
+    expected_checksum = urllib.request.urlopen(checksum_url).read().decode().split()[0].strip()
+    actual_checksum = hashlib.sha256(tar_path.read_bytes()).hexdigest()
+    if actual_checksum != expected_checksum:
+        tar_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Helm checksum mismatch: expected {expected_checksum}, got {actual_checksum}"
+        )
 
     with tarfile.open(tar_path) as tf:
         for member in tf.getmembers():
@@ -513,7 +524,12 @@ def _version_gte(version: str, minimum: str) -> bool:
     try:
         return _parse_version(version) >= _parse_version(minimum)
     except (ValueError, IndexError):
-        return True
+        logger.warning(
+            "Could not parse version %r for comparison against %s, assuming older",
+            version,
+            minimum,
+        )
+        return False
 
 
 def _version_spec(version: str) -> dict[str, Any]:

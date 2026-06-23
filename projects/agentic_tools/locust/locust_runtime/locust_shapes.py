@@ -19,13 +19,21 @@ import random
 from locust import LoadTestShape
 
 
+def _parse_env(default_duration="60"):
+    """Parse and clamp common load-shape env vars to safe positive integers."""
+    users = max(1, int(os.environ.get("USERS", "10")))
+    spawn_rate = max(1, int(os.environ.get("SPAWN_RATE", "1")))
+    duration = max(
+        1, int(os.environ.get("RUN_TIME_SECONDS", os.environ.get("DURATION", default_duration)))
+    )
+    return users, spawn_rate, duration
+
+
 class SteadyShape(LoadTestShape):
     """Constant user count for the entire duration."""
 
     def tick(self):
-        users = int(os.environ.get("USERS", "10"))
-        spawn_rate = int(os.environ.get("SPAWN_RATE", "1"))
-        duration = int(os.environ.get("RUN_TIME_SECONDS", os.environ.get("DURATION", "60")))
+        users, spawn_rate, duration = _parse_env("60")
 
         if self.get_run_time() > duration:
             return None
@@ -36,9 +44,7 @@ class SpikeShape(LoadTestShape):
     """Sudden burst at 30-50% of duration, then return to baseline."""
 
     def tick(self):
-        users = int(os.environ.get("USERS", "10"))
-        spawn_rate = int(os.environ.get("SPAWN_RATE", "1"))
-        duration = int(os.environ.get("RUN_TIME_SECONDS", os.environ.get("DURATION", "120")))
+        users, spawn_rate, duration = _parse_env("120")
         run_time = self.get_run_time()
 
         if run_time > duration:
@@ -56,9 +62,7 @@ class RealisticShape(LoadTestShape):
     """Gradual ramp up (20%), plateau (60%), gradual ramp down (20%)."""
 
     def tick(self):
-        users = int(os.environ.get("USERS", "10"))
-        spawn_rate = int(os.environ.get("SPAWN_RATE", "1"))
-        duration = int(os.environ.get("RUN_TIME_SECONDS", os.environ.get("DURATION", "180")))
+        users, spawn_rate, duration = _parse_env("180")
         run_time = self.get_run_time()
 
         if run_time > duration:
@@ -82,14 +86,12 @@ class PoissonShape(LoadTestShape):
     """Random user count around the target (uniform ±50%)."""
 
     def tick(self):
-        users = int(os.environ.get("USERS", "10"))
-        spawn_rate = int(os.environ.get("SPAWN_RATE", "1"))
-        duration = int(os.environ.get("RUN_TIME_SECONDS", os.environ.get("DURATION", "120")))
+        users, spawn_rate, duration = _parse_env("120")
 
         if self.get_run_time() > duration:
             return None
 
-        current_users = max(1, random.randint(max(1, users // 2), users * 2))
+        current_users = random.randint(max(1, users // 2), max(1, users * 2))
         return (current_users, spawn_rate)
 
 
@@ -99,7 +101,11 @@ class CustomShape(LoadTestShape):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         stages_json = os.environ.get("CUSTOM_STAGES", "[]")
-        self.stages = json.loads(stages_json) if stages_json else []
+        try:
+            self.stages = json.loads(stages_json) if stages_json else []
+        except (json.JSONDecodeError, TypeError):
+            print("WARNING: Malformed CUSTOM_STAGES JSON, falling back to empty stages")
+            self.stages = []
 
     def tick(self):
         run_time = self.get_run_time()

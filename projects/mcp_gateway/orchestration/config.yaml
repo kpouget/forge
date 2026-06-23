@@ -30,9 +30,9 @@ caliper:
             mlflow_secret: mlflow-secret.yaml
             aws_secret: null
         config:
+          run_name:
           experiment: mcp-gateway-cpt
           workspace: ashtarkb
-          run_name:
           description: >
             MCP Gateway performance test results
           source_script: mcp_gateway project

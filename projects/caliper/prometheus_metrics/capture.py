@@ -111,8 +111,9 @@ def capture_metrics(
     end_time: datetime,
     step_seconds: int = 15,
     query_keys: list[str] | None = None,
-    artifact_dir: Path,
-    job_name: str,
+    artifact_dir: Path | None = None,
+    job_name: str | None = None,
+    output_dir: Path | None = None,
 ) -> Path:
     """
     Query Prometheus for metrics and save raw results as JSON.
@@ -124,19 +125,30 @@ def capture_metrics(
         step_seconds: Query resolution step.
         query_keys: Subset of query keys from queries.yaml to execute.
             None or empty list means execute all available queries.
-        artifact_dir: Root artifact directory for this run.
-        job_name: Test job name (used for subdirectory).
+        artifact_dir: Root artifact directory for this run (used with job_name).
+        job_name: Test job name (used for subdirectory under artifact_dir).
+        output_dir: Explicit output directory. If set, overrides artifact_dir/job_name.
 
     Returns:
         Path to the metrics output directory.
     """
-    metrics_dir = artifact_dir / "artifacts" / "results" / job_name / "metrics" / "raw"
+    if output_dir is not None:
+        metrics_dir = output_dir
+    elif artifact_dir is not None and job_name is not None:
+        metrics_dir = artifact_dir / "artifacts" / "results" / job_name / "metrics" / "raw"
+    else:
+        raise ValueError("Either output_dir or both artifact_dir and job_name must be provided")
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     query_specs = load_queries(namespaces=namespaces, keys=query_keys or None)
 
     if not query_specs:
-        logger.warning("No query specs resolved for keys: %s", query_keys)
+        if query_keys:
+            raise ValueError(
+                f"Explicit query keys resolved to zero queries: {query_keys}. "
+                "Check that these keys exist in queries.yaml."
+            )
+        logger.warning("No query specs available")
         return metrics_dir
 
     logger.info(

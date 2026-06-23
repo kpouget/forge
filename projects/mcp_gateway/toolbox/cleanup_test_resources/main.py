@@ -106,7 +106,7 @@ def cleanup_mock_server(args, ctx):
 @task
 def cleanup_forge_labeled(args, ctx):
     """Remove any remaining resources with the forge project label"""
-    for kind in ("job", "pod", "configmap", "svc"):
+    for kind in ("deployment", "job", "pod", "configmap", "svc"):
         best_effort_oc(
             "delete",
             kind,

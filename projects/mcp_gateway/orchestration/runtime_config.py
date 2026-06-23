@@ -10,6 +10,15 @@ from projects.core.library import config
 
 logger = logging.getLogger(__name__)
 
+_FALSY_STRINGS = frozenset({"false", "0", "no", "off", ""})
+
+
+def _as_bool(value: Any) -> bool:
+    """Coerce a config value to bool, handling string representations."""
+    if isinstance(value, str):
+        return value.strip().lower() not in _FALSY_STRINGS
+    return bool(value)
+
 
 class MCPGatewayConfig(BaseRuntimeConfig):
     """Runtime configuration for MCP Gateway performance tests."""
@@ -124,10 +133,10 @@ class MCPGatewayConfig(BaseRuntimeConfig):
         return config.project.get_config("infrastructure.api_group", "mcp.kuadrant.io")
 
     def get_install_platform(self) -> bool:
-        return bool(config.project.get_config("infrastructure.install_platform", False))
+        return _as_bool(config.project.get_config("infrastructure.install_platform", False))
 
     def get_cleanup_platform(self) -> bool:
-        return bool(config.project.get_config("infrastructure.cleanup_platform", False))
+        return _as_bool(config.project.get_config("infrastructure.cleanup_platform", False))
 
     def get_platform_config(self) -> dict[str, Any]:
         import os
@@ -180,12 +189,11 @@ class MCPGatewayConfig(BaseRuntimeConfig):
 
     # --- Locust config builder ---
 
-    def build_locust_config(self, *, users: int, target: str, num_servers: int):
-        """Assemble a complete LocustRunConfig from the current preset configuration."""
+    def build_locust_kwargs(self, *, users: int, target: str, num_servers: int) -> dict[str, Any]:
+        """Assemble plain keyword arguments for run_distributed.run()."""
         import math
 
         from projects.agentic_tools.locust import locust_runtime, locust_users
-        from projects.agentic_tools.locust.toolbox.run_distributed.main import LocustRunConfig
 
         namespace = self.get_namespace()
         preset = self.get_preset_name()
@@ -219,7 +227,7 @@ class MCPGatewayConfig(BaseRuntimeConfig):
         runtime_dir = Path(locust_runtime.__file__).parent
         users_dir = Path(locust_users.__file__).parent
 
-        return LocustRunConfig(
+        return dict(
             job_name=job_name,
             namespace=namespace,
             host_url=host_url,
@@ -228,9 +236,9 @@ class MCPGatewayConfig(BaseRuntimeConfig):
             duration_seconds=duration_seconds + warmup_seconds,
             spawn_rate=self.get_spawn_rate(),
             configmap_name=f"locust-scripts-mcp-{preset}"[:63],
-            locustfiles_dir=runtime_dir,
+            locustfiles_dir=str(runtime_dir),
             locustfile_names=["locustfile_main.py", "metrics_hook.py"],
-            extra_files=[users_dir / "mcp_session_user.py", self.get_mcp_client_path()],
+            extra_files=[str(users_dir / "mcp_session_user.py"), str(self.get_mcp_client_path())],
             env_vars=env_vars,
             labels={"forge.openshift.io/project": "mcp_gateway"},
             node_selector=scheduling.get("node_selector"),

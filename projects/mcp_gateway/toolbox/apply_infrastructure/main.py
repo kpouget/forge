@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import logging
 import tempfile
-import time
 from pathlib import Path
 
 import yaml
 
 from projects.agentic_tools.mcp.toolbox.deploy_mock_servers.main import SCALE_OUT_LABEL
+from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import oc
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_API_GROUP = "mcp.kuadrant.io"
 
 
-def apply_infrastructure(
+@entrypoint
+def run(
     *,
     namespace: str,
     count: int,
@@ -33,16 +34,24 @@ def apply_infrastructure(
     gateway_namespace: str = "gateway-system",
     gateway_name: str = "mcp-gateway",
     api_group: str = DEFAULT_API_GROUP,
-) -> None:
-    """
-    Generate and apply HTTPRoute + DestinationRule + MCPServerRegistration
-    for `count` mock servers.
-    """
-    logger.info("Applying infrastructure for %d server(s) (api_group=%s)...", count, api_group)
+) -> int:
+    """Apply MCP Gateway infrastructure and wait for registrations."""
+    execute_tasks(locals())
+    return 0
+
+
+@task
+def apply_manifests(args, ctx):
+    """Generate and apply HTTPRoute + DestinationRule + MCPServerRegistration."""
+    logger.info(
+        "Applying infrastructure for %d server(s) (api_group=%s)...",
+        args.count,
+        args.api_group,
+    )
 
     all_manifests = []
-    for i in range(1, count + 1):
-        server_name = f"{name_prefix}-{i}"
+    for i in range(1, args.count + 1):
+        server_name = f"{args.name_prefix}-{i}"
         hostname = f"server{i}.mcp.local"
         tool_prefix = f"server{i}_"
 
@@ -50,10 +59,10 @@ def apply_infrastructure(
             server_name=server_name,
             hostname=hostname,
             tool_prefix=tool_prefix,
-            namespace=namespace,
-            gateway_namespace=gateway_namespace,
-            gateway_name=gateway_name,
-            api_group=api_group,
+            namespace=args.namespace,
+            gateway_namespace=args.gateway_namespace,
+            gateway_name=args.gateway_name,
+            api_group=args.api_group,
         )
         all_manifests.append(manifest)
 
@@ -63,69 +72,24 @@ def apply_infrastructure(
     oc("apply", "-f", tmp_path)
     Path(tmp_path).unlink(missing_ok=True)
 
-    logger.info("Infrastructure applied for %d server(s)", count)
+    return f"Infrastructure applied for {args.count} server(s)"
 
 
-def wait_for_registrations(
-    *,
-    namespace: str,
-    count: int,
-    name_prefix: str = "mock-server",
-    timeout_seconds: int = 300,
-    api_group: str = DEFAULT_API_GROUP,
-) -> None:
+@retry(attempts=60, delay=5, backoff=1.0)
+@task
+def wait_for_registrations(args, ctx):
     """Wait until all N MCPServerRegistrations report Ready."""
-    logger.info("Waiting for %d MCPServerRegistration(s) to become Ready...", count)
+    ready_count = _count_ready_registrations(namespace=args.namespace, api_group=args.api_group)
 
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        ready_count = _count_ready_registrations(namespace=namespace, api_group=api_group)
-        elapsed = int(timeout_seconds - (deadline - time.time()))
-        logger.info(
-            "  registrations ready: %d/%d (%ds elapsed)",
-            ready_count,
-            count,
-            elapsed,
-        )
-        if ready_count >= count:
-            logger.info("All %d registrations are Ready", count)
-            return
-        time.sleep(5)
+    if ready_count >= args.count:
+        return f"All {args.count} registrations are Ready"
 
-    ready_count = _count_ready_registrations(namespace=namespace, api_group=api_group)
-    if ready_count < count:
-        raise RuntimeError(
-            f"Timed out waiting for MCPServerRegistrations: "
-            f"{ready_count}/{count} ready after {timeout_seconds}s"
-        )
+    return (False, f"registrations ready: {ready_count}/{args.count}")
 
 
-def cleanup_infrastructure(*, namespace: str, api_group: str = DEFAULT_API_GROUP) -> None:
-    """Delete all scale-out infrastructure resources by label."""
-    logger.info("Cleaning up infrastructure (label=%s)...", SCALE_OUT_LABEL)
-    oc(
-        "delete",
-        f"mcpserverregistrations.{api_group},httproute",
-        "-n",
-        namespace,
-        "-l",
-        SCALE_OUT_LABEL,
-        "--wait=false",
-        "--ignore-not-found=true",
-        check=False,
-    )
-    oc(
-        "delete",
-        "destinationrule",
-        "-n",
-        "istio-system",
-        "-l",
-        SCALE_OUT_LABEL,
-        "--wait=false",
-        "--ignore-not-found=true",
-        check=False,
-    )
-    logger.info("Infrastructure cleanup complete")
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 
 def _count_ready_registrations(*, namespace: str, api_group: str = DEFAULT_API_GROUP) -> int:
@@ -157,7 +121,10 @@ def _generate_infrastructure_manifest(
     api_group: str = DEFAULT_API_GROUP,
 ) -> str:
     """Generate YAML manifest for HTTPRoute + DestinationRule + MCPServerRegistration."""
-    labels = {"experiment": "scale-out"}
+    labels = {
+        "experiment": "scale-out",
+        "forge.openshift.io/project": "mcp_gateway",
+    }
 
     httproute = {
         "apiVersion": "gateway.networking.k8s.io/v1",

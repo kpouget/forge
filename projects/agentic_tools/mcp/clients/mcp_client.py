@@ -43,7 +43,7 @@ class MCPClient:
     session_id: str | None = None
     host_header: str | None = None
     request_id: int = field(default=0, init=False)
-    timeout: float = None
+    timeout: float = 30.0
 
     def _next_id(self) -> int:
         self.request_id += 1
@@ -94,6 +94,14 @@ class MCPClient:
                     )
             else:
                 data = response.json()
+
+            if not isinstance(data, dict):
+                return MCPResponse(
+                    success=False,
+                    response_time_ms=elapsed_ms,
+                    status_code=response.status_code,
+                    error=f"Expected JSON object, got {type(data).__name__}",
+                )
 
             if "error" in data:
                 msg = data["error"]

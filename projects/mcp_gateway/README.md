@@ -11,10 +11,11 @@ projects/
 │   │   ├── locust_users/             # User classes (one per file)
 │   │   ├── locust_runtime/           # Pod-mounted scripts (entrypoint, shapes, hooks)
 │   │   ├── templates/                # K8s job template (locust_job.yaml)
+│   │   ├── helpers/
+│   │   │   ├── parse_results.py      # Parse Locust CSV into RunMetrics
+│   │   │   └── summary.py           # Save metrics.json + parameters.json
 │   │   └── toolbox/
-│   │       ├── run_distributed/      # Deploy Locust jobs, wait, collect CSV
-│   │       ├── parse_results/        # Parse Locust CSV into RunMetrics
-│   │       └── export_to_mlflow/     # Generate summary + export metrics
+│   │       └── run_distributed/      # Deploy Locust jobs, wait, collect CSV
 │   ├── mcp/
 │   │   ├── toolbox/
 │   │   │   ├── deploy_mock_servers/  # Deploy 1..N mock MCP servers
@@ -45,8 +46,8 @@ projects/
 | Import | Path | Used for |
 |--------|------|----------|
 | Distributed Locust runner | `agentic_tools/locust/toolbox/run_distributed` | Deploying Locust master+worker K8s Jobs, waiting for completion, collecting CSV results |
-| Results parser | `agentic_tools/locust/toolbox/parse_results` | Parsing Locust CSV output into structured `RunMetrics` |
-| MLflow exporter | `agentic_tools/locust/toolbox/export_to_mlflow` | Generating summary dicts and exporting metrics to MLflow |
+| Results parser | `agentic_tools/locust/helpers/parse_results` | Parsing Locust CSV output into structured `RunMetrics` |
+| Summary helpers | `agentic_tools/locust/helpers/summary` | Saving metrics.json + parameters.json for caliper multi-run export |
 | Locust K8s template | `agentic_tools/locust/templates/locust_job.yaml` | Base Job/Service YAML for distributed Locust deployments |
 | Locust runtime | `agentic_tools/locust/locust_runtime/` | Shared entry point, warmup hook, load shapes |
 | MCP session user | `agentic_tools/locust/locust_users/mcp_session_user.py` | Locust user class for MCP protocol load |

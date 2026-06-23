@@ -19,7 +19,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-VALID_PRESETS = {"smoke", "baseline", "scale-out", "demo"}
+VALID_PRESETS = {"smoke", "baseline", "scale-out", "demo", "matrix-demo-1"}
 
 
 def get_supported_mcp_gateway_directives() -> dict[str, str]:
@@ -93,7 +93,7 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
                 config_overrides.update(
                     {
                         "runtime.default_preset": preset,
-                        "ci_job.args": [],
+                        "project.args": [preset],
                     }
                 )
                 parsed_directives.append(line)
