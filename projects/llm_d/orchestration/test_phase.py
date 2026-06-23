@@ -254,6 +254,8 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
 
     for benchmark_key, benchmark in benchmark_configs:
         guidellm_args = build_guidellm_args(benchmark)
+        if not any(arg.startswith("--processor=") for arg in guidellm_args):
+            guidellm_args.append(f"--processor={runtime_config.get_model_name()}")
         artifact_name = f"benchmark_{slugify_identifier(benchmark_key, max_length=48)}"
         with env.NextArtifactDir(artifact_name):
             run_guidellm_benchmark_command.run(

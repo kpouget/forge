@@ -8,7 +8,7 @@ from projects.core.library import config as core_config
 from projects.core.library import env
 from projects.kserve.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
 from projects.llm_d.orchestration import ci as llmd_ci
-from projects.llm_d.orchestration import runtime_config
+from projects.llm_d.orchestration import runtime_config, test_phase
 
 PROJECT_ORCHESTRATION_DIR = Path(__file__).resolve().parents[1] / "orchestration"
 
@@ -124,6 +124,28 @@ def test_benchmark_resolution_applies_workload_defaults_and_per_benchmark_overri
     assert multi_turn["image"] == "ghcr.io/vllm-project/guidellm:v0.5.4"
     assert multi_turn["pvc_size"] == "1Gi"
     assert multi_turn["timeout_seconds"] == 3600
+
+
+def test_guidellm_benchmark_uses_original_model_name_as_processor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _init_project_config()
+    core_config.project.set_config("runtime.model_name", "openai/gpt-oss-120b")
+    core_config.project.set_config("runtime.deployment_profile", "distributed-default")
+    core_config.project.set_config("runtime.benchmark_key", "concurrent-1k-1k")
+
+    captured: dict[str, object] = {}
+
+    def _fake_run(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(test_phase.run_guidellm_benchmark_command, "run", _fake_run)
+    test_phase.run_guidellm_benchmark(endpoint_url="https://example.test/llm-d")
+
+    guidellm_args = captured["guidellm_args"]
+    assert isinstance(guidellm_args, list)
+    assert "--processor=openai/gpt-oss-120b" in guidellm_args
 
 
 def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> None:
