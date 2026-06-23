@@ -52,6 +52,7 @@ gpt-oss-120b-inference-scheduling-release:
     - concurrent-1k-1k
     - heavy-heterogeneous
     - multi-turn
+  model_cache.pvc.size: 300Gi
   workloads.args:
     request_type: text_completions
 

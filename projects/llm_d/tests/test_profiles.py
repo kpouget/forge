@@ -155,6 +155,7 @@ def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> Non
     core_config.project.apply_preset("gpt-oss-120b-inference-scheduling-release")
 
     assert runtime_config.get_deployment_profile_name() == "distributed-default"
+    assert runtime_config.get_model_cache_config()["pvc"]["size"] == "300Gi"
     assert runtime_config.get_benchmark_keys() == [
         "concurrent-1k-1k",
         "heavy-heterogeneous",
