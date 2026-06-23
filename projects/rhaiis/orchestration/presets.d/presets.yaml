@@ -52,6 +52,10 @@ deepseek-v3:
 gpt-oss:
   tests.rhaiis.model_key: gpt-oss-120b-fp8
 
+# CI quick validation
+ci-quick:
+  tests.rhaiis.workload_key: ci-quick
+
 # Workload profiles
 profile1:
   tests.rhaiis.workload_key: profile1

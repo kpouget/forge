@@ -1,3 +1,8 @@
+ci-quick:
+  data: "prompt_tokens=256,output_tokens=128"
+  rates: [1, 5]
+  max_seconds: 60
+
 profile1:
   data: "prompt_tokens=1000,output_tokens=1000"
   rates: [1, 50, 100, 200, 300]
