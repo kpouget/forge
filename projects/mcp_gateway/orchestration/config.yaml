@@ -17,6 +17,28 @@ metrics:
   query_keys: []  # empty = all queries from queries.yaml
 
 caliper:
+  postprocess:
+    enabled: true
+    artifacts_dir: null
+    plugin_module: projects.mcp_gateway.postprocess.mcp_gateway.plugin
+    postprocess_config: null
+    parse:
+      enabled: true
+      no_cache: false
+    visualize:
+      enabled: false
+    kpi:
+      enabled: true
+      generate:
+        enabled: true
+        output: kpis.jsonl
+      export:
+        enabled: false
+    analyze:
+      enabled: false
+      baseline: null
+      output: kpi_analyze.json
+
   export:
     from: null
     verbose: true

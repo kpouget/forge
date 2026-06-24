@@ -2,11 +2,11 @@
 Tests for the multi-run caliper export pipeline.
 
 Covers:
-- Run directory auto-detection via runs/ convention
+- Run directory auto-detection via __test_labels__.yaml markers
 - Shared vs run-specific file partitioning
 - metrics.json / parameters.json reading and MLflow logging
 - Parent + nested child run creation
-- Single-run fallback when no runs/ directory exists
+- Single-run directory triggers flat export
 - Workspace propagation
 """
 
@@ -18,12 +18,24 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from projects.caliper.orchestration.export import (
     METRICS_FILE,
     PARAMETERS_FILE,
+    TEST_LABELS_MARKER,
     _discover_run_dirs,
 )
+
+
+def _write_test_labels(directory: Path, labels: dict) -> None:
+    """Helper to write a __test_labels__.yaml marker file."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / TEST_LABELS_MARKER).write_text(
+        yaml.safe_dump({"version": "1", "labels": labels}, sort_keys=False),
+        encoding="utf-8",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -57,6 +69,9 @@ def artifact_tree(tmp_path: Path) -> Path:
     # Run A
     run_a = runs / "mcp-smoke-s1-u16-gateway"
     run_a.mkdir()
+    _write_test_labels(
+        run_a, {"preset": "smoke", "target": "gateway", "users": "16", "num_servers": "1"}
+    )
     (run_a / METRICS_FILE).write_text(
         json.dumps(
             {
@@ -87,6 +102,9 @@ def artifact_tree(tmp_path: Path) -> Path:
     # Run B
     run_b = runs / "mcp-smoke-s1-u64-gateway"
     run_b.mkdir()
+    _write_test_labels(
+        run_b, {"preset": "smoke", "target": "gateway", "users": "64", "num_servers": "1"}
+    )
     (run_b / METRICS_FILE).write_text(
         json.dumps(
             {
@@ -121,7 +139,7 @@ def artifact_tree(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def single_run_tree(tmp_path: Path) -> Path:
-    """Artifact tree without runs/ — should trigger single-run fallback."""
+    """Artifact tree without any __test_labels__.yaml markers."""
     base = tmp_path / "artifacts"
 
     prepare = base / "001__prepare"
@@ -141,7 +159,7 @@ def single_run_tree(tmp_path: Path) -> Path:
 
 
 class TestDiscoverRunDirs:
-    def test_detects_runs_subdirectories(self, artifact_tree: Path):
+    def test_detects_via_test_labels_markers(self, artifact_tree: Path):
         run_dirs = _discover_run_dirs(artifact_tree)
 
         assert len(run_dirs) == 2
@@ -149,21 +167,8 @@ class TestDiscoverRunDirs:
         assert "mcp-smoke-s1-u16-gateway" in names
         assert "mcp-smoke-s1-u64-gateway" in names
 
-    def test_returns_empty_when_no_runs_dir(self, single_run_tree: Path):
+    def test_returns_empty_when_no_markers(self, single_run_tree: Path):
         run_dirs = _discover_run_dirs(single_run_tree)
-        assert run_dirs == []
-
-    def test_returns_empty_for_empty_runs_dir(self, tmp_path: Path):
-        base = tmp_path / "artifacts" / "002__test" / "runs"
-        base.mkdir(parents=True)
-        run_dirs = _discover_run_dirs(tmp_path / "artifacts")
-        assert run_dirs == []
-
-    def test_ignores_files_named_runs(self, tmp_path: Path):
-        base = tmp_path / "artifacts"
-        base.mkdir(parents=True)
-        (base / "runs").write_text("I am a file, not a directory")
-        run_dirs = _discover_run_dirs(base)
         assert run_dirs == []
 
     def test_returns_sorted(self, artifact_tree: Path):
@@ -171,32 +176,34 @@ class TestDiscoverRunDirs:
         names = [d.name for d in run_dirs]
         assert names == sorted(names)
 
+    def test_ignores_dirs_without_markers(self, tmp_path: Path):
+        """Directories without __test_labels__.yaml are not discovered."""
+        base = tmp_path / "artifacts" / "002__test"
+        runs = base / "runs"
+        (runs / "run-a").mkdir(parents=True)
+        (runs / "run-a" / "stats.csv").write_text("data")
+
+        run_dirs = _discover_run_dirs(tmp_path / "artifacts")
+        assert run_dirs == []
+
 
 # ---------------------------------------------------------------------------
 # Test: shared vs run-specific file partitioning
 # ---------------------------------------------------------------------------
 
 
-class TestFilePartitioning:
-    def test_shared_files_exclude_run_dirs(self, artifact_tree: Path):
-        run_dirs = _discover_run_dirs(artifact_tree)
+class TestArtifactCollection:
+    def test_all_artifacts_collected(self, artifact_tree: Path):
+        all_files = [p for p in artifact_tree.rglob("*") if p.is_file()]
+        all_names = {p.name for p in all_files}
 
-        shared_paths = [
-            p
-            for p in artifact_tree.rglob("*")
-            if p.is_file() and not any(p.resolve().is_relative_to(rd.resolve()) for rd in run_dirs)
-        ]
+        assert "run.log" in all_names
+        assert "config.yaml" in all_names
+        assert "stats.csv" in all_names
+        assert METRICS_FILE in all_names
+        assert PARAMETERS_FILE in all_names
 
-        shared_names = {p.name for p in shared_paths}
-        assert "run.log" in shared_names
-        assert "config.yaml" in shared_names
-
-        # Run-specific files must NOT be in shared
-        assert "stats.csv" not in shared_names
-        assert METRICS_FILE not in shared_names
-        assert PARAMETERS_FILE not in shared_names
-
-    def test_run_specific_files_are_correct(self, artifact_tree: Path):
+    def test_run_dir_files_are_correct(self, artifact_tree: Path):
         run_dirs = _discover_run_dirs(artifact_tree)
         run_a = [d for d in run_dirs if "u16" in d.name][0]
         run_a_files = {p.name for p in run_a.rglob("*") if p.is_file()}
@@ -284,15 +291,11 @@ class TestMultiRunMlflowLogging:
         )
 
         run_dirs = _discover_run_dirs(artifact_tree)
-        shared_paths = [
-            p
-            for p in artifact_tree.rglob("*")
-            if p.is_file() and not any(p.resolve().is_relative_to(rd.resolve()) for rd in run_dirs)
-        ]
+        all_files = [p for p in artifact_tree.rglob("*") if p.is_file()]
 
         log_multi_run_artifacts(
-            shared_paths=shared_paths,
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=all_files,
+            artifact_root=artifact_tree,
             run_dirs=run_dirs,
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -323,8 +326,8 @@ class TestMultiRunMlflowLogging:
         run_dirs = _discover_run_dirs(artifact_tree)
 
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=run_dirs,
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -346,8 +349,8 @@ class TestMultiRunMlflowLogging:
         run_dirs = _discover_run_dirs(artifact_tree)
 
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=run_dirs,
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -367,8 +370,8 @@ class TestMultiRunMlflowLogging:
         )
 
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=_discover_run_dirs(artifact_tree),
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -386,8 +389,8 @@ class TestMultiRunMlflowLogging:
         run_dirs = _discover_run_dirs(artifact_tree)
 
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=run_dirs,
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -420,15 +423,15 @@ class TestWorkspacePropagation:
         with patch.dict("sys.modules", {"mlflow": mock_ml, "mlflow.tracking": mock_ml.tracking}):
             yield mock_ml
 
-    def test_workspace_restored_after_call(self, artifact_tree: Path, _mock_mlflow):
+    def test_workspace_set_in_env(self, artifact_tree: Path, _mock_mlflow):
         from projects.caliper.engine.file_export.mlflow_backend import (
             log_multi_run_artifacts,
         )
 
         os.environ.pop("MLFLOW_WORKSPACE", None)
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=_discover_run_dirs(artifact_tree),
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -436,7 +439,8 @@ class TestWorkspacePropagation:
             experiment="test",
             workspace="ashtarkb",
         )
-        assert "MLFLOW_WORKSPACE" not in os.environ
+        assert os.environ.get("MLFLOW_WORKSPACE") == "ashtarkb"
+        os.environ.pop("MLFLOW_WORKSPACE", None)
 
     def test_no_workspace_leaves_env_unchanged(self, artifact_tree: Path, _mock_mlflow):
         from projects.caliper.engine.file_export.mlflow_backend import (
@@ -445,8 +449,8 @@ class TestWorkspacePropagation:
 
         os.environ.pop("MLFLOW_WORKSPACE", None)
         log_multi_run_artifacts(
-            shared_paths=[],
-            shared_artifact_root=artifact_tree,
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
             run_dirs=_discover_run_dirs(artifact_tree),
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,
@@ -541,33 +545,21 @@ class TestParseResults:
 
 
 # ---------------------------------------------------------------------------
-# Test: single-run fallback
+# Test: single marker triggers flat export
 # ---------------------------------------------------------------------------
 
 
-class TestSingleRunFallback:
-    def test_no_runs_dir_returns_empty(self, single_run_tree: Path):
-        run_dirs = _discover_run_dirs(single_run_tree)
-        assert run_dirs == []
-
-    def test_single_run_dir_uses_flat_export(self, tmp_path: Path):
-        """When only one run directory exists, export should use single-run
-        (flat) mode instead of creating a parent with one nested child."""
+class TestSingleRunExport:
+    def test_single_marker_uses_flat_export(self, tmp_path: Path):
+        """When only one __test_labels__.yaml exists, export should use
+        single-run (flat) mode instead of creating a parent with one nested child."""
         base = tmp_path / "artifacts"
-        test_phase = base / "002__test"
-        runs = test_phase / "runs"
-        run_a = runs / "mcp-smoke-s1-u16-gateway"
+        run_a = base / "000__mcp-smoke-s1-u16-gateway"
         run_a.mkdir(parents=True)
+        _write_test_labels(run_a, {"preset": "smoke"})
         (run_a / METRICS_FILE).write_text(json.dumps({"total_requests": 100}))
         (run_a / PARAMETERS_FILE).write_text(json.dumps({"preset": "smoke"}))
 
         run_dirs = _discover_run_dirs(base)
         assert len(run_dirs) == 1
-
-        # The routing condition in run_from_orchestration_config is:
-        #   if len(run_dirs) > 1  → multi-run export
-        #   else                  → single-run (flat) export
-        # Verify the threshold: a single run dir must NOT trigger multi-run.
-        assert not (len(run_dirs) > 1), (
-            "Single run dir should fall through to flat export, not multi-run"
-        )
+        assert not (len(run_dirs) > 1)

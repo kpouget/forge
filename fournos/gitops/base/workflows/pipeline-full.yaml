@@ -110,6 +110,6 @@ spec:
         - name: kubeconfig-secret
           value: "$(params.kubeconfig-secret)"
         - name: job-step
-          value: pre-cleanup
+          value: post-cleanup
         - name: job-step-name
           value: 004__post-cleanup

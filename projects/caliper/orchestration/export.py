@@ -159,23 +159,22 @@ def run_from_orchestration_config(
 
 METRICS_FILE = "metrics.json"
 PARAMETERS_FILE = "parameters.json"
-RUNS_DIR_NAME = "runs"
+TEST_LABELS_MARKER = "__test_labels__.yaml"
 
 
 def _discover_run_dirs(from_path: Path) -> list[Path]:
-    """Auto-detect test run directories by looking for ``runs/`` directories with subdirectories."""
+    """Auto-detect test run directories via ``__test_labels__.yaml`` markers."""
     run_dirs: list[Path] = []
-    for runs_parent in sorted(from_path.rglob(RUNS_DIR_NAME)):
-        if not runs_parent.is_dir():
-            continue
-        children = sorted(d for d in runs_parent.iterdir() if d.is_dir())
-        run_dirs.extend(children)
+    for marker in sorted(from_path.rglob(TEST_LABELS_MARKER)):
+        if marker.is_file():
+            run_dirs.append(marker.parent)
 
     if run_dirs:
         logger.info(
-            "Auto-detected %d test run director%s under runs/",
+            "Auto-detected %d test run director%s via %s",
             len(run_dirs),
             "y" if len(run_dirs) == 1 else "ies",
+            TEST_LABELS_MARKER,
         )
     return run_dirs
 
@@ -209,11 +208,7 @@ def _run_multi_run_export(
 
     logger.info("Multi-run export: %d test run(s) detected", len(run_dirs))
 
-    shared_paths = [
-        p
-        for p in from_path.rglob("*")
-        if p.is_file() and not any(p.resolve().is_relative_to(rd.resolve()) for rd in run_dirs)
-    ]
+    all_artifact_paths = [p for p in from_path.rglob("*") if p.is_file()]
 
     secrets_data = None
     if mlflow_secrets_path is not None:
@@ -245,7 +240,7 @@ def _run_multi_run_export(
     if export_cfg.verbose:
         click.echo("caliper multi-run export (verbose)", err=True)
         click.echo(f"  Source: {from_path}", err=True)
-        click.echo(f"  Shared files: {len(shared_paths)}", err=True)
+        click.echo(f"  Total artifact files: {len(all_artifact_paths)}", err=True)
         click.echo(f"  Run directories: {len(run_dirs)}", err=True)
         click.echo(f"  Workspace: {workspace or '(default)'}", err=True)
         for rd in run_dirs:
@@ -254,8 +249,8 @@ def _run_multi_run_export(
 
     try:
         detail, ml_meta = mlflow_backend.log_multi_run_artifacts(
-            shared_paths=shared_paths,
-            shared_artifact_root=from_path,
+            all_artifact_paths=all_artifact_paths,
+            artifact_root=from_path,
             run_dirs=run_dirs,
             metrics_file=METRICS_FILE,
             parameters_file=PARAMETERS_FILE,

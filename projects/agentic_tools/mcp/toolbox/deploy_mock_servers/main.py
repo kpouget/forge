@@ -19,6 +19,7 @@ from typing import Any
 
 import yaml
 
+from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import oc
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,8 @@ logger = logging.getLogger(__name__)
 SCALE_OUT_LABEL = "experiment=scale-out"
 
 
-def deploy_servers(
+@entrypoint
+def run(
     *,
     namespace: str,
     count: int,
@@ -37,31 +39,31 @@ def deploy_servers(
     node_selector: dict[str, str] | None = None,
     tolerations: list[dict[str, str]] | None = None,
     rollout_timeout: str = "120s",
-) -> list[str]:
-    """
-    Deploy `count` mock servers ({name_prefix}-1 .. {name_prefix}-N).
+) -> int:
+    """Deploy mock servers and wait for readiness."""
+    execute_tasks(locals())
+    return 0
 
-    Returns the list of deployed server names.
-    All manifests are applied in a single batch, then readiness is
-    checked for maximum throughput.
-    """
+
+@task
+def generate_and_apply_manifests(args, ctx):
+    """Generate YAML manifests for all servers and apply them."""
     merged_labels = {"experiment": "scale-out"}
-    if labels:
-        merged_labels.update(labels)
+    if args.labels:
+        merged_labels.update(args.labels)
 
-    logger.info("Deploying %d mock server(s) with %d tools each...", count, tools_per_server)
+    ctx.names = [f"{args.name_prefix}-{i}" for i in range(1, args.count + 1)]
 
-    names = [f"{name_prefix}-{i}" for i in range(1, count + 1)]
     all_manifests = []
-    for name in names:
+    for name in ctx.names:
         manifest = _generate_server_manifest(
             name=name,
-            namespace=namespace,
-            image=image,
-            tools_per_server=tools_per_server,
+            namespace=args.namespace,
+            image=args.image,
+            tools_per_server=args.tools_per_server,
             labels=merged_labels,
-            node_selector=node_selector,
-            tolerations=tolerations,
+            node_selector=args.node_selector,
+            tolerations=args.tolerations,
         )
         all_manifests.append(manifest)
 
@@ -70,24 +72,19 @@ def deploy_servers(
         tmp_path = tmp.name
     oc("apply", "-f", tmp_path)
     Path(tmp_path).unlink(missing_ok=True)
-    logger.info("All %d server manifests applied", count)
 
-    logger.info("Waiting for %d server(s) to become ready...", count)
-    oc(
-        "rollout",
-        "status",
-        *[f"deployment/{n}" for n in names],
-        "-n",
-        namespace,
-        f"--timeout={rollout_timeout}",
-        check=False,
-    )
+    return f"Applied {args.count} server manifest(s)"
 
+
+@retry(attempts=24, delay=5, backoff=1.0)
+@task
+def wait_for_rollout(args, ctx):
+    """Wait for all server deployments to become ready."""
     result = oc(
         "get",
         "deployment",
         "-n",
-        namespace,
+        args.namespace,
         "-l",
         SCALE_OUT_LABEL,
         "-o",
@@ -95,10 +92,30 @@ def deploy_servers(
         check=False,
     )
     ready_count = len(result.stdout.split()) if result.stdout.strip() else 0
-    logger.info("Servers ready: %d/%d", ready_count, count)
-    if ready_count < count:
-        raise RuntimeError(f"Only {ready_count}/{count} servers became ready")
-    return names
+
+    if ready_count >= args.count:
+        ctx.server_names = ctx.names
+        return f"All {args.count} server(s) ready"
+
+    return (False, f"Servers ready: {ready_count}/{args.count}")
+
+
+def cleanup_servers(*, namespace: str) -> None:
+    """Delete all scale-out mock server deployments and services by label."""
+    logger.info("Cleaning up scale-out servers (label=%s)...", SCALE_OUT_LABEL)
+    oc(
+        "delete",
+        "deployment,service",
+        "-n",
+        namespace,
+        "-l",
+        SCALE_OUT_LABEL,
+        "--wait=false",
+        "--ignore-not-found=true",
+        check=False,
+    )
+    _wait_for_deletion(namespace=namespace, resource="deployment", timeout_seconds=120)
+    logger.info("Scale-out server cleanup complete")
 
 
 def restart_servers(
@@ -124,24 +141,6 @@ def restart_servers(
             f"--timeout={rollout_timeout}",
         )
     logger.info("All %d server(s) restarted and ready", len(names))
-
-
-def cleanup_servers(*, namespace: str) -> None:
-    """Delete all scale-out mock server deployments and services by label."""
-    logger.info("Cleaning up scale-out servers (label=%s)...", SCALE_OUT_LABEL)
-    oc(
-        "delete",
-        "deployment,service",
-        "-n",
-        namespace,
-        "-l",
-        SCALE_OUT_LABEL,
-        "--wait=false",
-        "--ignore-not-found=true",
-        check=False,
-    )
-    _wait_for_deletion(namespace=namespace, resource="deployment", timeout_seconds=120)
-    logger.info("Scale-out server cleanup complete")
 
 
 def _wait_for_deletion(*, namespace: str, resource: str, timeout_seconds: int = 120) -> None:
