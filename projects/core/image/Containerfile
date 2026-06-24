@@ -56,6 +56,7 @@ COPY . .
 RUN uv lock && \
     uv pip install --system -e ".[caliper]" && \
     uv pip install --system -e ".[matrix_benchmarking]" && \
+    uv pip install --system -e ".[agentic_review]" && \
     uv cache clean --no-progress
 
 # Create non-root user for security
