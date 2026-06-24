@@ -61,12 +61,7 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
                         "'/test fournos mcp_gateway PRESET'"
                     )
                 preset = args[0]
-                config_overrides.update(
-                    {
-                        "runtime.default_preset": preset,
-                        "ci_job.args": [],
-                    }
-                )
+                config_overrides["runtime.default_preset"] = preset
                 parsed_directives.append(line)
                 logger.info("Parsed mcp_gateway preset: %s", preset)
             continue
