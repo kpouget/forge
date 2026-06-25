@@ -7,9 +7,11 @@ import yaml
 
 from projects.core.library import config as core_config
 from projects.core.library import env
-from projects.kserve.toolbox.deploy_llmisvc import render_inference_service_from_parts
 from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import runtime_config, test_phase
+from projects.llm_d.orchestration.render_inference_service import (
+    render_inference_service_from_parts,
+)
 
 PROJECT_ORCHESTRATION_DIR = Path(__file__).resolve().parents[1] / "orchestration"
 

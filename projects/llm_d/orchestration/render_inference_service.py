@@ -1,7 +1,3 @@
-"""
-Utilities for the deploy LLM inference service toolbox module.
-"""
-
 from __future__ import annotations
 
 import copy
@@ -14,14 +10,14 @@ import yaml
 from projects.core.dsl.utils import slugify_identifier, truncate_k8s_name
 
 
-def load_yaml(path: Path) -> Any:
+def _load_yaml(path: Path) -> Any:
     with path.open(encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
 def render_inference_service_from_parts(
     *,
-    config_dir: str,
+    config_dir: str | Path,
     namespace: str,
     inference_service: dict[str, Any],
     model_name: str,
@@ -29,22 +25,9 @@ def render_inference_service_from_parts(
     deployment_profile: dict[str, Any],
     model_cache: dict[str, Any],
 ) -> dict[str, Any]:
-    """Render an LLM inference service manifest from individual components.
-
-    Args:
-        config_dir: Configuration directory path
-        namespace: Target namespace
-        inference_service: Inference service configuration
-        model_name: Hugging Face model name
-        model_slug: Sanitized model identifier
-        deployment_profile: Deployment profile configuration
-        model_cache: Model cache configuration
-
-    Returns:
-        InferenceService manifest as dict
-    """
+    """Render an llm_d-owned LLMInferenceService manifest from concrete runtime inputs."""
     template_path = Path(config_dir) / inference_service["template"]
-    manifest = load_yaml(template_path)
+    manifest = _load_yaml(template_path)
 
     name = inference_service["name"]
     manifest["metadata"]["name"] = name
@@ -57,7 +40,6 @@ def render_inference_service_from_parts(
         }
     )
 
-    # Resolve model URI and scheme
     if model_name.startswith("oci://"):
         source_uri = model_name
         source_scheme = "oci"
@@ -65,40 +47,36 @@ def render_inference_service_from_parts(
         source_uri = model_name
         source_scheme = "hf"
     else:
-        # Plain name defaults to HuggingFace
         source_uri = f"hf://{model_name}"
         source_scheme = "hf"
 
-    # Resolve model cache spec inline
     cache_spec = None
-    if model_cache.get("enabled", False):
-        # Skip caching for PVC-based models
-        if not source_uri.startswith(("pvc://", "pvc+hf://")):
-            pvc_defaults = model_cache["pvc"]
-            pvc_prefix = model_cache["pvc"]["name_prefix"]
-            cache_key = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:10]
-            pvc_name = truncate_k8s_name(
-                f"{pvc_prefix}-{slugify_identifier(model_slug, max_length=32)}-{cache_key}"
-            )
-            model_path = pvc_defaults["model_directory_name"]
+    if model_cache.get("enabled", False) and not source_uri.startswith(("pvc://", "pvc+hf://")):
+        pvc_defaults = model_cache["pvc"]
+        pvc_prefix = pvc_defaults["name_prefix"]
+        cache_key = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:10]
+        pvc_name = truncate_k8s_name(
+            f"{pvc_prefix}-{slugify_identifier(model_slug, max_length=32)}-{cache_key}"
+        )
+        model_path = pvc_defaults["model_directory_name"]
 
-            cache_spec = {
-                "source_uri": source_uri,
-                "source_scheme": source_scheme,
-                "cache_key": cache_key,
-                "namespace": namespace,
-                "pvc_name": pvc_name,
-                "pvc_size": pvc_defaults["size"],
-                "access_mode": pvc_defaults["access_mode"],
-                "storage_class_name": pvc_defaults.get("storage_class_name"),
-                "model_path": model_path,
-                "model_uri": f"pvc://{pvc_name}/{model_path}",
-                "marker_filename": model_cache["marker_filename"],
-                "marker_path": f"/cache/{model_path}/{model_cache['marker_filename']}",
-                "download_job_name": truncate_k8s_name(f"{pvc_name}-download"),
-                "hf_token_secret_name": model_cache["hf"].get("token_secret_name"),
-                "hf_token_secret_key": model_cache["hf"].get("token_secret_key"),
-            }
+        cache_spec = {
+            "source_uri": source_uri,
+            "source_scheme": source_scheme,
+            "cache_key": cache_key,
+            "namespace": namespace,
+            "pvc_name": pvc_name,
+            "pvc_size": pvc_defaults["size"],
+            "access_mode": pvc_defaults["access_mode"],
+            "storage_class_name": pvc_defaults.get("storage_class_name"),
+            "model_path": model_path,
+            "model_uri": f"pvc://{pvc_name}/{model_path}",
+            "marker_filename": model_cache["marker_filename"],
+            "marker_path": f"/cache/{model_path}/{model_cache['marker_filename']}",
+            "download_job_name": truncate_k8s_name(f"{pvc_name}-download"),
+            "hf_token_secret_name": model_cache["hf"].get("token_secret_name"),
+            "hf_token_secret_key": model_cache["hf"].get("token_secret_key"),
+        }
 
     manifest["spec"]["replicas"] = deployment_profile["replicas"]
     manifest["spec"]["model"]["uri"] = cache_spec["model_uri"] if cache_spec else source_uri
@@ -115,10 +93,6 @@ def render_inference_service_from_parts(
     if vllm_args:
         serving_container["args"] = vllm_args
 
-    # Deployment profiles express the scheduler three ways:
-    #  - dict (incl. empty {}): embed verbatim as spec.router.scheduler
-    #  - null: the deployment wants no scheduler key at all -> remove it
-    #  - absent: treated as {} (embed an empty scheduler object)
     scheduler = deployment_profile.get("scheduler", {})
     if scheduler is None:
         manifest["spec"]["router"].pop("scheduler", None)

@@ -16,8 +16,10 @@ from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidell
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.kserve.toolbox.deploy_llmisvc import main as deploy_llmisvc
-from projects.kserve.toolbox.deploy_llmisvc import render_inference_service_from_parts
 from projects.llm_d.orchestration.prepare_phase import prepare_model_cache
+from projects.llm_d.orchestration.render_inference_service import (
+    render_inference_service_from_parts,
+)
 from projects.llm_d.orchestration.utils import write_yaml
 from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_resources_command
 
