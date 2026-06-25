@@ -17,7 +17,7 @@ spec:
     - name: kubeconfig-secret
       type: string
   tasks:
-    - name: replot
+    - name: 000-replot
       taskRef:
         name: forge-step
         kind: Task
@@ -37,7 +37,7 @@ spec:
           value: 000__replot
 
   finally:
-    - name: export-artifacts
+    - name: 001-export-artifacts
       taskRef:
         name: forge-step
         kind: Task
