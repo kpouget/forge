@@ -183,7 +183,7 @@ def resolve_hardware_request(hardware_spec: dict):
     # - Handle different hardware profiles (GPU, CPU, memory requirements)
     # - Example: return {"gpu": {"type": "nvidia-tesla-v100", "count": 1}, "memory": "32Gi"}
 
-    hardware_spec["gpuType"] = "h200"
-    hardware_spec["gpuCount"] = 4
+    # hardware_spec["gpuType"] = "h200"
+    # hardware_spec["gpuCount"] = 4
 
     return hardware_spec

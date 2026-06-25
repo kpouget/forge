@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -83,17 +82,6 @@ def run_from_orchestration_config(
     elif not mlflow_secrets_path.exists():
         raise FileNotFoundError(f"Vault {vault_name}/{vault_mlflow_secret} file missing :/")
 
-    # Get AWS credentials if provided
-    vault_aws_secret = export_cfg.backend.mlflow.secrets.vault.aws_secret
-    aws_credentials_path = None
-    if vault_aws_secret:
-        aws_credentials_path = vault_lib.get_vault_content_path(vault_name, vault_aws_secret)
-
-        if aws_credentials_path is None:
-            raise ValueError(f"Vault {vault_name}/{vault_aws_secret} missing :/")
-        elif not aws_credentials_path.exists():
-            raise FileNotFoundError(f"Vault {vault_name}/{vault_aws_secret} file missing :/")
-
     raw_cfg = mlflow_backend_cfg.config
     mlflow_config_data: dict[str, Any] | None = None
     if raw_cfg is None:
@@ -105,50 +93,40 @@ def run_from_orchestration_config(
 
     run_dirs = _discover_run_dirs(from_path)
 
-    previous_aws_creds = os.environ.get("AWS_SHARED_CREDENTIALS_FILE")
-    try:
-        if aws_credentials_path is not None:
-            os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(aws_credentials_path)
-
-        if len(run_dirs) > 1:
-            if export_cfg.dry_run:
-                logger.info(
-                    "dry-run: would export %d run dirs from %s (skipping)", len(run_dirs), from_path
-                )
-                ret = 0
-            else:
-                ret = _run_multi_run_export(
-                    export_cfg=export_cfg,
-                    from_path=from_path,
-                    status_yaml=status_yaml,
-                    mlflow_secrets_path=mlflow_secrets_path,
-                    mlflow_config_data=mlflow_config_data,
-                    run_dirs=run_dirs,
-                )
-        else:
-            mlflow_kwargs: dict[str, Any] = {
-                "mlflow_experiment": export_cfg.mlflow_experiment,
-                "mlflow_run_id": export_cfg.mlflow_run_id,
-                "mlflow_run_name": export_cfg.mlflow_run_name,
-                "mlflow_secrets_path": mlflow_secrets_path,
-            }
-            if mlflow_config_data is not None:
-                mlflow_kwargs["mlflow_config_data"] = mlflow_config_data
-
-            ret = run_artifacts_export(
-                from_path=from_path,
-                status_yaml_path=status_yaml,
-                dry_run=export_cfg.dry_run,
-                verbose=export_cfg.verbose,
-                upload_workers=export_cfg.upload_workers,
-                backend=backends,
-                **mlflow_kwargs,
+    if len(run_dirs) > 1:
+        if export_cfg.dry_run:
+            logger.info(
+                "dry-run: would export %d run dirs from %s (skipping)", len(run_dirs), from_path
             )
-    finally:
-        if previous_aws_creds is None:
-            os.environ.pop("AWS_SHARED_CREDENTIALS_FILE", None)
+            ret = 0
         else:
-            os.environ["AWS_SHARED_CREDENTIALS_FILE"] = previous_aws_creds
+            ret = _run_multi_run_export(
+                export_cfg=export_cfg,
+                from_path=from_path,
+                status_yaml=status_yaml,
+                mlflow_secrets_path=mlflow_secrets_path,
+                mlflow_config_data=mlflow_config_data,
+                run_dirs=run_dirs,
+            )
+    else:
+        mlflow_kwargs: dict[str, Any] = {
+            "mlflow_experiment": export_cfg.mlflow_experiment,
+            "mlflow_run_id": export_cfg.mlflow_run_id,
+            "mlflow_run_name": export_cfg.mlflow_run_name,
+            "mlflow_secrets_path": mlflow_secrets_path,
+        }
+        if mlflow_config_data is not None:
+            mlflow_kwargs["mlflow_config_data"] = mlflow_config_data
+
+        ret = run_artifacts_export(
+            from_path=from_path,
+            status_yaml_path=status_yaml,
+            dry_run=export_cfg.dry_run,
+            verbose=export_cfg.verbose,
+            upload_workers=export_cfg.upload_workers,
+            backend=backends,
+            **mlflow_kwargs,
+        )
 
     if ret != 0:
         raise RuntimeError(f"Caliper export failed (ret code = {ret})")

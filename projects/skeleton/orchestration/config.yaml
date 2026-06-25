@@ -1,6 +1,12 @@
 vaults:
-- psap-forge-notifications
-- psap-forge-mlflow-export
+  all: []
+  all-optional:
+  - psap-forge-notifications
+  - psap-forge-mlflow-export
+  prepare: []
+  prepare-optional: []
+  test: []
+  test-optional: []
 
 skeleton:
   collect_cluster_info: false
@@ -26,7 +32,6 @@ caliper:
           vault:
             name: psap-forge-mlflow-export
             mlflow_secret: mlflow-secret.yaml
-            aws_secret: aws.credentials
 
         config:
           # Same keys/values as docs/caliper/mlflow-config.example.yaml

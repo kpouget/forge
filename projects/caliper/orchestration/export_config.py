@@ -24,9 +24,6 @@ class CaliperExportMlflowVaultContentRef(BaseModel):
     mlflow_secret: str = Field(
         ..., description="Content key in that vault (filename / logical key)."
     )
-    aws_secret: str | None = Field(
-        None, description="Content key in that vault (filename / logical key)."
-    )
 
 
 class CaliperExportMlflowSecretsSpec(BaseModel):

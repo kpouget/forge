@@ -32,76 +32,8 @@ def init():
 
 
 def list_vaults() -> list[str]:
-    """List all mandatory vaults (excludes optional vaults)."""
-
-    vault_config = config.project.get_config("vaults")
-
-    # Handle both old format (list) and new format (dict with categories)
-    if isinstance(vault_config, list):
-        return vault_config
-
-    # New format: collect only mandatory vaults (exclude *-optional categories)
-    mandatory_vaults = []
-    for category, vaults in vault_config.items():
-        if isinstance(vaults, list) and not category.endswith("-optional"):
-            mandatory_vaults.extend(vaults)
-
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_vaults = []
-    for _vault in mandatory_vaults:
-        if _vault in seen:
-            continue
-
-        seen.add(_vault)
-        unique_vaults.append(_vault)
-
-    return unique_vaults
-
-
-def get_vaults_for_phase(phase: str) -> list[str]:
-    """Get vaults needed for a specific phase.
-
-    Args:
-        phase: Phase name ('resolve-only', 'test', 'prepare', 'all')
-
-    Returns:
-        List of vault names for the specified phase
-    """
-
-    # Get vaults for specific phase, defaulting to empty list if phase doesn't exist
-    return config.project.get_config(f"vaults.{phase}", [])
-
-
-def init_vaults_for_phase(phase: str) -> None:
-    """Initialize vaults for a specific phase."""
-
-    # Get global mandatory vaults (always loaded)
-    global_mandatory = get_vaults_for_phase("all")
-
-    # Get phase-specific mandatory vaults
-    phase_mandatory = get_vaults_for_phase(phase)
-
-    # Combine all mandatory vaults
-    mandatory_vaults = global_mandatory + phase_mandatory
-
-    # Get global optional vaults (always loaded optionally)
-    global_optional = get_vaults_for_phase("all-optional")
-
-    # Get phase-specific optional vaults
-    phase_optional = get_vaults_for_phase(f"{phase}-optional")
-
-    # Combine all optional vaults
-    optional_vaults = global_optional + phase_optional
-
-    if not mandatory_vaults and not optional_vaults:
-        logger.info(f"No vault to initialize for phase '{phase}'")
-        return
-
-    # Initialize both mandatory and optional vaults in a single call
-    # Mandatory vaults: strict=True (automation fails if missing/invalid)
-    # Optional vaults: strict=False (automation continues with warnings if missing/invalid)
-    vault.init(mandatory_vaults=mandatory_vaults, optional_vaults=optional_vaults)
+    """List all vaults (includes both mandatory and optional)."""
+    return vault.phase_vault_list_all()
 
 
 @click.group(cls=ci_lib.HelpfulGroup)
@@ -116,7 +48,7 @@ def main(ctx):
         logger.info("No need to initialize the vaults for the resolve step")
         return
 
-    init_vaults_for_phase(ctx.invoked_subcommand)
+    vault.phase_vault_init(ctx.invoked_subcommand)
 
 
 @main.command()
@@ -148,35 +80,7 @@ def pre_cleanup(ctx) -> int:
     return cleanup_toolbox_run(namespace=namespace)
 
 
-def list_resolve_vaults() -> list[str]:
-    """List all vaults for resolve operations (includes both mandatory and optional)."""
-
-    vault_config = config.project.get_config("vaults")
-
-    # Handle both old format (list) and new format (dict with categories)
-    if isinstance(vault_config, list):
-        return vault_config
-
-    # New format: collect all vaults from all categories for resolve operations
-    all_vaults = []
-    for _category, vaults in vault_config.items():
-        if isinstance(vaults, list):
-            all_vaults.extend(vaults)
-
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_vaults = []
-    for _vault in all_vaults:
-        if _vault in seen:
-            continue
-
-        seen.add(_vault)
-        unique_vaults.append(_vault)
-
-    return unique_vaults
-
-
-main.add_command(create_fournos_resolve_entrypoint(vault_list_func=list_resolve_vaults))
+main.add_command(create_fournos_resolve_entrypoint(vault_list_func=vault.phase_vault_list_all))
 main.add_command(caliper_export_entrypoint)
 main.add_command(caliper_replot_entrypoint)
 

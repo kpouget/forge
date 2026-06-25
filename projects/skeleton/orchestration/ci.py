@@ -7,7 +7,9 @@ within the FORGE test harness framework. Use this as a starting point for
 building your own projects.
 """
 
+import logging
 import types
+from pathlib import Path
 
 import click
 import prepare_skeleton
@@ -15,9 +17,18 @@ import test_skeleton
 
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import ci as ci_lib
-from projects.core.library import config
+from projects.core.library import config, env, run, vault
 from projects.core.library.export import caliper_export_entrypoint
 from projects.core.library.replot import caliper_replot_entrypoint
+
+logger = logging.getLogger(__name__)
+
+
+def init():
+    """Initialize Skeleton orchestration environment"""
+    env.init()
+    run.init()
+    config.init(Path(__file__).parent)
 
 
 @click.group(cls=ci_lib.HelpfulGroup)
@@ -26,11 +37,13 @@ from projects.core.library.replot import caliper_replot_entrypoint
 def main(ctx):
     """Skeleton example project CI operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
+    init()
 
-    # Skip vault initialization for resolve_fournos_config command since vaults aren't available yet
-    skip_vault_init = ctx.invoked_subcommand == "resolve-fournos-config"
+    if ctx.invoked_subcommand == "resolve-fournos-config":
+        logger.info("No need to initialize the vaults for the resolve step")
+        return
 
-    test_skeleton.init(skip_vault_init=skip_vault_init)
+    vault.phase_vault_init(ctx.invoked_subcommand)
 
 
 @main.command()
@@ -57,12 +70,20 @@ def pre_cleanup(ctx):
     return prepare_skeleton.cleanup()
 
 
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+def post_cleanup(ctx):
+    """Cleanup phase - Clean up resources and finalize."""
+    return prepare_skeleton.cleanup()
+
+
 main.add_command(caliper_export_entrypoint)
 main.add_command(caliper_replot_entrypoint)
 
 main.add_command(
     create_fournos_resolve_entrypoint(
-        vault_list_func=lambda: config.project.get_config("vaults"),
+        vault_list_func=vault.phase_vault_list_all,
         hardware_resolver_func=test_skeleton.resolve_hardware_request,
     )
 )

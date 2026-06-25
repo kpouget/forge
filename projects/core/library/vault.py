@@ -469,3 +469,81 @@ def get_vault_content_path(vault_name: str, content_name: str) -> Path | None:
     """Convenience function to get vault content path"""
 
     return get_vault_manager().get_vault_content_path(vault_name, content_name)
+
+
+# phase vault #
+
+
+def _phase_vault_get_for_phase(phase: str) -> list[str]:
+    """Get vaults needed for a specific phase.
+
+    Args:
+        phase: Phase name ('resolve-only', 'test', 'prepare', 'all')
+
+    Returns:
+        List of vault names for the specified phase
+    """
+    from projects.core.library import config
+
+    # Get vaults for specific phase, defaulting to empty list if phase doesn't exist
+    return config.project.get_config(f"vaults.{phase}", [])
+
+
+def phase_vault_init(phase: str) -> None:
+    """Initialize vaults for a specific phase."""
+
+    # Get global mandatory vaults (always loaded)
+    global_mandatory = _phase_vault_get_for_phase("all")
+
+    # Get phase-specific mandatory vaults
+    phase_mandatory = _phase_vault_get_for_phase(phase)
+
+    # Combine all mandatory vaults
+    mandatory_vaults = global_mandatory + phase_mandatory
+
+    # Get global optional vaults (always loaded optionally)
+    global_optional = _phase_vault_get_for_phase("all-optional")
+
+    # Get phase-specific optional vaults
+    phase_optional = _phase_vault_get_for_phase(f"{phase}-optional")
+
+    # Combine all optional vaults
+    optional_vaults = global_optional + phase_optional
+
+    if not mandatory_vaults and not optional_vaults:
+        logger.info(f"No vault to initialize for phase '{phase}'")
+        return
+
+    # Initialize both mandatory and optional vaults in a single call
+    # Mandatory vaults: strict=True (automation fails if missing/invalid)
+    # Optional vaults: strict=False (automation continues with warnings if missing/invalid)
+    init(mandatory_vaults=mandatory_vaults, optional_vaults=optional_vaults)
+
+
+def phase_vault_list_all() -> list[str]:
+    """List all vaults from project config (includes both mandatory and optional)."""
+    from projects.core.library import config
+
+    vault_config = config.project.get_config("vaults")
+
+    # Handle both old format (list) and new format (dict with categories)
+    if isinstance(vault_config, list):
+        return vault_config
+
+    # New format: collect all vaults from all categories
+    all_vaults = []
+    for _category, vaults in vault_config.items():
+        if isinstance(vaults, list):
+            all_vaults.extend(vaults)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_vaults = []
+    for _vault in all_vaults:
+        if _vault in seen:
+            continue
+
+        seen.add(_vault)
+        unique_vaults.append(_vault)
+
+    return unique_vaults

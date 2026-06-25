@@ -29,7 +29,6 @@ def _download_mlflow_artifacts(
     replot_url: str,
     replot_download_dir: Path,
     mlflow_secrets_path: Path,
-    aws_credentials_path: Path | None = None,
 ) -> dict:
     """
     Download MLflow artifacts from a replot URL.
@@ -38,7 +37,6 @@ def _download_mlflow_artifacts(
         replot_url: MLflow URL containing run ID
         replot_download_dir: Local directory to download artifacts to
         mlflow_secrets_path: Path to MLflow secrets file
-        aws_credentials_path: Optional path to AWS credentials file
 
     Returns:
         Dict containing download status information
@@ -99,10 +97,6 @@ def _download_mlflow_artifacts(
         # Suppress MLflow progress bars by setting environment variable
         os.environ["MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR"] = "false"
 
-        # Set AWS shared credentials file for MLflow S3 artifact storage (if provided)
-        if aws_credentials_path is not None:
-            os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(aws_credentials_path)
-
         # Use the same MLflow connection setup as export
         with mlflow_connection_env(mlflow_secrets):
             # Set tracking URI before creating client (AWS credentials need to be set first)
@@ -156,7 +150,6 @@ def run_replot_from_orchestration_config(
     artifact_directory: Path,
     vault_name: str,
     vault_mlflow_secret: str,
-    vault_aws_secret: str | None = None,
     keep_replot_dir: bool = False,
     postprocess_config: dict | None = None,
 ) -> dict:
@@ -168,7 +161,6 @@ def run_replot_from_orchestration_config(
         artifact_directory: Directory for final artifacts output
         vault_name: Name of the vault containing secrets
         vault_mlflow_secret: MLflow secret key in the vault
-        vault_aws_secret: Optional AWS secret key in the vault
         keep_replot_dir: Whether to keep the download directory after processing
         postprocess_config: Configuration for post-processing
 
@@ -189,16 +181,6 @@ def run_replot_from_orchestration_config(
         )
 
     # Get AWS credentials if provided
-    aws_credentials_path = None
-    if vault_aws_secret:
-        aws_credentials_path = vault_lib.get_vault_content_path(vault_name, vault_aws_secret)
-
-        if aws_credentials_path is None:
-            raise ValueError(f"Vault {vault_name}/{vault_aws_secret} missing :/")
-        elif not aws_credentials_path.exists():
-            raise FileNotFoundError(f"Vault {vault_name}/{vault_aws_secret} file missing :/")
-
-        logger.info(f"Using AWS credentials from vault {vault_name}/{vault_aws_secret}")
 
     logger.info(f"Using MLflow secrets from vault {vault_name}/{vault_mlflow_secret}")
 
@@ -251,7 +233,7 @@ def run_replot_from_orchestration_config(
             # Download artifacts based on URL type
             if "mlflow" in replot_url.lower() and "runs" in replot_url:
                 download_result = _download_mlflow_artifacts(
-                    replot_url, replot_download_dir, mlflow_secrets_path, aws_credentials_path
+                    replot_url, replot_download_dir, mlflow_secrets_path
                 )
                 status["replot"].update(download_result)
             else:
