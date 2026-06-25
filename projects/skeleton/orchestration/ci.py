@@ -57,6 +57,15 @@ def pre_cleanup(ctx):
     return prepare_skeleton.cleanup()
 
 
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+@agent_review_on_failure
+def post_cleanup(ctx):
+    """Cleanup phase - Clean up resources and finalize."""
+    return prepare_skeleton.cleanup()
+
+
 main.add_command(caliper_export_entrypoint)
 main.add_command(caliper_replot_entrypoint)
 
