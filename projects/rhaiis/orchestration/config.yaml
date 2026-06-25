@@ -48,7 +48,6 @@ caliper:
           vault:
             name: psap-forge-mlflow-export
             mlflow_secret: mlflow-secret.yaml
-            aws_secret: aws.credentials
         config:
           experiment: forge-rhaiis
           run_name: null
