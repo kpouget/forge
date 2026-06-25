@@ -17,7 +17,7 @@ spec:
       type: string
 
   tasks:
-    - name: pre-cleanup
+    - name: 000-pre-cleanup
       taskRef:
         name: forge-step
         kind: Task
@@ -36,7 +36,7 @@ spec:
         - name: job-step-name
           value: 000__pre-cleanup
 
-    - name: prepare
+    - name: 001-prepare
       taskRef:
         name: forge-step
         kind: Task
@@ -55,8 +55,8 @@ spec:
         - name: job-step-name
           value: 001__prepare
 
-    - name: test
-      runAfter: [prepare]
+    - name: 002-test
+      runAfter: [001-prepare]
       taskRef:
         name: forge-step
         kind: Task
@@ -76,26 +76,7 @@ spec:
           value: 002__test
 
   finally:
-    - name: export-artifacts
-      taskRef:
-        name: forge-step
-        kind: Task
-      workspaces:
-        - name: artifacts
-          workspace: artifacts
-      params:
-        - name: fjob-name
-          value: "$(params.fjob-name)"
-        - name: fournos-workload-namespace
-          value: "$(params.fournos-workload-namespace)"
-        - name: kubeconfig-secret
-          value: "$(params.kubeconfig-secret)"
-        - name: job-step
-          value: export-artifacts
-        - name: job-step-name
-          value: 003__export-artifacts
-
-    - name: post-cleanup
+    - name: 003-post-cleanup
       taskRef:
         name: forge-step
         kind: Task
@@ -112,4 +93,26 @@ spec:
         - name: job-step
           value: post-cleanup
         - name: job-step-name
-          value: 004__post-cleanup
+          value: 003__post-cleanup
+
+    - name: 004-export-artifacts
+      taskRef:
+        name: forge-step
+        kind: Task
+      workspaces:
+        - name: artifacts
+          workspace: artifacts
+      params:
+        - name: fjob-name
+          value: "$(params.fjob-name)"
+        - name: fournos-workload-namespace
+          value: "$(params.fournos-workload-namespace)"
+        - name: kubeconfig-secret
+          value: "$(params.kubeconfig-secret)"
+        - name: job-step
+          value: export-artifacts
+        - name: job-step-name
+          value: 004__export-artifacts
+        # Force the artifacts export to run after the cleanups
+        - name: status-report
+          value: "$(tasks.003-post-cleanup.results.status)"

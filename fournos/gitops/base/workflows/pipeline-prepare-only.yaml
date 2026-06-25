@@ -17,7 +17,7 @@ spec:
     - name: kubeconfig-secret
       type: string
   tasks:
-    - name: prepare
+    - name: 000-prepare
       taskRef:
         name: forge-step
         kind: Task
@@ -39,7 +39,7 @@ spec:
           value: "true"
 
   finally:
-    - name: export-artifacts
+    - name: 001-export-artifacts
       taskRef:
         name: forge-step
         kind: Task
