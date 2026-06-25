@@ -50,7 +50,6 @@ caliper:
           vault:
             name: psap-forge-mlflow-export
             mlflow_secret: mlflow-secret.yaml
-            aws_secret: null
         config:
           run_name:
           experiment: mcp-gateway-cpt
