@@ -7,6 +7,7 @@ Parses mcp_gateway-specific directives from PR trigger comments.
 Supported syntax::
 
     /test fournos mcp_gateway smoke
+    /test fournos mcp_gateway smoke collect_cluster_info
     /version 0.7.0
 """
 
@@ -55,13 +56,8 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
         args = _parse_test_line(line)
         if args is not None:
             if args:
-                if len(args) > 1:
-                    raise ValueError(
-                        "mcp_gateway accepts at most one preset in "
-                        "'/test fournos mcp_gateway PRESET'"
-                    )
                 parsed_directives.append(line)
-                logger.info("Parsed mcp_gateway preset: %s", args[0])
+                logger.info("Parsed mcp_gateway presets: %s", args)
             continue
 
         # Parse /version directive

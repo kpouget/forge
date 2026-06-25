@@ -118,7 +118,7 @@ class BaseRuntimeConfig:
     @staticmethod
     def get_preset_name() -> str:
         args = config.project.get_config("project.args", [])
-        return args[0] if args else "default"
+        return "|".join(args) if args else "default"
 
     def get_manifests_dir(self) -> Path:
         return self.orchestration_dir / "manifests"
