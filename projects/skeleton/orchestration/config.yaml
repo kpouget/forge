@@ -35,6 +35,7 @@ caliper:
 
         config:
           # Same keys/values as docs/caliper/mlflow-config.example.yaml
+          workspace: forge-sandbox
           experiment: forge-skeleton
           run_name:
           description: >
