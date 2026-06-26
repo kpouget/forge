@@ -94,6 +94,55 @@ def validate_parameters(args, ctx):
     )
 
 
+@task
+def check_existing_csv(args, ctx):
+    """Check if a CSV for this operator already exists and is succeeded"""
+
+    result = shell.run(
+        "oc get csv "
+        f"-n {args.target_namespace} "
+        f"-l operators.coreos.com/{args.package_name}.{args.target_namespace} "
+        "--no-headers",
+        check=False,
+    )
+
+    if not result.success or not result.stdout.strip():
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"No existing CSV found for {args.package_name}"
+
+    csv_lines = [line for line in result.stdout.strip().split("\n") if line.strip()]
+    if not csv_lines:
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"No existing CSV found for {args.package_name}"
+
+    csv_info = csv_lines[0].split()
+    if len(csv_info) < 2:
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"Invalid CSV format for {args.package_name}"
+
+    csv_name = csv_info[0]
+    csv_phase = csv_info[-1]  # Phase is the last column
+
+    if csv_phase != "Succeeded":
+        logger.info(f"Found existing CSV in non-succeeded state: {csv_name} in phase {csv_phase}")
+        ctx.existing_csv = False  # Treat as if it doesn't exist so we can redeploy
+        ctx.csv_already_succeeded = False
+        return f"Found existing CSV {csv_name} in {csv_phase} state - will continue with deployment"
+
+    logger.info(f"Found existing succeeded CSV: {csv_name} in phase {csv_phase}")
+    ctx.existing_csv = True
+    ctx.csv_already_succeeded = True
+
+    from projects.core.dsl import EarlyReturn
+
+    return EarlyReturn(
+        f"Operator {args.package_name} is already deployed (CSV: {csv_name}, Phase: {csv_phase})"
+    )
+
+
 @retry(attempts=60, delay=15)
 @task
 def wait_for_catalog_source_ready(args, ctx):
