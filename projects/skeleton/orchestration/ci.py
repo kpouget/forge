@@ -15,6 +15,8 @@ import click
 import prepare_skeleton
 import test_skeleton
 
+from projects.core.agentic.config_review import trigger_config_review_for_ci
+from projects.core.agentic.on_failure import agent_review_on_failure
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env, run, vault
@@ -49,6 +51,7 @@ def main(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def prepare(ctx):
     """Prepare phase - Set up environment and dependencies."""
     return prepare_skeleton.prepare()
@@ -59,12 +62,17 @@ def prepare(ctx):
 @ci_lib.safe_ci_command
 def test(ctx):
     """Test phase - Execute the main testing logic."""
+
+    # Trigger config review analysis
+    trigger_config_review_for_ci(env.BASE_ARTIFACT_DIR)
+
     return test_skeleton.test()
 
 
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_skeleton.cleanup()
@@ -73,6 +81,7 @@ def pre_cleanup(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def post_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_skeleton.cleanup()
