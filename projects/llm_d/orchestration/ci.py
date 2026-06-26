@@ -10,9 +10,8 @@ from pathlib import Path
 
 import click
 
+from projects.core.agentic.on_failure import agent_review_on_failure
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
-
-# Use core K8s utilities instead of llmd_runtime
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env, run, vault
 from projects.core.library.export import caliper_export_entrypoint
@@ -54,6 +53,7 @@ def main(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
     return run_prepare_sequence()
@@ -62,6 +62,7 @@ def prepare(ctx) -> int:
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
     return test_toolbox_run()
@@ -70,6 +71,7 @@ def test(ctx) -> int:
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
+@agent_review_on_failure
 def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
     # Cleanup doesn't typically need vaults, but initialize resolve-only for consistency

@@ -181,6 +181,9 @@ def execute_tasks(function_args: dict = None):
                 raise
 
             except (TaskExecutionError, ConditionError, RetryFailure, Exception) as e:
+                # Generate FAILURE file for agent analysis
+                _generate_failure_file_for_agent(e)
+
                 # Log error but continue to always tasks
                 logger.info("")
                 logger.fatal(f"==> {e.__class__.__name__}: {e}")
@@ -239,6 +242,9 @@ def execute_tasks(function_args: dict = None):
             # future we'll return more info about what has been
             # executed
             shared_context.__dict__["artifact_dir"] = args.artifact_dir
+
+            # Generate context file on successful completion
+            _generate_context_file(shared_context, meta_dir)
 
             return shared_context
 
@@ -346,6 +352,15 @@ def _execute_single_task(task_info, args, shared_context):
 
         task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
 
+        # Call failure handler if one is configured
+        failure_handler = task_info.get("on_failure_handler")
+        if failure_handler:
+            try:
+                readonly_args, context = create_task_parameters(args, shared_context)
+                failure_handler(readonly_args, context, e)
+            except Exception as handler_error:
+                logger.warning(f"Failure handler for task {task_name} failed: {handler_error}")
+
         # Wrap in custom exception with context
         task_error = TaskExecutionError(
             task_name=task_name,
@@ -414,6 +429,31 @@ def _generate_env_file(meta_dir):
             f.write(f"{key}={value}\n")
 
     logger.debug(f"Generated environment file: {env_file}")
+
+
+def _generate_context_file(shared_context, meta_dir):
+    """Generate a YAML file with the final shared context"""
+    context_file = meta_dir / "context.yaml"
+
+    # Convert SimpleNamespace to dict, filtering out private attributes
+    context_dict = {}
+    for key, value in vars(shared_context).items():
+        if not key.startswith("_"):
+            # Convert Path objects to strings for YAML serialization
+            if hasattr(value, "__fspath__"):  # Path-like objects
+                context_dict[key] = str(value)
+            else:
+                context_dict[key] = value
+
+    context_data = {
+        "final_context": context_dict,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    with open(context_file, "w") as f:
+        yaml.dump(context_data, f, default_flow_style=False, sort_keys=False)
+
+    logger.debug(f"Generated context file: {context_file}")
 
 
 # Thread-local storage for DSL logger handlers
@@ -499,3 +539,70 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     os.chmod(restart_file, 0o755)
 
     logger.debug(f"Generated restart script: {restart_file}")
+
+
+def _generate_failure_file_for_agent(exception: Exception) -> None:
+    """Generate a FAILURE file for agent analysis when task execution fails"""
+    try:
+        # Get the artifact directory - should be available in DSL execution context
+        artifact_dir = env.ARTIFACT_DIR
+        if not artifact_dir:
+            logger.warning("No ARTIFACT_DIR available - cannot generate FAILURE file for agent")
+            return
+
+        failure_file_path = artifact_dir / "FAILURE"
+
+        # Generate failure content
+        failure_content = _format_failure_content_for_agent(exception)
+
+        # Write FAILURE file
+        with open(failure_file_path, "w", encoding="utf-8") as f:
+            f.write(failure_content)
+
+        logger.info(f"Generated FAILURE file for agent analysis: {failure_file_path}")
+
+    except Exception as failure_error:
+        logger.warning(f"Failed to generate FAILURE file for agent: {failure_error}")
+
+
+def _format_failure_content_for_agent(exception: Exception) -> str:
+    """Format exception information for FAILURE file that agent can analyze"""
+    failure_lines = []
+    failure_lines.append("=" * 80)
+    failure_lines.append("TASK EXECUTION FAILURE")
+    failure_lines.append("=" * 80)
+    failure_lines.append(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    failure_lines.append(f"Exception Type: {exception.__class__.__name__}")
+    failure_lines.append(f"Exception Message: {str(exception)}")
+    failure_lines.append("")
+
+    # Add TaskExecutionError details if available
+    if isinstance(exception, TaskExecutionError):
+        failure_lines.append("TASK EXECUTION DETAILS:")
+        failure_lines.append(f"  Task Name: {exception.task_name}")
+        failure_lines.append(f"  Task Description: {exception.task_description}")
+        failure_lines.append(f"  Task Location: {exception.task_location}")
+        failure_lines.append(f"  Artifact Directory: {exception.artifact_dir}")
+        if exception.original_exception:
+            failure_lines.append(
+                f"  Original Exception: {exception.original_exception.__class__.__name__}"
+            )
+            failure_lines.append(f"  Original Message: {str(exception.original_exception)}")
+        failure_lines.append("")
+
+    # Add environment context
+    failure_lines.append("ENVIRONMENT CONTEXT:")
+    if env.ARTIFACT_DIR:
+        failure_lines.append(f"  Artifact Directory: {env.ARTIFACT_DIR}")
+    failure_lines.append("")
+
+    # Add stack trace
+    failure_lines.append("STACK TRACE:")
+    failure_lines.append("-" * 40)
+    import traceback
+
+    failure_lines.append(traceback.format_exc())
+
+    failure_lines.append("=" * 80)
+
+    return "\n".join(failure_lines)

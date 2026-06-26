@@ -1,5 +1,8 @@
+# Name of the workspace (must exist)
+workspace: forge-sandbox
+
 # Experiment name (created if missing).
-experiment: kpouget
+experiment: sandbox
 
 # New run: optional display name for the run in the MLflow UI.
 run_name: gpu-a100-batch-001

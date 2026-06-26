@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from projects.core.dsl import (
     always,
     entrypoint,
@@ -247,12 +249,46 @@ def capture_final_job_status(args, ctx):
     if not hasattr(ctx, "final_job_name"):
         return "No job name available - skipping status capture"
 
+    # Save to fournos_jobs directory for notification pickup
+    fournos_jobs_dir = args.artifact_dir / "fournos_jobs"
+    shell.mkdir(fournos_jobs_dir)
+    job_file = fournos_jobs_dir / f"{ctx.final_job_name}-final-status.yaml"
+
     # Get full job details
-    shell.run(
+    result = shell.run(
         f"oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml",
-        stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.final_job_name}-final-status.yaml",
+        stdout_dest=job_file,
         check=False,
     )
+
+    if not result.success:
+        return f"Failed to capture job status: {result.stderr or 'Unknown error'}"
+
+    # Clean up annotations from the saved YAML
+    try:
+        with open(job_file) as f:
+            job_data = yaml.safe_load(f)
+
+        # Remove unwanted annotations from the job
+        annotations_to_remove = [
+            "kopf.zalando.org/last-handled-configuration",
+            "kubectl.kubernetes.io/last-applied-configuration",
+        ]
+
+        if job_data and job_data.get("metadata", {}).get("annotations"):
+            for annotation in annotations_to_remove:
+                job_data["metadata"]["annotations"].pop(annotation, None)
+
+            # Remove empty annotations dict if it becomes empty
+            if not job_data["metadata"]["annotations"]:
+                del job_data["metadata"]["annotations"]
+
+        # Write cleaned YAML back to file
+        with open(job_file, "w") as f:
+            yaml.safe_dump(job_data, f, default_flow_style=False, sort_keys=False)
+
+    except Exception as e:
+        logger.warning(f"Failed to clean annotations from job status: {e}")
 
     return f"Final job status captured to {ctx.final_job_name}-final-status.yaml"
 
@@ -349,10 +385,11 @@ def capture_pod_specs(args, ctx):
     ns = args.namespace
     label = f"fournos.dev/job-name={fj_name}"
 
+    pods_file = artifact_dir / "pods.yaml"
     yaml_list = shell.run(
         f"oc get pods -l {label!r} -n {ns} -oyaml",
         check=False,
-        stdout_dest=artifact_dir / "pods.yaml",
+        stdout_dest=pods_file,
     )
     if not (yaml_list.success and yaml_list.stdout and yaml_list.stdout.strip()):
         return f"No pods for label {label!r} (or list failed): {yaml_list.stderr or ''}".strip()

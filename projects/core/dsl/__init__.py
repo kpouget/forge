@@ -5,7 +5,7 @@ Task-based DSL for FORGE operations
 from . import context, shell, template, toolbox
 from .runtime import clear_tasks, execute_tasks
 from .script_manager import get_script_manager, reset_script_manager
-from .task import RetryFailure, always, entrypoint, retry, task, when
+from .task import RetryFailure, always, entrypoint, on_failure, retry, task, when
 
 __all__ = [
     "always",
@@ -14,6 +14,7 @@ __all__ = [
     "entrypoint",
     "execute_tasks",
     "get_script_manager",
+    "on_failure",
     "reset_script_manager",
     "RetryFailure",
     "retry",

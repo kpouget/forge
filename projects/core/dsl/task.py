@@ -48,6 +48,65 @@ def _ensure_is_task(func, decorator_name):
     return True
 
 
+def _log_retry_attempt(
+    func,
+    attempt,
+    retry_attempts,
+    start_time,
+    current_delay,
+    retry_reason=None,
+    result=None,
+    exc=None,
+):
+    """
+    Log a retry attempt with consistent formatting.
+
+    Args:
+        func: The function being retried
+        attempt: Current attempt number (0-based)
+        retry_attempts: Total number of retry attempts
+        start_time: Time when retries started
+        current_delay: Delay before next retry
+        retry_reason: Optional reason for retry (from result tuple)
+        result: The result value that caused retry
+        exc: Exception that caused retry
+    """
+    elapsed_time = time.time() - start_time
+    elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
+
+    # Get source file and line number for logging
+    source_info = ""
+    try:
+        # Use the task info captured at definition time, not wrapper introspection
+        if hasattr(func, "_task_info") and "id" in func._task_info:
+            # task_info["id"] is in format "rel_filename:line_number"
+            source_info = func._task_info["id"]
+    except (OSError, TypeError):
+        # Source info not available, continue without it
+        pass
+
+    logger.info("")
+    logger.info("~" * LINE_WIDTH)
+    logger.info(f"~~ {source_info}")
+    logger.info(f"~~ TASK: {func.__name__}: {func.__doc__ or 'No description'}")
+
+    # Build retry message based on what caused the retry
+    if exc:
+        retry_reason = f"{exc.__class__.__name__}: {exc}"
+    elif retry_reason:
+        retry_reason = f"reason: {retry_reason}"
+    else:
+        retry_reason = f"returned: {result}"
+
+    logger.warning(f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} ({retry_reason})")
+    logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
+    logger.info(f"~~ RETRY in {current_delay:.0f}s")
+    logger.info("~" * LINE_WIDTH)
+    logger.info("")
+
+    time.sleep(current_delay)
+
+
 def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *args, **kwargs):
     """
     Execute a function with retry logic.
@@ -93,46 +152,15 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
 
             if should_retry:
                 if attempt < retry_attempts - 1:  # Not the last attempt
-                    elapsed_time = time.time() - start_time
-                    elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
-
-                    # Get source file and line number for logging
-                    source_info = ""
-                    try:
-                        source_file = inspect.getsourcefile(func)
-                        source_lines = inspect.getsourcelines(func)
-                        line_number = source_lines[1]
-                        if source_file:
-                            # Convert to relative path if it's within the project
-                            if "/forge/" in source_file:
-                                rel_path = source_file.split("/forge/", 1)[1]
-                                source_info = f"{rel_path}:{line_number} "
-                            else:
-                                source_info = f"{source_file}:{line_number} "
-                    except (OSError, TypeError):
-                        # Source info not available, continue without it
-                        pass
-
-                    logger.info("")
-                    logger.info("~" * LINE_WIDTH)
-                    logger.info(f"~~ {source_info}")
-                    logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
-                    # Show reason if provided, otherwise show the returned value
-                    if retry_reason:
-                        logger.warning(
-                            f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (reason: {retry_reason})"
-                        )
-                    else:
-                        logger.warning(
-                            f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
-                        )
-
-                    logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
-                    logger.info(f"~~ RETRY in {current_delay:.0f}s")
-                    logger.info("~" * LINE_WIDTH)
-                    time.sleep(current_delay)
-                    logger.info("")
-
+                    _log_retry_attempt(
+                        func,
+                        attempt,
+                        retry_attempts,
+                        start_time,
+                        current_delay,
+                        retry_reason=retry_reason,
+                        result=result,
+                    )
                     current_delay *= retry_backoff
                 else:
                     elapsed_time = time.time() - start_time
@@ -176,40 +204,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                     f"{func.__doc__ or 'No description'} (last error: {exc.__class__.__name__}: {exc})"
                 ) from exc
 
-            elapsed_time = time.time() - start_time
-            elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
-
-            # Get source file and line number for logging
-            source_info = ""
-            try:
-                source_file = inspect.getsourcefile(func)
-                source_lines = inspect.getsourcelines(func)
-                line_number = source_lines[1]
-                if source_file:
-                    # Convert to relative path if it's within the project
-                    if "/forge/" in source_file:
-                        rel_path = source_file.split("/forge/", 1)[1]
-                        source_info = f"~~ {rel_path}:{line_number} "
-                    else:
-                        source_info = f"~~ {source_file}:{line_number} "
-            except (OSError, TypeError):
-                # Source info not available, continue without it
-                pass
-
-            logger.info("")
-            logger.info("~" * LINE_WIDTH)
-            logger.info(
-                f"{source_info}~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}"
-            )
-            logger.warning(
-                f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} "
-                f"({exc.__class__.__name__}: {exc})"
-            )
-            logger.info(f"~~ ELAPSED TIME: {elapsed_mins:.0f}m {elapsed_secs:.0f}s")
-            logger.info(f"~~ RETRY in {current_delay:.0f}s")
-            logger.info("~" * LINE_WIDTH)
-            time.sleep(current_delay)
-            logger.info("")
+            _log_retry_attempt(func, attempt, retry_attempts, start_time, current_delay, exc=exc)
             current_delay *= retry_backoff
 
     raise RetryFailure(
@@ -314,7 +309,7 @@ def task(func):
         except (KeyboardInterrupt, SignalInterrupt):
             raise
         except Exception as e:
-            logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
+            logger.error(f"==> TASK EXCEPTION: {task_name}: {func.__doc__ or 'No description'}")
             logger.error(f"==> {e.__class__.__name__}: {e}")
             logger.info("")
             raise
@@ -414,6 +409,42 @@ def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
         # If this is already a registered task, update its retry config
         if hasattr(func, "_task_info"):
             func._task_info["retry_config"] = retry_config
+
+        return func
+
+    return decorator
+
+
+@task_only
+def on_failure(failure_handler_func):
+    """
+    On failure decorator for @task functions.
+
+    Must be applied to a function that is already decorated with @task.
+    The failure handler function will be called when the task fails.
+
+    Args:
+        failure_handler_func: Function to call on failure. Should accept (args, ctx, exception) parameters.
+
+    Usage:
+        def handle_deploy_failure(args, ctx, exception):
+            # Generate failure report
+            pass
+
+        @on_failure(handle_deploy_failure)
+        @task
+        def deploy_service(args, ctx):
+            # Task implementation
+            pass
+    """
+
+    def decorator(func):
+        # Store failure handler config on function
+        func._on_failure_handler = failure_handler_func
+
+        # If this is already a registered task, update its failure handler
+        if hasattr(func, "_task_info"):
+            func._task_info["on_failure_handler"] = failure_handler_func
 
         return func
 

@@ -7,9 +7,12 @@ import threading
 import traceback
 from datetime import datetime
 
+import yaml
+
 from projects.core.dsl.utils.k8s import sanitize_k8s_name
 from projects.core.library import config, env, run, vault
 from projects.core.library.run_parallel import Parallel
+from projects.core.notifications.send import get_ci_link
 from projects.fournos_launcher.orchestration import job_management, pr_args
 from projects.fournos_launcher.toolbox.cleanup_fjob.main import (
     run as cleanup_fjob,
@@ -52,6 +55,178 @@ def _setup_signal_handlers():
 
     except Exception as e:
         logger.warning(f"Failed to set up FOURNOS signal handlers: {e}")
+
+
+def generate_notification_files():
+    """Generate NOTIFICATION.html and NOTIFICATION.md files with job artifacts information."""
+    artifact_dir = pathlib.Path(env.ARTIFACT_DIR)
+
+    logger.info("Generating notification files with job artifacts information")
+
+    # Search for job files under fournos_jobs/* and parse for MLflow info and status
+    mlflow_urls = []
+    job_status_info = []
+    job_files = []
+
+    for job_file in artifact_dir.glob("**/fournos_jobs/*"):
+        if job_file.is_file() and job_file.name.endswith("-final-status.yaml"):
+            try:
+                with open(job_file) as f:
+                    status_data = yaml.safe_load(f)
+
+                # Extract job status info (message and phase)
+                job_status = status_data.get("status", {})
+                if job_status.get("message") or job_status.get("phase"):
+                    status_message = job_status.get("message", "")
+                    status_phase = job_status.get("phase", "Unknown")
+                    job_name = status_data.get("metadata", {}).get("name", job_file.stem)
+                    job_status_info.append((job_name, status_phase, status_message))
+
+                # Extract MLflow run URL if available
+                mlflow_info = (
+                    status_data.get("status", {})
+                    .get("engineStatus", {})
+                    .get("forge", {})
+                    .get("exportArtifacts", {})
+                    .get("caliper_artifacts_export", {})
+                    .get("backends", {})
+                    .get("mlflow", {})
+                )
+
+                if (
+                    mlflow_info
+                    and mlflow_info.get("status") == "success"
+                    and mlflow_info.get("run_url")
+                ):
+                    run_url = mlflow_info["run_url"]
+                    run_name = mlflow_info.get("run_name", "MLflow run")
+                    experiment_name = mlflow_info.get("experiment_name", "experiment")
+                    mlflow_urls.append((run_name, run_url, experiment_name))
+                    logger.info(f"Found MLflow URL in {job_file.name}: {run_url}")
+
+                # Always also include a link to the raw job file for reference
+                rel_path = job_file.relative_to(artifact_dir)
+                ci_link = get_ci_link(str(rel_path), is_raw_file=True)
+                job_files.append((job_file.name, ci_link))
+
+            except Exception as e:
+                logger.warning("Failed to parse job status from %s: %s", job_file, e)
+                # On parse error, fall back to showing the job file link
+                rel_path = job_file.relative_to(artifact_dir)
+                ci_link = get_ci_link(str(rel_path), is_raw_file=True)
+                job_files.append((job_file.name, ci_link))
+        elif job_file.is_file():
+            # Non-status files, just show as links
+            rel_path = job_file.relative_to(artifact_dir)
+            ci_link = get_ci_link(str(rel_path), is_raw_file=True)
+            job_files.append((job_file.name, ci_link))
+
+    # Search for log files under task_logs/*
+    log_files = []
+    for log_file in artifact_dir.glob("**/task_logs/*"):
+        if log_file.is_file():
+            # Get relative path from artifact_dir for the CI link
+            rel_path = log_file.relative_to(artifact_dir)
+            # Generate absolute CI link for the log file
+            ci_link = get_ci_link(str(rel_path), is_raw_file=True)
+            log_files.append((log_file.name, ci_link))
+
+    if mlflow_urls or job_status_info or job_files or log_files:
+        if mlflow_urls:
+            logger.info(f"Found {len(mlflow_urls)} MLflow runs")
+        if job_status_info:
+            logger.info(f"Found {len(job_status_info)} job status summaries")
+        if job_files:
+            logger.info(f"Found {len(job_files)} job files")
+        if log_files:
+            logger.info(f"Found {len(log_files)} log files")
+
+        # Generate HTML notification for GitHub
+        html_content = ""
+
+        if job_status_info:
+            html_content += "• **FOURNOS Job Status**:\n"
+            for job_name, phase, message in job_status_info:
+                status_emoji = "✅" if phase == "Succeeded" else "❌"
+                html_content += f"  - {status_emoji} **{job_name}**: {phase}"
+                if message:
+                    html_content += f" - {message}"
+                html_content += "\n"
+
+        if mlflow_urls:
+            if html_content:
+                html_content += "\n"
+            html_content += "• **MLflow Tracking**:\n"
+            for run_name, run_url, experiment_name in mlflow_urls:
+                html_content += f"  - [{run_name} ({experiment_name})]({run_url})\n"
+
+        if job_files:
+            if html_content:
+                html_content += "\n"
+            html_content += "• **FOURNOS Job Details**:\n"
+            for job_name, job_url in job_files:
+                html_content += f"  - [{job_name}]({job_url})\n"
+
+        if log_files:
+            if html_content:
+                html_content += "\n"
+            html_content += "• **Task Logs**:\n"
+            for log_name, log_url in log_files:
+                html_content += f"  - [{log_name}]({log_url})\n"
+
+        html_file = artifact_dir / "NOTIFICATION.html"
+        try:
+            with open(html_file, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            logger.info(f"Generated GitHub notification: {html_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write NOTIFICATION.html: {e}")
+
+        # Generate Markdown notification for Slack
+        md_content = ""
+
+        if job_status_info:
+            md_content += "• *FOURNOS Job Status*:\n"
+            for job_name, phase, message in job_status_info:
+                status_emoji = ":white_check_mark:" if phase == "Succeeded" else ":x:"
+                md_content += f"  - {status_emoji} *{job_name}*: {phase}"
+                if message:
+                    md_content += f" - {message}"
+                md_content += "\n"
+
+        if mlflow_urls:
+            if md_content:
+                md_content += "\n"
+            md_content += "• *MLflow Tracking*:\n"
+            for run_name, run_url, experiment_name in mlflow_urls:
+                md_content += f"  - <{run_url}|{run_name} ({experiment_name})>\n"
+
+        if job_files:
+            if md_content:
+                md_content += "\n"
+            md_content += "• *FOURNOS Job Details*:\n"
+            for job_name, job_url in job_files:
+                md_content += f"  - <{job_url}|{job_name}>\n"
+
+        if log_files:
+            if md_content:
+                md_content += "\n"
+            md_content += "• *Task Logs*:\n"
+            for log_name, log_url in log_files:
+                # For Slack, use the absolute CI link
+                md_content += f"  - <{log_url}|{log_name}>\n"
+
+        md_file = artifact_dir / "NOTIFICATION.md"
+        try:
+            with open(md_file, "w", encoding="utf-8") as f:
+                f.write(md_content)
+            logger.info(f"Generated Slack notification: {md_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write NOTIFICATION.md: {e}")
+    else:
+        logger.info(
+            "No job status, MLflow runs, job files, or log files found, skipping notification generation"
+        )
 
 
 def init():
@@ -229,6 +404,9 @@ def submit_job():
                 except Exception as cleanup_e:
                     logger.warning(f"Failed to cleanup job {job_name}: {cleanup_e}")
 
+        # Generate notification files regardless of success/failure
+        generate_notification_files()
+
         # Check if any jobs failed
         if has_failures[0]:
             logger.error("One or more parallel jobs failed")
@@ -257,6 +435,9 @@ def submit_job():
         except Exception as e:
             logger.error(f"Single job failed: {e}")
             return_code = 1
+
+        # Generate notification files regardless of success/failure
+        generate_notification_files()
 
         # Cleanup the job
         try:
