@@ -7,7 +7,18 @@ import logging
 
 import yaml
 
-from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
+from projects.core.dsl import (
+    always,
+    entrypoint,
+    execute_tasks,
+    on_failure,
+    retry,
+    shell,
+    task,
+    template,
+)
+
+from .on_failure_helpers import handle_installplan_failure
 
 logger = logging.getLogger("DSL")
 
@@ -374,6 +385,7 @@ def apply_subscription(args, ctx):
     return f"Applied Subscription for {ctx.display_name}"
 
 
+@on_failure(handle_installplan_failure)
 @retry(attempts=30, delay=10)
 @task
 def wait_for_installplan(args, ctx):
@@ -391,6 +403,19 @@ def wait_for_installplan(args, ctx):
         return (False, f"Failed to get subscription {args.package_name}")
 
     subscription_data = yaml.safe_load(result.stdout)
+
+    # Check for ResolutionFailed condition in any position
+    conditions = subscription_data.get("status", {}).get("conditions", [])
+    for condition in conditions:
+        condition_type = condition.get("type", "")
+        if condition_type == "ResolutionFailed":
+            condition_message = condition.get("message", "No message provided")
+            condition_reason = condition.get("reason", "No reason provided")
+            raise ValueError(
+                f"Subscription {args.package_name} has ResolutionFailed condition: "
+                f"Reason: {condition_reason}, Message: {condition_message}"
+            )
+
     install_plan_ref = subscription_data.get("status", {}).get("installPlanRef", {})
 
     if not install_plan_ref or not install_plan_ref.get("name"):
