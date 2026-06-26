@@ -113,6 +113,7 @@ spec:
           value: export-artifacts
         - name: job-step-name
           value: 004__export-artifacts
-        # Force the artifacts export to run after the cleanups
-        - name: status-report
-          value: "$(tasks.003-post-cleanup.results.status)"
+          # this will instruct FORGET to wait for the post-cleanup to
+          # finish before exporting the artifacts
+        - name: forge-wait-for-step
+          value: 003__post-cleanup

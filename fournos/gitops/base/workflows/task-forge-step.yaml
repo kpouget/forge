@@ -20,6 +20,10 @@ spec:
     - name: always-send-notification
       type: string
       default: "false"
+    - name: forge-wait-for-step
+      type: string
+      default: "false"
+
   steps:
     - name: forge
       image: image-registry.openshift-image-registry.svc:5000/$(context.taskRun.namespace)/forge-core:latest
@@ -41,6 +45,9 @@ spec:
         value: "true"
       - name: PSAP_FORGE_ALWAYS_SEND_NOTIFICATION
         value: "$(params.always-send-notification)"
+      - name: PSAP_FORGE_WAIT_FOR_STEP
+        value: "$(params.forge-wait-for-step)"
+
       volumeMounts:
         - name: kubeconfig
           mountPath: /var/run/secrets/fournos-kubeconfig

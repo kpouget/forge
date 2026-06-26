@@ -23,12 +23,3 @@ content:
   password:
     description: |
       the mlflow password, so that the CI engine can censor it in the logs
-
-  aws.credentials:
-    description: |
-       the AWS credential file:
-    sample: |
-      [default]
-      aws_access_key_id = "..."
-      aws_secret_access_key = "..."
-      region = "..."
