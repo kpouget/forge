@@ -551,9 +551,7 @@ def log_multi_run_artifacts(
 
             for run_dir in sorted(run_dirs):
                 child_name = (
-                    child_run_names.get(run_dir, run_dir.name)
-                    if child_run_names
-                    else run_dir.name
+                    child_run_names.get(run_dir, run_dir.name) if child_run_names else run_dir.name
                 )
 
                 with mlflow.start_run(run_name=child_name, nested=True):
