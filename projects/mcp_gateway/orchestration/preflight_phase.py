@@ -297,8 +297,13 @@ def _cleanup_probe(*, namespace: str, api_group: str) -> None:
 
 
 def _normalize_version(version: str) -> str:
-    """Normalize a version string for comparison (strip leading 'v', whitespace)."""
+    """Normalize a version string for comparison.
+
+    Strips whitespace, leading ``v``, and the ``sha-`` prefix that ghcr.io
+    image tags use (e.g. ``sha-7ce4c58…`` → ``7ce4c58…``).
+    """
     v = version.strip().lstrip("v")
+    v = re.sub(r"^sha-", "", v)
     match = re.match(r"(\d+\.\d+\.\d+)", v)
     return match.group(1) if match else v
 
