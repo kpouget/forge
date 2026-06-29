@@ -17,6 +17,7 @@ import click
 import yaml
 
 from projects.caliper.orchestration.export import run_from_orchestration_config
+from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env, run
 
@@ -252,7 +253,7 @@ def _create_mlflow_url(mlflow_run_url: str, step_dir_name: str) -> str | None:
 
 def _read_step_duration(step_dir: Path) -> str:
     """Read step duration from timing file."""
-    timing_file = step_dir / "000__ci_metadata" / "test_duration.yaml"
+    timing_file = step_dir / CI_METADATA_DIRNAME / "test_duration.yaml"
     if not timing_file.exists():
         return ""
 
@@ -269,7 +270,7 @@ def _read_step_duration(step_dir: Path) -> str:
 
 def _process_notification_files(step_dir: Path, step_log_links: list[str]) -> None:
     """Process notification files from step directory."""
-    notifications_dir = step_dir / "000__ci_metadata" / "notifications"
+    notifications_dir = step_dir / CI_METADATA_DIRNAME / "notifications"
     if not (notifications_dir.exists() and notifications_dir.is_dir()):
         return
 
@@ -305,7 +306,7 @@ def _process_step_logs(mlflow_run_url: str) -> list[str]:
     parent_dir = Path(env.BASE_ARTIFACT_DIR).parent
     current_step_name = Path(env.BASE_ARTIFACT_DIR).name
 
-    for step_dir in parent_dir.iterdir():
+    for step_dir in sorted(parent_dir.iterdir()):
         if not step_dir.is_dir():
             continue
         if step_dir.name.startswith("."):
@@ -343,7 +344,7 @@ def _process_step_logs(mlflow_run_url: str) -> list[str]:
 def _read_step_exit_status(step_dir: Path, current_step_name: str | None = None) -> str:
     """Read exit status from step directory and return appropriate emoji."""
     try:
-        exit_status_file = step_dir / "000__ci_metadata" / "exit_status.yaml"
+        exit_status_file = step_dir / CI_METADATA_DIRNAME / "exit_status.yaml"
         if not exit_status_file.exists():
             # Check if this is the current ongoing step
             if current_step_name and step_dir.name == current_step_name:
@@ -387,14 +388,14 @@ def _build_enhanced_notification(
 
         if artifact_links:
             notification_parts.append("")
-            notification_parts.append("**Artifact Links:**")
+            notification_parts.append("**Artifact Links**")
             notification_parts.extend([f"* {link}" for link in artifact_links])
         else:
             notification_parts.append("**Artifact Links:** No direct links available")
 
         if step_log_links:
             notification_parts.append("")
-            notification_parts.append("**Test Logs:**")
+            notification_parts.append("**Test Logs**")
             notification_parts.extend(step_log_links)
 
     except Exception as e:
