@@ -133,7 +133,7 @@ spec:
         - name: job-step
           value: export-artifacts
         - name: job-step-name
-          value: 04__export-artifacts
+          value: 05__export-artifacts
           # this will instruct FORGET to wait for the post-cleanup to
           # finish before exporting the artifacts
         - name: forge-wait-for-step
