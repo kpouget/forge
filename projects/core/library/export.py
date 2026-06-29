@@ -136,226 +136,272 @@ def send_notification(status: dict[str, Any]) -> None:
         logger.warning(f"Failed to send GitHub notification: {e}")
 
 
-def _build_enhanced_notification(
-    project: str, finish_reason: FinishReason, duration_str: str, status: dict[str, Any]
-) -> str:
-    """Build enhanced notification with fournos job config and artifact links."""
-
-    # Get project and args from fournos job or fallback to config
+def _get_project_and_args(project: str) -> tuple[str, str]:
+    """Extract project name and args from fournos job or config."""
     fjob_project = project
     fjob_args_str = ""
 
     try:
-        if env.BASE_ARTIFACT_DIR:
-            fournos_fjob_path = (
-                Path(env.BASE_ARTIFACT_DIR) / "000__ci_metadata" / "fournos_fjob.yaml"
-            )
-            if fournos_fjob_path.exists():
-                with open(fournos_fjob_path, encoding="utf-8") as f:
-                    fjob_data = yaml.safe_load(f)
+        metadata_dir = ci_lib.get_ci_metadata_dir()
+        fournos_fjob_path = metadata_dir / "fournos_fjob.yaml"
+        if not fournos_fjob_path.exists():
+            return fjob_project, fjob_args_str
 
-                # Extract project and args from fournos job display name if available
-                display_name = fjob_data.get("spec", {}).get("displayName", "")
-                if display_name:
-                    # Display name format is typically "project args"
-                    parts = display_name.split()
-                    if parts:
-                        fjob_project = parts[0]
-                        fjob_args_str = " ".join(parts[1:]) if len(parts) > 1 else ""
+        with open(fournos_fjob_path, encoding="utf-8") as f:
+            fjob_data = yaml.safe_load(f)
+
+        display_name = fjob_data.get("spec", {}).get("displayName", "")
+        if not display_name:
+            return fjob_project, fjob_args_str
+
+        parts = display_name.split()
+        if not parts:
+            return fjob_project, fjob_args_str
+
+        fjob_project = parts[0]
+        fjob_args_str = " ".join(parts[1:]) if len(parts) > 1 else ""
     except Exception as e:
         logger.warning(f"Failed to read fournos job for project/args: {e}")
 
-    # Fallback to config if fournos job didn't provide values
-    if not fjob_args_str:
-        try:
-            from projects.core.library import config
+    if fjob_args_str:
+        return fjob_project, fjob_args_str
 
-            job_args = config.project.get_config("ci_job.args", default=[])
-            fjob_args_str = " ".join(job_args) if job_args else ""
-        except Exception:
-            fjob_args_str = ""
-
-    # Base status message with proper formatting
-    status_emoji = "🟢" if finish_reason == FinishReason.SUCCESS else "🔴"
-    base_status = f"{status_emoji} Testing of `{fjob_project}` {fjob_args_str} {status_emoji}"
-
-    notification_parts = [base_status]
-
-    # 1. Read fournos job execution engine config
     try:
-        if env.BASE_ARTIFACT_DIR:
-            fournos_fjob_path = (
-                Path(env.BASE_ARTIFACT_DIR) / "000__ci_metadata" / "fournos_fjob.yaml"
-            )
-            if fournos_fjob_path.exists():
-                with open(fournos_fjob_path, encoding="utf-8") as f:
-                    fjob_data = yaml.safe_load(f)
+        from projects.core.library import config
 
-                execution_engine = fjob_data.get("spec", {}).get("executionEngine", {})
-                if execution_engine:
-                    # Format execution engine as code block
-                    engine_yaml = yaml.dump(
-                        execution_engine, default_flow_style=False, sort_keys=True
-                    )
-                    notification_parts.append("**Execution Engine Configuration:**")
-                    notification_parts.append(f"```yaml\n{engine_yaml.strip()}\n```")
+        job_args = config.project.get_config("ci_job.args")
+        fjob_args_str = " ".join(job_args) if job_args else ""
+    except Exception as e:
+        logger.warning(f"Failed to get args from config: {e}")
+
+    return fjob_project, fjob_args_str
+
+
+def _get_execution_engine_config() -> str | None:
+    """Read and format execution engine configuration."""
+    try:
+        metadata_dir = ci_lib.get_ci_metadata_dir()
+        fournos_fjob_path = metadata_dir / "fournos_fjob.yaml"
+        if not fournos_fjob_path.exists():
+            return None
+
+        with open(fournos_fjob_path, encoding="utf-8") as f:
+            fjob_data = yaml.safe_load(f)
+
+        execution_engine = fjob_data.get("spec", {}).get("executionEngine", {})
+        if not execution_engine:
+            return None
+
+        engine_yaml = yaml.dump(execution_engine, default_flow_style=False, sort_keys=True)
+        return f"```yaml\n{engine_yaml.strip()}\n```"
     except Exception as e:
         logger.warning(f"Failed to read fournos job config: {e}")
+        return None
 
-    # 2. Extract artifact links from caliper status
+
+def _extract_artifact_links(status: dict[str, Any]) -> tuple[list[str], str | None]:
+    """Extract artifact links and MLflow URL from status."""
+    artifact_links = []
+    mlflow_run_url = None
+
+    caliper_export = status.get("caliper_artifacts_export", {})
+    backends = caliper_export.get("backends", {})
+
+    for backend_name, backend_result in backends.items():
+        if not isinstance(backend_result, dict):
+            continue
+
+        if backend_result.get("experiment_url"):
+            artifact_links.append(
+                f"[{backend_name} Experiment]({backend_result['experiment_url']})"
+            )
+
+        if backend_result.get("run_url"):
+            mlflow_run_url = backend_result["run_url"]
+            artifact_links.append(f"[{backend_name} Results]({mlflow_run_url})")
+        elif backend_result.get("artifact_url"):
+            artifact_links.append(f"[{backend_name} Artifacts]({backend_result['artifact_url']})")
+        elif backend_result.get("dashboard_url"):
+            artifact_links.append(f"[{backend_name} Dashboard]({backend_result['dashboard_url']})")
+
+    if status.get("artifact_url"):
+        artifact_links.append(f"[Artifacts]({status['artifact_url']})")
+
+    return artifact_links, mlflow_run_url
+
+
+def _create_mlflow_url(mlflow_run_url: str, step_dir_name: str) -> str | None:
+    """Create MLflow URL for step logs."""
+    if "/artifacts" not in mlflow_run_url:
+        logger.warning(f"Unexpected MLflow URL format: {mlflow_run_url}")
+        return None
+
+    if "#" in mlflow_run_url:
+        base_domain, hash_fragment = mlflow_run_url.split("#", 1)
+        if "/artifacts" not in hash_fragment:
+            raise ValueError("Artifacts not found in hash fragment")
+
+        hash_base, params = hash_fragment.split("/artifacts", 1)
+        workspace_param = params if "?workspace=" in params else ""
+        return f"{base_domain}#{hash_base}/artifacts/{step_dir_name}/run.log{workspace_param}"
+    else:
+        base_url, params = mlflow_run_url.split("/artifacts", 1)
+        workspace_param = params if "?workspace=" in params else ""
+        return f"{base_url}/artifacts/{step_dir_name}/run.log{workspace_param}"
+
+
+def _read_step_duration(step_dir: Path) -> str:
+    """Read step duration from timing file."""
+    timing_file = step_dir / "000__ci_metadata" / "test_duration.yaml"
+    if not timing_file.exists():
+        return ""
+
     try:
-        artifact_links = []
-        step_log_links = []
-        mlflow_run_url = None
+        with open(timing_file, encoding="utf-8") as f:
+            timing_data = yaml.safe_load(f)
 
-        # Look for backend results with URLs or artifact references in caliper_artifacts_export
-        caliper_export = status.get("caliper_artifacts_export", {})
-        backends = caliper_export.get("backends", {})
-        for backend_name, backend_result in backends.items():
-            if isinstance(backend_result, dict):
-                # Check for MLflow experiment_url
-                if backend_result.get("experiment_url"):
-                    artifact_links.append(
-                        f"[{backend_name} Experiment]({backend_result['experiment_url']})"
-                    )
-                # Check for run_url - store it for step log links
-                if backend_result.get("run_url"):
-                    mlflow_run_url = backend_result["run_url"]
-                    artifact_links.append(f"[{backend_name} Results]({mlflow_run_url})")
-                # Check for other URLs
-                elif backend_result.get("artifact_url"):
-                    artifact_links.append(
-                        f"[{backend_name} Artifacts]({backend_result['artifact_url']})"
-                    )
-                elif backend_result.get("dashboard_url"):
-                    artifact_links.append(
-                        f"[{backend_name} Dashboard]({backend_result['dashboard_url']})"
-                    )
+        formatted_duration = timing_data.get("duration", {}).get("formatted")
+        return formatted_duration or ""
+    except Exception as timing_error:
+        logger.warning(f"Failed to read timing file {timing_file}: {timing_error}")
+        return ""
 
-        # Look for general artifact paths or URLs in status
-        if status.get("artifact_url"):
-            artifact_links.append(f"[Artifacts]({status['artifact_url']})")
 
-        # Browse parent directory for other step run.log files and link them to MLflow
-        if not env.BASE_ARTIFACT_DIR:
-            logging.error("BASE_ARTIFACT_DIR not set set, cannot generate the notification")
-            return "(couldn't generate the notification)"
-        if not mlflow_run_url:
-            logging.error("mlflow_run_url not set set, cannot generate the notification")
-            return "(couldn't generate the notification)"
+def _process_notification_files(step_dir: Path, step_log_links: list[str]) -> None:
+    """Process notification files from step directory."""
+    notifications_dir = step_dir / "000__ci_metadata" / "notifications"
+    if not (notifications_dir.exists() and notifications_dir.is_dir()):
+        return
 
-        parent_dir = Path(env.BASE_ARTIFACT_DIR).parent
-        current_step_name = Path(env.BASE_ARTIFACT_DIR).name
+    import re
 
-        for step_dir in parent_dir.iterdir():
-            if not step_dir.is_dir():
+    for notification_file in sorted(notifications_dir.glob("*.txt")):
+        try:
+            with open(notification_file, encoding="utf-8") as f:
+                content = f.read().strip()
+
+            if not content:
                 continue
 
-            if step_dir.name == current_step_name:
+            subtitle = notification_file.stem.replace("__", " ").replace("_", " ").title()
+            subtitle = re.sub(r"^\d+\s+", "", subtitle)
+            step_log_links.append(f"##### {subtitle}")
+
+            for line in content.splitlines():
+                step_log_links.append(f"> {line}")
+
+        except Exception as file_error:
+            logger.warning(f"Failed to read notification file {notification_file}: {file_error}")
+            continue
+
+
+def _process_step_logs(mlflow_run_url: str) -> list[str]:
+    """Process step logs from parent directory."""
+    if not mlflow_run_url:
+        logging.warning("mlflow_run_url not set, skipping step log browsing")
+        return []
+
+    step_log_links = []
+    parent_dir = Path(env.BASE_ARTIFACT_DIR).parent
+    current_step_name = Path(env.BASE_ARTIFACT_DIR).name
+
+    for step_dir in parent_dir.iterdir():
+        if not step_dir.is_dir():
+            continue
+        if step_dir.name.startswith("."):
+            continue
+
+        run_log = step_dir / "run.log"
+        if not run_log.exists():
+            continue
+
+        try:
+            mlflow_log_url = _create_mlflow_url(mlflow_run_url, step_dir.name)
+            if not mlflow_log_url:
                 continue
 
-            if step_dir.name.startswith("."):
-                continue
+            step_name = step_dir.name.replace("__", " ").replace("_", " ").title()
+            duration_str = _read_step_duration(step_dir)
+            exit_status_emoji = _read_step_exit_status(step_dir, current_step_name)
 
-            run_log = step_dir / "run.log"
+            if duration_str:
+                step_log_links.append(
+                    f"#### {exit_status_emoji} [{step_name}]({mlflow_log_url}) `{duration_str}`"
+                )
+            else:
+                step_log_links.append(f"#### {exit_status_emoji} [{step_name}]({mlflow_log_url})")
 
-            # Guard: Skip if run.log doesn't exist
-            if not run_log.exists():
-                continue
+            _process_notification_files(step_dir, step_log_links)
 
-            # Create MLflow URL with proper artifact path structure
-            try:
-                # Parse mlflow_run_url to extract base and workspace parameter
-                # Expected format: https://mlflow.../artifacts?workspace=...
-                if "/artifacts" in mlflow_run_url:
-                    base_url, params = mlflow_run_url.split("/artifacts", 1)
+        except Exception as e:
+            logger.warning(f"Failed to create MLflow link for {run_log}: {e}")
+            continue
 
-                    # Extract workspace parameter if present
-                    workspace_param = ""
-                    if "?workspace=" in params:
-                        workspace_param = params  # Keep the ?workspace=... part
+    return step_log_links
 
-                    # Construct proper MLflow artifact URL
-                    mlflow_log_url = (
-                        f"{base_url}/artifacts/{step_dir.name}/run.log{workspace_param}"
-                    )
-                    step_name = step_dir.name.replace("__", " ").replace("_", " ").title()
 
-                    # Read timing information for this step
-                    duration_str = ""
-                    timing_file = step_dir / "000__ci_metadata" / "test_duration.yaml"
-                    if timing_file.exists():
-                        try:
-                            with open(timing_file, encoding="utf-8") as f:
-                                timing_data = yaml.safe_load(f)
+def _read_step_exit_status(step_dir: Path, current_step_name: str | None = None) -> str:
+    """Read exit status from step directory and return appropriate emoji."""
+    try:
+        exit_status_file = step_dir / "000__ci_metadata" / "exit_status.yaml"
+        if not exit_status_file.exists():
+            # Check if this is the current ongoing step
+            if current_step_name and step_dir.name == current_step_name:
+                return "🔄"  # Ongoing step
+            return "❓"  # Unknown status if file doesn't exist
 
-                            # Extract duration in seconds
-                            duration_seconds = timing_data.get("duration", {}).get("seconds")
-                            if duration_seconds:
-                                # Convert to HH:MM:SS format
-                                hours = duration_seconds // 3600
-                                minutes = (duration_seconds % 3600) // 60
-                                seconds = duration_seconds % 60
-                                duration_str = f" ({hours:02d}:{minutes:02d}:{seconds:02d})"
-                        except Exception as timing_error:
-                            logger.warning(
-                                f"Failed to read timing file {timing_file}: {timing_error}"
-                            )
+        with open(exit_status_file, encoding="utf-8") as f:
+            exit_data = yaml.safe_load(f)
 
-                    step_log_links.append(f"[{step_name} Log{duration_str}]({mlflow_log_url})")
+        return_code = exit_data.get("return_code")
+        if return_code is None or return_code == 0:
+            return "✅"
+        else:
+            return "❌"
+    except Exception as e:
+        logger.warning(f"Failed to read exit status from {step_dir}: {e}")
+        # Check if this is the current ongoing step even on error
+        if current_step_name and step_dir.name == current_step_name:
+            return "🔄"  # Ongoing step
+        return "❓"  # Unknown status on error
 
-                    notifications_dir = step_dir / "000__ci_metadata" / "notifications"
 
-                    if not (notifications_dir.exists() and notifications_dir.is_dir()):
-                        continue
+def _build_enhanced_notification(
+    project: str, finish_reason: FinishReason, duration_str: str, status: dict[str, Any]
+) -> str:
+    """Build enhanced notification with fournos job config and artifact links."""
+    fjob_project, fjob_args_str = _get_project_and_args(project)
 
-                    for notification_file in sorted(notifications_dir.glob("*.txt")):
-                        try:
-                            with open(notification_file, encoding="utf-8") as f:
-                                content = f.read().strip()
+    status_emoji = "🟢" if finish_reason == FinishReason.SUCCESS else "🔴"
+    base_status = f"<strong>{status_emoji} Execution of `{fjob_project}` {fjob_args_str} {status_emoji}</strong>"
+    notification_parts = [base_status, "---"]
 
-                            if not content:
-                                continue
+    execution_engine_config = _get_execution_engine_config()
+    if execution_engine_config:
+        notification_parts.append("**Execution Engine Configuration**")
+        notification_parts.append(execution_engine_config)
 
-                            # Create subtitle from filename (remove extension, clean up formatting)
-                            subtitle = (
-                                notification_file.stem.replace("__", " ").replace("_", " ").title()
-                            )
-                            step_log_links.append(f"**{subtitle}:**")
+    try:
+        artifact_links, mlflow_run_url = _extract_artifact_links(status)
+        step_log_links = _process_step_logs(mlflow_run_url)
 
-                            # Add content with '>' prefix for each line
-                            for line in content.splitlines():
-                                step_log_links.append(f"> {line}")
-
-                        except Exception as file_error:
-                            logger.warning(
-                                f"Failed to read notification file {notification_file}: {file_error}"
-                            )
-                            continue
-                else:
-                    logger.warning(f"Unexpected MLflow URL format: {mlflow_run_url}")
-                    continue
-            except Exception as e:
-                logger.warning(f"Failed to create MLflow link for {run_log}: {e}")
-                continue
-
-        # Add artifact links section
         if artifact_links:
+            notification_parts.append("")
             notification_parts.append("**Artifact Links:**")
             notification_parts.extend([f"* {link}" for link in artifact_links])
         else:
             notification_parts.append("**Artifact Links:** No direct links available")
 
-        # Add test logs section
         if step_log_links:
+            notification_parts.append("")
             notification_parts.append("**Test Logs:**")
-            notification_parts.extend([f"* {link}" for link in step_log_links])
+            notification_parts.extend(step_log_links)
 
     except Exception as e:
         logger.warning(f"Failed to extract artifact links: {e}")
         notification_parts.append("**Artifact Links:** Error extracting links")
 
-    return "\n\n".join(notification_parts)
+    return "\n".join(notification_parts)
 
 
 def _extract_project_from_status(status: dict[str, Any]) -> str:
