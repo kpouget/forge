@@ -280,24 +280,47 @@ def _build_enhanced_notification(
                         f"{base_url}/artifacts/{step_dir.name}/run.log{workspace_param}"
                     )
                     step_name = step_dir.name.replace("__", " ").replace("_", " ").title()
-                    step_log_links.append(f"[{step_name} Log]({mlflow_log_url})")
+
+                    # Read timing information for this step
+                    duration_str = ""
+                    timing_file = step_dir / "000__ci_metadata" / "test_duration.yaml"
+                    if timing_file.exists():
+                        try:
+                            with open(timing_file, encoding="utf-8") as f:
+                                timing_data = yaml.safe_load(f)
+
+                            # Extract duration in seconds
+                            duration_seconds = timing_data.get("duration", {}).get("seconds")
+                            if duration_seconds:
+                                # Convert to HH:MM:SS format
+                                hours = duration_seconds // 3600
+                                minutes = (duration_seconds % 3600) // 60
+                                seconds = duration_seconds % 60
+                                duration_str = f" ({hours:02d}:{minutes:02d}:{seconds:02d})"
+                        except Exception as timing_error:
+                            logger.warning(
+                                f"Failed to read timing file {timing_file}: {timing_error}"
+                            )
+
+                    step_log_links.append(f"[{step_name} Log{duration_str}]({mlflow_log_url})")
 
                     notifications_dir = step_dir / "000__ci_metadata" / "notifications"
 
-                    if not (notifications_dir.exists() and notifications_dir.is_dir()) :
+                    if not (notifications_dir.exists() and notifications_dir.is_dir()):
                         continue
-
 
                     for notification_file in sorted(notifications_dir.glob("*.txt")):
                         try:
-                            with open(notification_file, 'r', encoding='utf-8') as f:
+                            with open(notification_file, encoding="utf-8") as f:
                                 content = f.read().strip()
 
                             if not content:
                                 continue
 
                             # Create subtitle from filename (remove extension, clean up formatting)
-                            subtitle = notification_file.stem.replace("__", " ").replace("_", " ").title()
+                            subtitle = (
+                                notification_file.stem.replace("__", " ").replace("_", " ").title()
+                            )
                             step_log_links.append(f"**{subtitle}:**")
 
                             # Add content with '>' prefix for each line
@@ -305,7 +328,9 @@ def _build_enhanced_notification(
                                 step_log_links.append(f"> {line}")
 
                         except Exception as file_error:
-                            logger.warning(f"Failed to read notification file {notification_file}: {file_error}")
+                            logger.warning(
+                                f"Failed to read notification file {notification_file}: {file_error}"
+                            )
                             continue
                 else:
                     logger.warning(f"Unexpected MLflow URL format: {mlflow_run_url}")
