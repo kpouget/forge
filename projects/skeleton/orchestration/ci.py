@@ -87,6 +87,17 @@ def post_cleanup(ctx):
     return prepare_skeleton.cleanup()
 
 
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+def preflight_check(ctx) -> int:
+    """Preflight check phase - Validate that the cluster if ready for testing."""
+
+    logger.warning("Nothing so far for the preflight check")
+
+    return 0
+
+
 main.add_command(caliper_export_entrypoint)
 main.add_command(caliper_replot_entrypoint)
 

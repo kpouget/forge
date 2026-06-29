@@ -17,7 +17,7 @@ spec:
       type: string
 
   tasks:
-    - name: 000-pre-cleanup
+    - name: 00-pre-cleanup
       taskRef:
         name: forge-step
         kind: Task
@@ -34,10 +34,10 @@ spec:
         - name: job-step
           value: pre-cleanup
         - name: job-step-name
-          value: 000__pre-cleanup
+          value: 00__pre-cleanup
 
-    - name: 001-prepare
-      runAfter: [000-pre-cleanup]
+    - name: 01-prepare
+      runAfter: [00-pre-cleanup]
       taskRef:
         name: forge-step
         kind: Task
@@ -54,10 +54,10 @@ spec:
         - name: job-step
           value: prepare
         - name: job-step-name
-          value: 001__prepare
+          value: 01__prepare
 
-    - name: 002-test
-      runAfter: [001-prepare]
+    - name: 02-preflight
+      runAfter: [01-prepare]
       taskRef:
         name: forge-step
         kind: Task
@@ -72,12 +72,32 @@ spec:
         - name: kubeconfig-secret
           value: "$(params.kubeconfig-secret)"
         - name: job-step
-          value: test
+          value: preflight
         - name: job-step-name
-          value: 002__test
+          value: 02__preflight
+
+    - name: 02-test
+      runAfter: [02-preflight]
+      taskRef:
+        name: forge-step
+        kind: Task
+      workspaces:
+        - name: artifacts
+          workspace: artifacts
+      params:
+        - name: fjob-name
+          value: "$(params.fjob-name)"
+        - name: fournos-workload-namespace
+          value: "$(params.fournos-workload-namespace)"
+        - name: kubeconfig-secret
+          value: "$(params.kubeconfig-secret)"
+        - name: job-step
+          value: preflight
+        - name: job-step-name
+          value: 02__test
 
   finally:
-    - name: 003-post-cleanup
+    - name: 04-post-cleanup
       taskRef:
         name: forge-step
         kind: Task
@@ -94,9 +114,9 @@ spec:
         - name: job-step
           value: post-cleanup
         - name: job-step-name
-          value: 003__post-cleanup
+          value: 04__post-cleanup
 
-    - name: 004-export-artifacts
+    - name: 05-export-artifacts
       taskRef:
         name: forge-step
         kind: Task
@@ -113,8 +133,8 @@ spec:
         - name: job-step
           value: export-artifacts
         - name: job-step-name
-          value: 004__export-artifacts
+          value: 04__export-artifacts
           # this will instruct FORGET to wait for the post-cleanup to
           # finish before exporting the artifacts
         - name: forge-wait-for-step
-          value: 003__post-cleanup
+          value: 04__post-cleanup

@@ -17,7 +17,26 @@ spec:
     - name: kubeconfig-secret
       type: string
   tasks:
-    - name: 000-test
+    - name: 00-preflight
+      taskRef:
+        name: forge-step
+        kind: Task
+      workspaces:
+        - name: artifacts
+          workspace: artifacts
+      params:
+        - name: fjob-name
+          value: "$(params.fjob-name)"
+        - name: fournos-workload-namespace
+          value: "$(params.fournos-workload-namespace)"
+        - name: kubeconfig-secret
+          value: "$(params.kubeconfig-secret)"
+        - name: job-step
+          value: preflight
+        - name: job-step-name
+          value: 00__preflight
+
+    - name: 01-test
       taskRef:
         name: forge-step
         kind: Task
@@ -34,10 +53,10 @@ spec:
         - name: job-step
           value: test
         - name: job-step-name
-          value: 000__test
+          value: 01__test
 
   finally:
-    - name: 001-export-artifacts
+    - name: 02-export-artifacts
       taskRef:
         name: forge-step
         kind: Task
@@ -54,4 +73,4 @@ spec:
         - name: job-step
           value: export-artifacts
         - name: job-step-name
-          value: 001__export-artifacts
+          value: 02__export-artifacts

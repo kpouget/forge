@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 import types
 
 import click
@@ -11,6 +12,8 @@ from projects.core.library import ci as ci_lib
 from projects.core.library import vault
 from projects.core.library.export import caliper_export_entrypoint
 from projects.rhaiis.orchestration import runtime_config
+
+logger = logging.getLogger(__name__)
 
 
 def list_vaults() -> list[str]:
@@ -83,6 +86,17 @@ def pre_cleanup(ctx):
 def post_cleanup(ctx):
     """Post-cleanup phase - Clean up resources after test."""
     return prepare_rhaiis.cleanup()
+
+
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+def preflight_check(ctx) -> int:
+    """Preflight check phase - Validate that the cluster if ready for testing."""
+
+    logger.warning("Nothing so far for the preflight check")
+
+    return 0
 
 
 main.add_command(caliper_export_entrypoint)
