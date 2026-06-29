@@ -6,6 +6,7 @@ import inspect
 import logging
 import os
 import threading
+import time
 import types
 from datetime import datetime
 from pathlib import Path
@@ -86,6 +87,8 @@ def execute_tasks(function_args: dict = None):
     Args:
         function_args: Dictionary of function arguments (from locals())
     """
+    # Track the start time for elapsed time calculations
+    start_time = time.time()
 
     # Get the command name from the caller file path for artifact directory naming
     frame = inspect.currentframe()
@@ -179,7 +182,7 @@ def execute_tasks(function_args: dict = None):
             try:
                 while task_index < len(file_tasks):
                     current_task_info = file_tasks[task_index]
-                    _execute_single_task(current_task_info, args, shared_context)
+                    _execute_single_task(current_task_info, args, shared_context, start_time)
                     task_index += 1
 
             except (KeyboardInterrupt, SignalInterrupt):
@@ -237,7 +240,7 @@ def execute_tasks(function_args: dict = None):
                     logger.info("~" * 80)
                     continue
                 try:
-                    _execute_single_task(current_task_info, args, shared_context)
+                    _execute_single_task(current_task_info, args, shared_context, start_time)
 
                 except EarlyReturnException:
                     # EarlyReturn from @always task - just log and continue with other @always tasks
@@ -293,7 +296,7 @@ def execute_tasks(function_args: dict = None):
                 del _thread_local_handlers.file_handler
 
 
-def _execute_single_task(task_info, args, shared_context):
+def _execute_single_task(task_info, args, shared_context, start_time=None):
     """Execute a single task with condition checking"""
     task_name = task_info["name"]
     task_func = task_info["func"]
@@ -315,7 +318,12 @@ def _execute_single_task(task_info, args, shared_context):
         rel_definition_filename = co_filename
 
     log_task_header(
-        task_name, original_func.__doc__, rel_definition_filename, co_firstlineno, suffix
+        task_name,
+        original_func.__doc__,
+        rel_definition_filename,
+        co_firstlineno,
+        suffix,
+        start_time,
     )
 
     # Check condition if present
