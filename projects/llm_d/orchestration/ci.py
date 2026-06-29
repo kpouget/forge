@@ -63,7 +63,7 @@ def prepare(ctx) -> int:
 @click.pass_context
 @ci_lib.safe_ci_command
 @agent_review_on_failure
-def preflight_check(ctx) -> int:
+def preflight(ctx) -> int:
     """Preflight check phase - Validate that the cluster if ready for testing."""
 
     logger.warning("Nothing so far for the preflight check")

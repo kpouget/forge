@@ -90,7 +90,7 @@ def post_cleanup(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
-def preflight_check(ctx) -> int:
+def preflight(ctx) -> int:
     """Preflight check phase - Validate that the cluster if ready for testing."""
 
     logger.warning("Nothing so far for the preflight check")
