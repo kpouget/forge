@@ -8,6 +8,7 @@ import yaml
 
 import projects.core.notifications.github.api as github_api
 import projects.core.notifications.slack.api as slack_api
+from projects.core.library import ci as ci_lib
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,7 @@ def _get_notification_content(artifact_dir: pathlib.Path, get_link, get_bold) ->
     Returns:
         Formatted notification content string
     """
-    notifications_dir = artifact_dir / "000__ci_metadata" / "notifications"
+    notifications_dir = ci_lib.get_ci_metadata_dir() / "notifications"
     failures_file = artifact_dir / "FAILURES"
 
     # Guard: Check if notifications directory exists
@@ -354,11 +355,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
         except Exception as e:
             logger.warning("Failed to read NOTIFICATION.html: %s", e)
 
-    if (
-        var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
-        / "000__ci_metadata"
-        / "pr_config.txt"
-    ).exists():
+    if (var_over := ci_lib.get_ci_metadata_dir() / "pr_config.txt").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
@@ -366,11 +363,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 {f.read().strip()}
 ```
 """
-    elif (
-        var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
-        / "000__ci_metadata"
-        / "variable_overrides.yaml"
-    ).exists():
+    elif (var_over := ci_lib.get_ci_metadata_dir() / "variable_overrides.yaml").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
