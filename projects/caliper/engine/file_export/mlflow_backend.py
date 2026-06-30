@@ -523,6 +523,7 @@ def log_multi_run_artifacts(
             )
 
         parent_meta: dict[str, Any] | None = None
+        child_runs_meta: list[dict[str, Any]] = []
         client = mlflow.tracking.MlflowClient()
 
         start_kw: dict[str, Any] = {}
@@ -595,7 +596,17 @@ def log_multi_run_artifacts(
                     if child_url:
                         logger.info("  Child run %s: %s", child_name, child_url)
 
+                    child_entry: dict[str, Any] = {
+                        "run_id": child_rid,
+                        "run_name": child_name,
+                    }
+                    if child_url:
+                        child_entry["run_url"] = child_url
+                    child_runs_meta.append(child_entry)
+
             parent_meta = _capture_mlflow_run_metadata(tu, workspace=workspace)
+            if child_runs_meta:
+                parent_meta["child_runs"] = child_runs_meta
 
         if verbose:
             logger.info("MLflow multi-run upload finished (%s)", mlflow.get_tracking_uri())

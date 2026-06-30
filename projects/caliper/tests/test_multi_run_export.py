@@ -466,6 +466,60 @@ class TestMultiRunMlflowLogging:
         assert tag_dict.get("forge.multi_run") == "true"
         assert tag_dict.get("forge.child_count") == "2"
 
+    def test_child_run_metadata_in_status(self, artifact_tree: Path, mock_mlflow):
+        """Returned metadata should include child_runs with run_id and run_name."""
+        from projects.caliper.engine.file_export.mlflow_backend import (
+            log_multi_run_artifacts,
+        )
+
+        run_dirs = _discover_run_dirs(artifact_tree)
+
+        child_run_ids = iter(["child-id-1", "child-id-2"])
+
+        def _active_run_side_effect():
+            mock = MagicMock()
+            mock.info.run_id = next(child_run_ids, "fallback-id")
+            return mock
+
+        mock_mlflow.active_run.side_effect = _active_run_side_effect
+
+        mock_client = mock_mlflow.tracking.MlflowClient.return_value
+        mock_get_run = MagicMock()
+        mock_get_run.info.run_name = "test-parent"
+        mock_get_run.data.tags = {}
+        mock_client.get_run.return_value = mock_get_run
+
+        mock_exp = MagicMock()
+        mock_exp.name = "test-experiment"
+        mock_client.get_experiment.return_value = mock_exp
+
+        _, meta = log_multi_run_artifacts(
+            all_artifact_paths=[],
+            artifact_root=artifact_tree,
+            run_dirs=run_dirs,
+            metrics_file=METRICS_FILE,
+            parameters_file=PARAMETERS_FILE,
+            tracking_uri="http://test-mlflow:5000",
+            experiment="test-experiment",
+            parent_run_name="test-parent",
+        )
+
+        assert meta is not None
+        assert "child_runs" in meta
+
+        child_runs = meta["child_runs"]
+        assert len(child_runs) == 2
+
+        child_names = sorted(c["run_name"] for c in child_runs)
+        assert child_names == ["mcp-smoke-s1-u16-gateway", "mcp-smoke-s1-u64-gateway"]
+
+        child_ids = {c["run_id"] for c in child_runs}
+        assert child_ids == {"child-id-1", "child-id-2"}
+
+        for child in child_runs:
+            assert "run_id" in child
+            assert "run_name" in child
+
 
 # ---------------------------------------------------------------------------
 # Test: workspace propagation
