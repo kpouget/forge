@@ -418,9 +418,7 @@ class TestMultiRunMlflowLogging:
         child_a_artifacts = [c for c in log_artifact_calls if c.args[0] == "child-run-a"]
         child_b_artifacts = [c for c in log_artifact_calls if c.args[0] == "child-run-b"]
 
-        assert len(parent_artifacts) == len(all_files), (
-            "Parent run should receive all artifacts"
-        )
+        assert len(parent_artifacts) == len(all_files), "Parent run should receive all artifacts"
 
         run_a = sorted(run_dirs)[0]
         run_b = sorted(run_dirs)[1]
