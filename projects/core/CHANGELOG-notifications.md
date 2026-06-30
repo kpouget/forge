@@ -1,5 +1,35 @@
 # Core Notifications Changelog
 
+## 2026-06-30 - Export Artifacts Notification Integration
+
+### Export Notification Features
+- **Automated Export Notifications**: Added comprehensive notification system for artifact export completion
+  - **Status Reporting**: Clear success/failure indicators with detailed export status information
+  - **MLflow Integration**: Automatic extraction and linking of MLflow experiment and run URLs
+  - **Step Log Browser**: Enhanced step-by-step execution logs with status indicators and duration tracking
+  - **Artifact Links**: Direct links to exported artifacts and dashboards for immediate access
+
+### Enhanced Step Tracking
+- **Visual Status Indicators**: Step logs now show clear status with emojis (✅ success, ❌ failure, 🔄 ongoing, ❓ unknown)
+  - **Current Step Detection**: Automatically identifies ongoing export step with spinning arrow indicator
+  - **Sorted Log Display**: Step logs displayed in chronological order for better navigation
+  - **Duration Display**: Shows execution time for completed steps
+
+### GitHub Integration
+- **Rich Notification Format**: Structured GitHub notifications with collapsible details sections
+  - **Execution Engine Config**: Displays FournosJob execution configuration in notifications
+  - **Artifact Directory**: Comprehensive artifact link collection with proper categorization
+  - **FournosJob Status**: Updates FournosJob status with export artifacts results
+
+### Files Modified
+- `projects/core/library/export.py` - Added comprehensive export notification system with MLflow and step log integration
+
+### Benefits
+- **Immediate Export Feedback**: Users receive detailed notifications when artifact exports complete
+- **Rich Context**: Notifications include MLflow URLs, execution logs, and step-by-step progress
+- **Better Debugging**: Enhanced step status tracking helps identify export issues quickly
+- **Seamless Integration**: Automatic integration with existing GitHub notification workflow
+
 ## 2026-06-24 - Notification System Improvements
 
 ### Enhanced Features
