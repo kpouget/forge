@@ -477,7 +477,9 @@ def log_multi_run_artifacts(
 ) -> tuple[str, dict[str, Any] | None]:
     """Create a parent MLflow run with all artifacts and nested child runs per test directory.
 
-    All artifacts are uploaded to both the parent run and each child run.
+    The parent run receives every artifact.  Each child run receives only the
+    files that live under its own ``run_dir`` subtree, so artifacts are never
+    duplicated across children.
     If ``child_run_names`` is provided, those names are used instead of ``run_dir.name``.
     """
     try:
@@ -554,6 +556,11 @@ def log_multi_run_artifacts(
                     child_run_names.get(run_dir, run_dir.name) if child_run_names else run_dir.name
                 )
 
+                resolved_run_dir = run_dir.resolve()
+                child_files = [
+                    p for p in file_paths if p.resolve().is_relative_to(resolved_run_dir)
+                ]
+
                 with mlflow.start_run(run_name=child_name, nested=True):
                     child_rid = mlflow.active_run().info.run_id
 
@@ -571,12 +578,19 @@ def log_multi_run_artifacts(
                     _upload_mlflow_files_parallel(
                         client=client,
                         run_id=child_rid,
-                        file_paths=file_paths,
+                        file_paths=child_files,
                         artifact_root=artifact_root,
                         upload_workers=upload_workers,
                         verbose=verbose,
                     )
 
+                    if verbose:
+                        logger.info(
+                            "  Child run %s: %d artifact(s) (of %d total)",
+                            child_name,
+                            len(child_files),
+                            len(file_paths),
+                        )
                     child_url, _ = _mlflow_ui_links(tu, eid, child_rid, workspace=workspace)
                     if child_url:
                         logger.info("  Child run %s: %s", child_name, child_url)
