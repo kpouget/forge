@@ -144,8 +144,9 @@ def send_github_notification(
 
         # Build structured notification
         presets = " ".join(job_args) if job_args else ""
+        status_verb = "succeeded" if success else "failed"
         notification_status = f"""<details>
-<summary>{status_flag} Submission of <code>{project_name} {presets}</code> finished <code>{duration_str.strip()}</code> {status_flag}</summary>
+<summary>{status_flag} Submission of <code>{project_name} {presets}</code> {status_verb} <code>{duration_str.strip()}</code> {status_flag}</summary>
 
 * [OCPCI Test results]({ocpci_results_link})
 {task_logs_section}
