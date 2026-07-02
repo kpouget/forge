@@ -335,6 +335,9 @@ def _run_multi_run_export(
     experiment = merged_ml.get("experiment")
     run_name = resolved_parent_name or merged_ml.get("run_name")
     workspace = merged_ml.get("workspace")
+    if not workspace:
+        raise ValueError("The export workspace must be specified")
+
     meta = project_metadata_fields(merged_ml)
     run_metadata = meta if meta else None
 
@@ -345,7 +348,7 @@ def _run_multi_run_export(
         click.echo(f"  Source: {from_path}", err=True)
         click.echo(f"  Total artifact files: {len(all_artifact_paths)}", err=True)
         click.echo(f"  Run directories: {len(run_dirs)}", err=True)
-        click.echo(f"  Workspace: {workspace or '(default)'}", err=True)
+        click.echo(f"  Workspace: {workspace}", err=True)
         for rd in run_dirs:
             click.echo(f"    - {rd.name}", err=True)
         click.echo("", err=True)
