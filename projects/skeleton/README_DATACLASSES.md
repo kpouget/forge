@@ -49,7 +49,7 @@ class SkeletonKpiCatalogEntry:
     name: str
     unit: str
     higher_is_better: bool
-    is_2d: bool
+    is_curve: bool
     help: str = ""
     x_unit: str = ""
     x_help: str = ""
@@ -137,7 +137,7 @@ catalog = SkeletonKpiHandler.get_catalog()
 #     "name": "Throughput",
 #     "unit": "req/s",
 #     "higher_is_better": true,
-#     "is_2d": false,
+#     "is_curve": false,
 #     "help": "Number of requests processed per second"
 # }
 ```
