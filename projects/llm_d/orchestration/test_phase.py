@@ -803,6 +803,7 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
                 pvc_size=benchmark.get("pvc_size"),
                 pvc_storage_class=benchmark.get("pvc_storage_class"),
                 guidellm_args=guidellm_args,
+                use_pvc=benchmark.get("use_pvc"),
             )
     finally:
         # Add benchmark end timing (even if benchmark failed)
