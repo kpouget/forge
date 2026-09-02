@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from projects.caliper.engine.kpi.analyze import AnalysisConfig
+from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -108,7 +109,7 @@ class SkeletonDefaultPlugin(PostProcessingPlugin):
             "optional": {},
         }
 
-    def kpi_catalog(self) -> list[dict[str, object]]:
+    def kpi_catalog(self) -> list[KpiCatalogEntry]:
         """Return catalog of available KPIs for hierarchical formatting."""
         return self.kpi_handler.get_catalog()
 
