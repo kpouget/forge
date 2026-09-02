@@ -287,13 +287,21 @@ TEST_LABELS_FILENAME = "__test_labels__.yaml"
     experiment="caliper.export.backend.mlflow.config.experiment",
     workspace="caliper.export.backend.mlflow.config.workspace",
 )
-def precreate_mlflow_run_if_configured(_cfg) -> dict[str, str] | None:
+def precreate_mlflow_run_if_configured(_cfg, force=False) -> dict[str, str] | None:
     """Pre-create an MLflow run and return the ``mlflow_destination`` dict.
 
     Uses ``@requires`` to read vault and MLflow config from the project config.
     Returns ``None`` if MLflow is not configured or pre-creation fails.
     The returned dict contains ``run_id``, ``experiment_id``, and ``workspace``.
+
+    Args:
+      force: if not forced, precreate only on FournosCI
     """
+
+    if not (force or env.running_inside_fournos()):
+        logging.info("Not running inside FOURNOS CI, skipping the MLFLow run_id precreation.")
+        return
+
     vault_name = _cfg.vault_name
     vault_key = _cfg.vault_key
     if not vault_name or not vault_key:
