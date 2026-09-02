@@ -780,6 +780,7 @@ def run_smoke_request(*, endpoint_url: str) -> dict[str, object]:
 def run_guidellm_benchmark(*, endpoint_url: str) -> None:
     namespace = runtime_config.get_namespace()
     benchmark = runtime_config.get_benchmark_config()
+    workload = runtime_config.get_workload_config()
 
     if benchmark is None:
         return
@@ -792,6 +793,12 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         guidellm_args = build_guidellm_args(benchmark)
         if not any(arg.startswith("--processor=") for arg in guidellm_args):
             guidellm_args.append(f"--processor={runtime_config.get_model_name()}")
+
+        # Get fs_group from workload config
+        fs_group = None
+        if workload:
+            fs_group = workload.get("fs_group")
+
         artifact_name = f"benchmark_{slugify_identifier(benchmark_key, max_length=48)}"
         with env.NextArtifactDir(artifact_name):
             run_guidellm_benchmark_command.run(
@@ -803,6 +810,7 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
                 pvc_size=benchmark.get("pvc_size"),
                 pvc_storage_class=benchmark.get("pvc_storage_class"),
                 guidellm_args=guidellm_args,
+                fs_group=fs_group,
                 use_pvc=benchmark.get("use_pvc"),
             )
     finally:
