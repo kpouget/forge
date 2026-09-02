@@ -107,12 +107,12 @@ class SkeletonKpiHandler:
         return datetime.now(UTC).strftime("%Y-%m-%d")
 
     @staticmethod
-    def get_catalog() -> list[dict[str, Any]]:
+    def get_catalog() -> list[KpiCatalogEntry]:
         """
         Return the KPI catalog for skeleton metrics using dataclasses.
 
         Returns:
-            List of KPI catalog entries as dictionaries
+            List of KPI catalog entries as KpiCatalogEntry dataclasses
         """
         current_module = inspect.getmodule(SkeletonKpiHandler)
         raw_catalog = build_catalog_from_functions(current_module)
@@ -132,7 +132,7 @@ class SkeletonKpiHandler:
                 y_unit=entry.get("y_unit", ""),
                 y_help=entry.get("y_help", ""),
             )
-            catalog_entries.append(catalog_entry.to_dict())
+            catalog_entries.append(catalog_entry)
 
         return catalog_entries
 
@@ -203,7 +203,7 @@ class SkeletonKpiHandler:
                     ),
                 )
 
-                # Add 2D-specific metadata if applicable
+                # Add curve-specific metadata if applicable
                 if is_curve_kpi(kpi_func):
                     kpi_record.x_unit = kpi_func._kpi_x_unit
                     kpi_record.x_help = kpi_func._kpi_x_help
