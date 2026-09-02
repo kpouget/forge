@@ -474,6 +474,7 @@ def do_test() -> int:
 
         if not endpoint_url:
             raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
+
         run_smoke_request(endpoint_url=endpoint_url)
 
         run_guidellm_benchmark(endpoint_url=endpoint_url)
@@ -682,12 +683,16 @@ def deploy_inference_service_from_manifest(manifest_path: Path, actual_llmisvc_n
     # Get scheduling wait configuration
     wait_long_scheduling = config.project.get_config("runtime.kserve.wait_long_scheduling")
 
+    # Get monitoring configuration
+    deploy_monitor = config.project.get_config("deployments.defaults.enable_monitors")
+
     endpoint_url = deploy_llmisvc.run(
         namespace=namespace,
         inference_service_manifest_path=str(manifest_path),
         gateway_status_address_name=gateway_status_address_name,
         dry_run=dry_run,
         wait_long_scheduling=wait_long_scheduling,
+        deploy_monitor=deploy_monitor,
     )
 
     if dry_run:
