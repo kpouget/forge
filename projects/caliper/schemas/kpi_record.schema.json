@@ -8,8 +8,7 @@
     "unit",
     "run_id",
     "timestamp",
-    "labels",
-    "source"
+    "labels"
   ],
   "properties": {
     "schema_version": { "type": "string" },
@@ -19,13 +18,12 @@
     "run_id": { "type": "string" },
     "timestamp": { "type": "string" },
     "labels": { "type": "object" },
-    "source": {
-      "type": "object",
-      "properties": {
-        "test_base_path": { "type": "string" },
-        "plugin_module": { "type": "string" }
-      }
-    }
+    "higher_is_better": { "type": "boolean" },
+    "is_curve": { "type": "boolean" },
+    "x_unit": { "type": "string" },
+    "x_help": { "type": "string" },
+    "y_unit": { "type": "string" },
+    "y_help": { "type": "string" }
   },
   "additionalProperties": true
 }
