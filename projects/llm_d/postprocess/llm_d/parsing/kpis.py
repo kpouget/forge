@@ -8,7 +8,6 @@ from typing import Any
 from projects.caliper.engine.kpi import (
     KpiCatalogEntry,
     KpiRecord,
-    SourceInfo,
     build_catalog_from_functions,
     get_kpi_functions,
     is_curve_kpi,
@@ -48,15 +47,15 @@ class GuideLLMKpiHandler:
 
     LABEL_EXTRACTOR = type("TestLabelExtractor", (), {"extract": _extract_labels})()
 
-    # Metadata fields to include in KPI records but not as labels
-    @staticmethod
-    def extract_metadata(record) -> dict[str, Any]:
-        """Extract metadata fields for KPI records."""
-        config = record.metrics.get("configuration", {})
-        return {
-            "configuration": config,
-            "run_path": record.test_base_path,
-        }
+     # Metadata fields to include in KPI records but not as labels
+     @staticmethod
+     def extract_metadata(record) -> dict[str, Any]:
+         """Extract metadata fields for KPI records."""
+         config = record.metrics.get("configuration", {})
+         return {
+             "configuration": config,
+             "run_path": record.test_base_path,
+         }
 
     @staticmethod
     def get_catalog() -> list[KpiCatalogEntry]:
@@ -69,26 +68,7 @@ class GuideLLMKpiHandler:
         # Import the module containing the KPI functions
         from projects.guidellm.postprocess.guidellm.parsing import kpis as guidellm_kpis
 
-        raw_catalog = build_catalog_from_functions(guidellm_kpis)
-
-        # Convert to structured dataclass format
-        catalog_entries = []
-        for entry in raw_catalog:
-            catalog_entry = KpiCatalogEntry(
-                kpi_id=entry.get("kpi_id", ""),
-                name=entry.get("name", ""),
-                unit=entry.get("unit", ""),
-                higher_is_better=entry.get("higher_is_better", True),
-                is_curve=entry.get("is_curve", False),
-                help=entry.get("help", ""),
-                x_unit=entry.get("x_unit", ""),
-                x_help=entry.get("x_help", ""),
-                y_unit=entry.get("y_unit", ""),
-                y_help=entry.get("y_help", ""),
-            )
-            catalog_entries.append(catalog_entry)
-
-        return catalog_entries
+        return build_catalog_from_functions(guidellm_kpis)
 
     @staticmethod
     def compute_kpis(
@@ -181,7 +161,6 @@ class GuideLLMKpiHandler:
 
                 # Create structured KPI record using core dataclass
                 kpi_record = KpiRecord(
-                    schema_version="1",
                     kpi_id=kpi_id,
                     value=value,  # Core enforces int|float only
                     unit=kpi_func._kpi_unit,
@@ -190,10 +169,6 @@ class GuideLLMKpiHandler:
                     labels=all_labels,
                     metadata=metadata_fields,
                     is_curve=False,  # Scalar KPI
-                    source=SourceInfo(
-                        test_base_path=r.test_base_path,
-                        plugin_module=model.plugin_module,
-                    ),
                 )
 
                 out.append(kpi_record.to_dict())
@@ -237,14 +212,10 @@ class GuideLLMKpiHandler:
                     labels=kpi_labels,
                     metadata=metadata_fields,
                     is_curve=True,  # curve KPI
-                    source=SourceInfo(
-                        test_base_path=r.test_base_path,
-                        plugin_module=model.plugin_module,
-                    ),
                     x_unit=kpi_func._kpi_x_unit,
                     x_help=kpi_func._kpi_x_help,
-                    y_unit=getattr(kpi_func, "_kpi_y_unit", None) or kpi_func._kpi_unit,
-                    y_help=getattr(kpi_func, "_kpi_y_help", None) or kpi_func._kpi_help,
+                    y_unit=kpi_func._kpi_y_unit,
+                    y_help=kpi_func._kpi_y_help,
                 )
 
                 out.append(kpi_record.to_dict())

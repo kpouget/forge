@@ -21,23 +21,6 @@ class OverallStatus(StrEnum):
     NO_TEST_PERFORMED = "NO_TEST_PERFORMED"
 
 
-@dataclass
-class SourceInfo:
-    """Source information for KPI records."""
-
-    test_base_path: str = ""
-    plugin_module: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> SourceInfo:
-        """Create SourceInfo from dictionary data."""
-        return cls(**data)
-
-
 class Algorithm(StrEnum):
     """Regression testing algorithms."""
 
@@ -64,7 +47,6 @@ class KpiRecord:
     higher_is_better: bool = True
     labels: dict[str, str] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
-    source: SourceInfo | None = None
     timestamp: str = ""
     run_id: str = ""
     is_curve: bool = False
@@ -85,17 +67,14 @@ class KpiRecord:
             result.pop("x_help", None)
             result.pop("y_unit", None)
             result.pop("y_help", None)
+        else:
+            result.pop("unit", None)
 
         return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KpiRecord:
         """Create KpiRecord from dictionary data."""
-        source_data = data.get("source")
-        if isinstance(source_data, dict):
-            source = SourceInfo.from_dict(source_data)
-        else:
-            source = source_data
 
         return cls(
             kpi_id=data["kpi_id"],
@@ -105,7 +84,6 @@ class KpiRecord:
             higher_is_better=data.get("higher_is_better", True),
             labels=data.get("labels", {}),
             metadata=data.get("metadata", {}),
-            source=source,
             timestamp=data.get("timestamp", ""),
             run_id=data.get("run_id", ""),
             is_curve=data.get("is_curve", False),
@@ -428,7 +406,6 @@ class TestMetadata:
     """Test metadata structure for hierarchical format."""
 
     timestamp: str = ""
-    source: SourceInfo | None = None
     run_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -438,15 +415,9 @@ class TestMetadata:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TestMetadata:
         """Create TestMetadata from dictionary data."""
-        source_data = data.get("source")
-        if isinstance(source_data, dict):
-            source = SourceInfo.from_dict(source_data)
-        else:
-            source = source_data
 
         return cls(
             timestamp=data.get("timestamp", ""),
-            source=source,
             run_id=data.get("run_id", ""),
         )
 
@@ -708,7 +679,6 @@ class MlflowConversionResult:
 # Export all public classes
 __all__ = [
     "OverallStatus",
-    "SourceInfo",
     "Algorithm",
     "Verdict",
     "KpiRecord",

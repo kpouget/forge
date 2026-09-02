@@ -12,7 +12,6 @@ from projects.caliper.engine.kpi.dataclasses import (
     HierarchicalKpi,
     HierarchicalKpiFormat,
     HierarchicalTestEntry,
-    SourceInfo,
     TestMetadata,
 )
 
@@ -77,14 +76,8 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> Hierarchic
 
         # Store test metadata from first KPI
         if not test_data.metadata.timestamp:
-            source_data = kpi.get("source")
-            source = None
-            if isinstance(source_data, dict) and source_data:
-                source = SourceInfo.from_dict(source_data)
-
             test_data.metadata = TestMetadata(
                 timestamp=kpi.get("timestamp", ""),
-                source=source,
                 run_id=run_id,
             )
 

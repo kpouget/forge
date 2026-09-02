@@ -9,7 +9,6 @@ from .dataclasses import (
     OverallStatus,
     RegressionFinding,
     RegressionReport,
-    SourceInfo,
     TestSummary,
 )
 from .decorators import (
@@ -31,7 +30,6 @@ __all__ = [
     "KpiCatalogEntry",
     "RegressionFinding",
     "RegressionReport",
-    "SourceInfo",
     # Status enum
     "OverallStatus",
     # Summary dataclasses
