@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from projects.caliper.engine.kpi.analyze import AnalysisConfig
+from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -39,6 +40,10 @@ class MCPGatewayPlugin(PostProcessingPlugin):
 
     def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:
         return self.kpi_handler.compute_kpis(model)
+
+    def kpi_catalog(self) -> list[KpiCatalogEntry]:
+        """Return catalog of available KPIs for hierarchical formatting."""
+        return self.kpi_handler.get_catalog()
 
 
 def get_plugin() -> PostProcessingPlugin:
