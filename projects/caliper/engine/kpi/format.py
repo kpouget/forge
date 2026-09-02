@@ -8,36 +8,46 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.kpi.dataclasses import (
+    HierarchicalKpi,
+    HierarchicalKpiFormat,
+    HierarchicalTestEntry,
+    TestMetadata,
+)
+
 logger = logging.getLogger(__name__)
 
 
-def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> dict:
+def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> HierarchicalKpiFormat:
     """
-    Transform flat KPI list into hierarchical JSON structure.
+    Transform flat KPI list into hierarchical JSON structure using dataclasses.
 
-    Groups KPIs by test (run_id), extracting common labels and organizing
-    KPI metadata (name, help, unit, etc.) for improved readability.
+    Groups KPIs by test (run_id) using HierarchicalTestEntry dataclasses,
+    with TestMetadata for test metadata and direct field access from
+    KpiCatalogEntry dataclasses for improved type safety.
 
     Args:
         kpis: List of flat KPI records from compute_kpis
         model: Unified model for accessing plugin metadata
 
     Returns:
-        Hierarchical JSON structure organized by test
+        HierarchicalKpiFormat dataclass containing structured test entries
+        with TestMetadata and KPI data
     """
 
     if not kpis:
-        return {"schema_version": "2", "tests": []}
+        return HierarchicalKpiFormat()
 
-    # Group KPIs by test (run_id)
-    tests_data = defaultdict(lambda: {"kpis": [], "labels": {}, "metadata": {}})
+    # Group KPIs by test (run_id) using dataclasses
+    tests_data: dict[str, HierarchicalTestEntry] = {}
 
     # Get KPI function metadata from the plugin module
 
     plugin_module_obj = __import__(model.plugin_module, fromlist=[""])
     kpi_catalog = plugin_module_obj.get_plugin().kpi_catalog()
 
-    kpi_models = {e["kpi_id"]: e for e in kpi_catalog}
+    # Build KPI models index from KpiCatalogEntry dataclasses
+    kpi_models = {entry.kpi_id: entry for entry in kpi_catalog}
 
     # First pass: determine which labels vary across KPIs in the same run
     run_label_values: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
@@ -54,26 +64,33 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> dict:
         kpi_model = kpi_models[kpi_id]
 
         run_id = kpi.get("run_id", "unknown")
+
+        # Get or create test entry using dataclass
+        if run_id not in tests_data:
+            tests_data[run_id] = HierarchicalTestEntry(run_id=run_id)
+
         test_data = tests_data[run_id]
 
-        if "labels" not in test_data:
-            test_data["labels"] = {}
-
-        test_data["labels"].update(kpi["labels"])
+        # Update labels
+        test_data.labels.update(kpi["labels"])
 
         # Store test metadata from first KPI
-        if not test_data["metadata"]:
-            test_data["metadata"] = {
-                "timestamp": kpi.get("timestamp"),
-                "source": kpi.get("source", {}),
-                "run_id": run_id,
-            }
+        if not test_data.metadata.timestamp:
+            source_data = kpi.get("source")
+            source = None
+            if isinstance(source_data, dict) and source_data:
+                source = SourceInfo.from_dict(source_data)
+
+            test_data.metadata = TestMetadata(
+                timestamp=kpi.get("timestamp", ""),
+                source=source,
+                run_id=run_id,
+            )
 
         raw_value = kpi.get("value")
-        is_curve = kpi_model["is_curve"]
 
         # Apply tuple-pair structural transform only for confirmed curve KPIs
-        if is_curve:
+        if kpi_model.is_curve:
             final_value = {
                 "data_points": [{"x": float(x), "y": float(y)} for x, y in raw_value],
                 "count": len(raw_value),
@@ -81,27 +98,33 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> dict:
         else:
             final_value = raw_value
 
-        kpi_record: dict[str, Any] = kpi_model.copy()
-        kpi_record["value"] = final_value
-
-        for fmt_key in "x_format", "y_format", "format":
-            kpi_record.pop(fmt_key, None)
-
-        test_data["kpis"].append(kpi_record)
-
-    # Convert to final structure
-    tests_list = []
-    for run_id, test_data in tests_data.items():
-        tests_list.append(
-            {
-                "run_id": run_id,
-                "labels": test_data["labels"],
-                "metadata": test_data["metadata"],
-                "kpis": test_data["kpis"],
-            }
+        # Build output record using HierarchicalKpi dataclass
+        kpi_output = HierarchicalKpi(
+            id=kpi_model.kpi_id,  # Use 'id' field for schema-v2 output
+            name=kpi_model.name,
+            value=final_value,
+            unit=kpi_model.unit,
+            higher_is_better=kpi_model.higher_is_better,
+            is_curve=kpi_model.is_curve,
+            help=kpi_model.help,
         )
 
-    return {"schema_version": "2", "tests": tests_list}
+        # Add curve-specific fields only if it's a curve KPI
+        if kpi_model.is_curve:
+            kpi_output.x_unit = kpi_model.x_unit
+            kpi_output.x_help = kpi_model.x_help
+            kpi_output.y_unit = kpi_model.y_unit
+            kpi_output.y_help = kpi_model.y_help
+
+        test_data.kpis.append(kpi_output)
+
+    # Convert to hierarchical format using dataclass
+    hierarchical_format = HierarchicalKpiFormat(
+        schema_version="2",
+        tests=list(tests_data.values()),
+    )
+
+    return hierarchical_format
 
 
 def write_kpis_in_format(
@@ -123,10 +146,10 @@ def write_kpis_in_format(
             raise ValueError("Model is required for hierarchical format")
 
         # Transform to hierarchical format (schema v2)
-        hierarchical_data = transform_kpis_to_hierarchical_format(kpis, model)
+        hierarchical_format = transform_kpis_to_hierarchical_format(kpis, model)
 
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(hierarchical_data, f, indent=2, ensure_ascii=False)
+            json.dump(hierarchical_format.to_dict(), f, indent=2, ensure_ascii=False)
             # Add EOL at EOF if we have data
             if kpis:
                 f.write("\n")

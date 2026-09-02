@@ -22,7 +22,8 @@ def test_hierarchical_format_merges_common_labels_from_all_kpis():
 
     output = transform_kpis_to_hierarchical_format(kpis, model)
 
-    assert output["tests"][0]["labels"] == {
+    # Test now returns HierarchicalKpiFormat dataclass instead of dict
+    assert output.tests[0].labels == {
         "model": "llama",
         "tensor_parallel_size": "2",
     }

@@ -14,114 +14,16 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .dataclasses import SourceInfo
+from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat
 
 logger = logging.getLogger(__name__)
 
 METRICS_FILE = "metrics.json"
 PARAMETERS_FILE = "parameters.json"
 TEST_LABELS_MARKER = "__test_labels__.yaml"
-
-
-@dataclass
-class HierarchicalKpi:
-    """KPI entry in hierarchical format (schema v2)."""
-
-    id: str  # KPI identifier (maps to kpi_id in flat format)  # noqa: A003
-    value: Any  # KPI value (scalar or structured)
-    name: str = ""
-    unit: str = ""
-    higher_is_better: bool = False
-    is_curve: bool = False
-    help: str = ""  # noqa: A003
-    description: str = ""
-    category: str = ""
-    tags: list[str] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpi:
-        """Create HierarchicalKpi from dictionary data."""
-        return cls(
-            id=data.get("id", ""),
-            value=data.get("value"),
-            name=data.get("name", ""),
-            unit=data.get("unit", ""),
-            higher_is_better=data.get("higher_is_better", False),
-            is_curve=data.get("is_curve", False),
-            help=data.get("help", ""),
-            description=data.get("description", ""),
-            category=data.get("category", ""),
-            tags=data.get("tags", []),
-        )
-
-
-@dataclass
-class TestMetadata:
-    """Test metadata in hierarchical format."""
-
-    timestamp: str | None = None
-    source: SourceInfo | None = None
-    run_id: str = ""
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> TestMetadata:
-        """Create TestMetadata from dictionary data."""
-        source_data = data.get("source")
-        source = SourceInfo.from_dict(source_data) if isinstance(source_data, dict) else None
-        return cls(
-            timestamp=data.get("timestamp"),
-            source=source,
-            run_id=data.get("run_id", ""),
-        )
-
-
-@dataclass
-class HierarchicalTest:
-    """Test entry in hierarchical format (schema v2)."""
-
-    run_id: str
-    labels: dict[str, Any]
-    metadata: TestMetadata
-    kpis: list[HierarchicalKpi] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> HierarchicalTest:
-        """Create HierarchicalTest from dictionary data."""
-        metadata_data = data.get("metadata", {})
-        metadata = TestMetadata.from_dict(metadata_data)
-
-        kpis_data = data.get("kpis", [])
-        kpis = [HierarchicalKpi.from_dict(kpi) for kpi in kpis_data]
-
-        return cls(
-            run_id=data.get("run_id", ""),
-            labels=data.get("labels", {}),
-            metadata=metadata,
-            kpis=kpis,
-        )
-
-
-@dataclass
-class HierarchicalKpiData:
-    """Hierarchical KPI document structure (schema v2)."""
-
-    schema_version: str
-    tests: list[HierarchicalTest] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpiData:
-        """Create HierarchicalKpiData from dictionary data."""
-        tests_data = data.get("tests", [])
-        tests = [HierarchicalTest.from_dict(test) for test in tests_data]
-
-        return cls(
-            schema_version=data.get("schema_version", ""),
-            tests=tests,
-        )
 
 
 def _build_run_dir_index(artifact_tree: Path) -> dict[str, Path]:
@@ -203,7 +105,7 @@ def generate_metrics_from_kpis(
 
     # Parse into typed dataclass structure
     try:
-        kpi_data = HierarchicalKpiData.from_dict(raw_data)
+        kpi_data = HierarchicalKpiFormat.from_dict(raw_data)
     except Exception as e:
         logger.error("Failed to parse KPI data: %s", e)
         return {"status": "skipped", "reason": f"Invalid KPI data structure: {e}"}
@@ -223,7 +125,11 @@ def generate_metrics_from_kpis(
         # Determine test base path for directory matching
         test_base_path = test.run_id
         if test.metadata.source:
-            test_base_path = test.metadata.source.test_base_path or test.run_id
+            # Handle case where source might still be a dict (defensive programming)
+            if isinstance(test.metadata.source, dict):
+                test_base_path = test.metadata.source.get("test_base_path") or test.run_id
+            else:
+                test_base_path = test.metadata.source.test_base_path or test.run_id
 
         run_dir = run_dir_index.get(test_base_path) or run_dir_index.get(test.run_id)
         if run_dir is None:

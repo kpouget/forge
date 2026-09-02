@@ -64,7 +64,7 @@ class KpiRecord:
     higher_is_better: bool = True
     labels: dict[str, str] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
-    source: dict[str, Any] = field(default_factory=dict)
+    source: SourceInfo | None = None
     timestamp: str = ""
     run_id: str = ""
     is_curve: bool = False
@@ -91,7 +91,29 @@ class KpiRecord:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KpiRecord:
         """Create KpiRecord from dictionary data."""
-        return cls(**data)
+        source_data = data.get("source")
+        if isinstance(source_data, dict):
+            source = SourceInfo.from_dict(source_data)
+        else:
+            source = source_data
+
+        return cls(
+            kpi_id=data["kpi_id"],
+            value=data["value"],
+            schema_version=data.get("schema_version", "1"),
+            unit=data.get("unit", ""),
+            higher_is_better=data.get("higher_is_better", True),
+            labels=data.get("labels", {}),
+            metadata=data.get("metadata", {}),
+            source=source,
+            timestamp=data.get("timestamp", ""),
+            run_id=data.get("run_id", ""),
+            is_curve=data.get("is_curve", False),
+            x_unit=data.get("x_unit", ""),
+            x_help=data.get("x_help", ""),
+            y_unit=data.get("y_unit", ""),
+            y_help=data.get("y_help", ""),
+        )
 
 
 @dataclass
@@ -402,6 +424,148 @@ class KpiCatalogEntry:
 
 
 @dataclass
+class TestMetadata:
+    """Test metadata structure for hierarchical format."""
+
+    timestamp: str = ""
+    source: SourceInfo | None = None
+    run_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TestMetadata:
+        """Create TestMetadata from dictionary data."""
+        source_data = data.get("source")
+        if isinstance(source_data, dict):
+            source = SourceInfo.from_dict(source_data)
+        else:
+            source = source_data
+
+        return cls(
+            timestamp=data.get("timestamp", ""),
+            source=source,
+            run_id=data.get("run_id", ""),
+        )
+
+
+@dataclass
+class HierarchicalTestEntry:
+    """Test entry in hierarchical KPI format."""
+
+    run_id: str
+    labels: dict[str, str] = field(default_factory=dict)
+    metadata: TestMetadata = field(default_factory=TestMetadata)
+    kpis: list[HierarchicalKpi] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result = asdict(self)
+        # Ensure metadata is properly serialized
+        if isinstance(self.metadata, TestMetadata):
+            result["metadata"] = self.metadata.to_dict()
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HierarchicalTestEntry:
+        """Create HierarchicalTestEntry from dictionary data."""
+        # Convert metadata if it's a dict
+        metadata_data = data.get("metadata", {})
+        if isinstance(metadata_data, dict):
+            metadata = TestMetadata.from_dict(metadata_data)
+        else:
+            metadata = metadata_data
+
+        # Convert kpis if they're dicts
+        kpis_data = data.get("kpis", [])
+        kpis = [
+            HierarchicalKpi.from_dict(kpi) if isinstance(kpi, dict) else kpi for kpi in kpis_data
+        ]
+
+        return cls(
+            run_id=data["run_id"],
+            labels=data.get("labels", {}),
+            metadata=metadata,
+            kpis=kpis,
+        )
+
+
+@dataclass
+class HierarchicalKpi:
+    """Individual KPI entry in hierarchical format."""
+
+    id: str  # KPI identifier (maps to kpi_id in flat format)  # noqa: A003
+    value: Any  # KPI value (scalar or structured)
+    name: str = ""
+    unit: str = ""
+    higher_is_better: bool = False
+    is_curve: bool = False
+    help: str = ""  # noqa: A003
+    description: str = ""
+    category: str = ""
+    tags: list[str] = field(default_factory=list)
+    # Curve KPI support fields
+    x_unit: str = ""
+    x_help: str = ""
+    y_unit: str = ""
+    y_help: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpi:
+        """Create HierarchicalKpi from dictionary data."""
+        return cls(
+            id=data.get("id", ""),
+            value=data.get("value"),
+            name=data.get("name", ""),
+            unit=data.get("unit", ""),
+            higher_is_better=data.get("higher_is_better", False),
+            is_curve=data.get("is_curve", False),
+            help=data.get("help", ""),
+            description=data.get("description", ""),
+            category=data.get("category", ""),
+            tags=data.get("tags", []),
+            x_unit=data.get("x_unit", ""),
+            x_help=data.get("x_help", ""),
+            y_unit=data.get("y_unit", ""),
+            y_help=data.get("y_help", ""),
+        )
+
+
+@dataclass
+class HierarchicalKpiFormat:
+    """Hierarchical KPI format structure (schema version 2)."""
+
+    schema_version: str = "2"
+    tests: list[HierarchicalTestEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "schema_version": self.schema_version,
+            "tests": [test.to_dict() for test in self.tests],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpiFormat:
+        """Create HierarchicalKpiFormat from dictionary data."""
+        tests_data = data.get("tests", [])
+        tests = [
+            HierarchicalTestEntry.from_dict(test) if isinstance(test, dict) else test
+            for test in tests_data
+        ]
+        return cls(
+            schema_version=data.get("schema_version", "2"),
+            tests=tests,
+        )
+
+
+@dataclass
 class CaliperTestMetadata:
     """Caliper test metadata structure for __caliper_test_metadata__.yaml files."""
 
@@ -517,6 +681,10 @@ __all__ = [
     "ResultBaselineValue",
     "RegressionReport",
     "KpiCatalogEntry",
+    "TestMetadata",
+    "HierarchicalKpi",
+    "HierarchicalTestEntry",
+    "HierarchicalKpiFormat",
     "CaliperTestMetadata",
     "CurrentValueInfo",
     "RegressionTestResult",
