@@ -17,27 +17,46 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.constants import (
+    LEGACY_METADATA_FILE,
+    METADATA_FILE,
+    METRICS_FILE,
+    PARAMETERS_FILE,
+)
 from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat
 
 logger = logging.getLogger(__name__)
 
-METRICS_FILE = "metrics.json"
-PARAMETERS_FILE = "parameters.json"
-TEST_LABELS_MARKER = "__test_labels__.yaml"
+# Metadata file markers (new format preferred, legacy for backwards compatibility)
+METADATA_MARKER = METADATA_FILE
+LEGACY_METADATA_MARKER = LEGACY_METADATA_FILE
 
 
 def _build_run_dir_index(artifact_tree: Path) -> dict[str, Path]:
-    """Map run directory names to their paths using __test_labels__.yaml markers."""
+    """Map run directory names to their paths using metadata markers (with backwards compatibility)."""
     index: dict[str, Path] = {}
-    for marker in sorted(artifact_tree.rglob(TEST_LABELS_MARKER)):
+
+    # Collect directories with either metadata file (new format or legacy)
+    metadata_dirs = set()
+
+    for marker in artifact_tree.rglob(METADATA_MARKER):
         if marker.is_file():
-            run_dir = marker.parent
-            try:
-                rel = run_dir.relative_to(artifact_tree)
-            except ValueError:
-                rel = Path(run_dir.name)
-            index[str(rel)] = run_dir
-            index[run_dir.name] = run_dir
+            metadata_dirs.add(marker.parent)
+
+    # Look for legacy format (for directories that don't have new format)
+    for marker in artifact_tree.rglob(LEGACY_METADATA_MARKER):
+        if marker.is_file() and marker.parent not in metadata_dirs:
+            metadata_dirs.add(marker.parent)
+
+    # Build index from collected directories
+    for run_dir in sorted(metadata_dirs):
+        try:
+            rel = run_dir.relative_to(artifact_tree)
+        except ValueError:
+            rel = Path(run_dir.name)
+        index[str(rel)] = run_dir
+        index[run_dir.name] = run_dir
+
     return index
 
 

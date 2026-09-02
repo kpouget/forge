@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.constants import LEGACY_METADATA_FILE, METADATA_FILE
 from projects.caliper.engine.file_export.mlflow_secrets import (
     assert_tracking_uri_has_no_userinfo,
     mlflow_connection_env,
@@ -506,14 +507,22 @@ def _log_curve_metrics(metrics_curve: dict[str, Any]) -> None:
 
 
 def _log_metrics_and_params_from_tree(artifact_root: Path) -> None:
-    """Find metrics.json/parameters.json under __test_labels__.yaml-marked dirs and log them."""
+    """Find metrics.json/parameters.json under metadata-marked dirs and log them (with backwards compatibility)."""
     import mlflow
 
-    for marker in sorted(artifact_root.rglob("__test_labels__.yaml")):
-        if not marker.is_file():
-            continue
-        run_dir = marker.parent
+    # Collect directories with either metadata file (new format or legacy)
+    metadata_dirs = set()
 
+    for marker in artifact_root.rglob(METADATA_FILE):
+        if marker.is_file():
+            metadata_dirs.add(marker.parent)
+
+    # Look for legacy format (for directories that don't have new format)
+    for marker in artifact_root.rglob(LEGACY_METADATA_FILE):
+        if marker.is_file() and marker.parent not in metadata_dirs:
+            metadata_dirs.add(marker.parent)
+
+    for run_dir in sorted(metadata_dirs):
         mf = run_dir / "metrics.json"
         if mf.is_file():
             for k, v in _load_json_file(mf).items():
