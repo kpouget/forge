@@ -52,6 +52,10 @@ cluster_eks-h100:
     operator: Equal
     effect: NoSchedule
 
+  workloads.pvc_storage_class: gp2
+  workloads.use_pvc: true
+  workloads.fs_group: 0
+
 cluster_athena-fire:
   cpt.kpi.labels.platform: OCP
   model_cache.pvc.access_mode: ReadWriteMany
