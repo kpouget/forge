@@ -59,12 +59,12 @@ class GuideLLMKpiHandler:
         }
 
     @staticmethod
-    def get_catalog() -> list[dict[str, Any]]:
+    def get_catalog() -> list[KpiCatalogEntry]:
         """
         Return the KPI catalog for GuideLLM metrics using dataclasses.
 
         Returns:
-            List of KPI catalog entries as dictionaries
+            List of KPI catalog entries as KpiCatalogEntry dataclasses
         """
         # Import the module containing the KPI functions
         from projects.guidellm.postprocess.guidellm.parsing import kpis as guidellm_kpis
@@ -86,7 +86,7 @@ class GuideLLMKpiHandler:
                 y_unit=entry.get("y_unit", ""),
                 y_help=entry.get("y_help", ""),
             )
-            catalog_entries.append(catalog_entry.to_dict())
+            catalog_entries.append(catalog_entry)
 
         return catalog_entries
 
