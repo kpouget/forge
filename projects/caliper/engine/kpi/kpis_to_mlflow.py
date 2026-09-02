@@ -23,7 +23,7 @@ from projects.caliper.engine.constants import (
     METRICS_FILE,
     PARAMETERS_FILE,
 )
-from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat
+from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat, MlflowConversionResult
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 def generate_metrics_from_kpis(
     kpis_json_path: Path,
     artifact_tree: Path,
-) -> dict[str, Any]:
+) -> MlflowConversionResult:
     """Convert kpis.json into per-run metrics.json and parameters.json files.
 
     For each test entry in kpis.json, finds the matching directory under
@@ -120,22 +120,28 @@ def generate_metrics_from_kpis(
         raw_data = json.load(f)
 
     if not isinstance(raw_data, dict) or raw_data.get("schema_version") != "2":
-        return {"status": "skipped", "reason": "Not a schema v2 kpis.json"}
+        return MlflowConversionResult(status="skipped", reason="Not a schema v2 kpis.json")
 
     # Parse into typed dataclass structure
     try:
         kpi_data = HierarchicalKpiFormat.from_dict(raw_data)
     except Exception as e:
         logger.error("Failed to parse KPI data: %s", e)
-        return {"status": "skipped", "reason": f"Invalid KPI data structure: {e}"}
+        return MlflowConversionResult(status="skipped", reason=f"Invalid KPI data structure: {e}")
 
     if not kpi_data.tests:
-        return {"status": "skipped", "reason": "No tests in kpis.json"}
+        return MlflowConversionResult(status="skipped", reason="No tests in kpis.json")
 
     run_dir_index = _build_run_dir_index(artifact_tree)
     if not run_dir_index:
-        logger.warning("No test run directories found under %s", artifact_tree)
-        return {"status": "skipped", "reason": "No run directories with __test_labels__.yaml found"}
+        error_msg = f"No test run directories found under {artifact_tree}"
+        logger.error(error_msg)
+        return MlflowConversionResult(
+            status="failed",
+            error=error_msg,
+            tests_processed=0,
+            total_tests=len(kpi_data.tests),
+        )
 
     written = 0
     warnings: list[str] = []
@@ -168,25 +174,62 @@ def generate_metrics_from_kpis(
             elif _is_scalar(kpi.value):
                 metrics[kpi.id] = kpi.value
 
-        if metrics:
-            _write_json(run_dir / METRICS_FILE, metrics)
+        # Write files with error handling
+        try:
+            if metrics:
+                _write_json(run_dir / METRICS_FILE, metrics)
 
-        # Process labels with type safety
-        if test.labels:
-            params = {str(k): ("" if v is None else str(v)) for k, v in test.labels.items()}
-            _write_json(run_dir / PARAMETERS_FILE, params)
+            # Process labels with type safety
+            if test.labels:
+                params = {str(k): ("" if v is None else str(v)) for k, v in test.labels.items()}
+                _write_json(run_dir / PARAMETERS_FILE, params)
 
-        written += 1
+            written += 1
+        except OSError as e:
+            warnings.append(f"Failed to write files for run_id={test.run_id!r}: {e}")
+            continue
 
-    result: dict[str, Any] = {
-        "status": "success",
-        "tests_processed": written,
-        "total_tests": len(kpi_data.tests),
-    }
-    if warnings:
-        result["warnings"] = warnings
-        for w in warnings:
-            logger.warning("kpis-to-metrics: %s", w)
+    # Determine appropriate status based on results
+    total_tests = len(kpi_data.tests)
+
+    if written == 0:
+        # No tests were processed - this is a failure, not success
+        error_msg = f"Failed to process any of {total_tests} test(s). " + (
+            f"Warnings: {'; '.join(warnings)}" if warnings else "No matching directories found."
+        )
+        result = MlflowConversionResult(
+            status="failed",
+            error=error_msg,
+            tests_processed=0,
+            total_tests=total_tests,
+            warnings=warnings,
+        )
+
+        logger.error("Failed to process any tests from %s: %s", kpis_json_path.name, error_msg)
+        return result
+
+    elif written < total_tests:
+        # Partial success - some tests processed but some failed
+        result = MlflowConversionResult(
+            status="success",  # Still success but with warnings
+            tests_processed=written,
+            total_tests=total_tests,
+            partial=True,
+            message=f"Processed {written}/{total_tests} tests successfully, {total_tests - written} failed",
+            warnings=warnings,
+        )
+    else:
+        # Full success - all tests processed
+        result = MlflowConversionResult(
+            status="success",
+            tests_processed=written,
+            total_tests=total_tests,
+            warnings=warnings,
+        )
+
+    # Log warnings
+    for w in warnings:
+        logger.warning("kpis-to-metrics: %s", w)
 
     logger.info(
         "Generated metrics.json for %d/%d test(s) from %s",

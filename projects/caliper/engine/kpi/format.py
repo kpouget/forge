@@ -12,6 +12,7 @@ from projects.caliper.engine.kpi.dataclasses import (
     HierarchicalKpi,
     HierarchicalKpiFormat,
     HierarchicalTestEntry,
+    SourceInfo,
     TestMetadata,
 )
 

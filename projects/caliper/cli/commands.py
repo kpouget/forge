@@ -861,28 +861,35 @@ def kpis_to_mlflow_cmd(
 
     try:
         result = generate_metrics_from_kpis(input_file, artifacts_dir)
-        status = result.get("status", "unknown")
-        if status == "success":
-            status_data = {
-                "success": True,
-                "tests_processed": result.get("tests_processed", 0),
-                "total_tests": result.get("total_tests", 0),
-            }
+        # Convert dataclass result to status_data format for YAML file
+        status_data = result.to_status_data()
+
+        if result.is_success():
             click.echo(
-                f"Generated metrics.json for {result.get('tests_processed', 0)}/"
-                f"{result.get('total_tests', 0)} test(s)"
+                f"Generated metrics.json for {result.tests_processed}/{result.total_tests} test(s)"
             )
-        elif status == "skipped":
-            status_data = {"success": True, "skipped": True, "reason": result.get("reason", "")}
-            click.echo(f"Skipped: {result.get('reason', '')}")
-        else:
-            status_data = {"success": False, "error": result.get("error", "unknown error")}
-            click.echo(f"kpis-to-mlflow failed: {result.get('error', 'unknown')}", err=True)
+            if result.partial:
+                click.echo(f"Warning: {result.message}")
+        elif result.is_skipped():
+            click.echo(f"Skipped: {result.reason}")
+        else:  # failed
+            click.echo(f"kpis-to-mlflow failed: {result.error}", err=True)
     except Exception as e:  # noqa: BLE001
         import traceback
 
         full_traceback = traceback.format_exc()
-        status_data = {"success": False, "error": str(e), "traceback": full_traceback}
+
+        # Create failure result for unexpected exceptions
+        from projects.caliper.engine.kpi.dataclasses import MlflowConversionResult
+
+        exception_result = MlflowConversionResult(
+            status="failed",
+            error=str(e),
+            tests_processed=0,
+            total_tests=0,
+        )
+        status_data = exception_result.to_status_data(traceback=full_traceback)
+
         click.echo(f"kpis-to-mlflow failed: {e}", err=True)
         click.echo(f"Full traceback:\n{full_traceback}", err=True)
 

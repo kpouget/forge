@@ -658,6 +658,53 @@ class RegressionTestResult:
         )
 
 
+@dataclass
+class MlflowConversionResult:
+    """Result of converting hierarchical KPIs to MLflow metrics/parameters files."""
+
+    status: str  # "success", "failed", or "skipped"
+    tests_processed: int = 0
+    total_tests: int = 0
+    error: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    message: str | None = None
+    partial: bool = False
+    reason: str | None = None  # For skipped status
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result = asdict(self)
+        # Remove None values to keep output clean
+        return {k: v for k, v in result.items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> MlflowConversionResult:
+        """Create MlflowConversionResult from dictionary data."""
+        return cls(**data)
+
+    def is_success(self) -> bool:
+        """Check if the conversion was successful (including partial success)."""
+        return self.status == "success"
+
+    def is_failure(self) -> bool:
+        """Check if the conversion failed."""
+        return self.status == "failed"
+
+    def is_skipped(self) -> bool:
+        """Check if the conversion was skipped."""
+        return self.status == "skipped"
+
+    def to_status_data(self, **extra_fields) -> dict[str, Any]:
+        """Convert to status data format for CLI YAML files.
+
+        Adds legacy 'success' field and allows extra fields to be merged in.
+        """
+        result = self.to_dict()
+        result["success"] = self.is_success()
+        result.update(extra_fields)
+        return result
+
+
 # Export all public classes
 __all__ = [
     "OverallStatus",
@@ -688,4 +735,5 @@ __all__ = [
     "CaliperTestMetadata",
     "CurrentValueInfo",
     "RegressionTestResult",
+    "MlflowConversionResult",
 ]
