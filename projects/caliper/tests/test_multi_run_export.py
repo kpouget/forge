@@ -2,7 +2,7 @@
 Tests for the multi-run caliper export pipeline.
 
 Covers:
-- Run directory auto-detection via __caliper_test_metadata__.yaml markers
+- Run directory auto-detection via caliper metadata file markers
 - Shared vs run-specific file partitioning
 - metrics.json / parameters.json reading and MLflow logging
 - Parent + nested child run creation
@@ -138,7 +138,7 @@ def artifact_tree(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def single_run_tree(tmp_path: Path) -> Path:
-    """Artifact tree without any __test_labels__.yaml markers."""
+    """Artifact tree without any caliper metadata file markers."""
     base = tmp_path / "artifacts"
 
     prepare = base / "001__prepare"

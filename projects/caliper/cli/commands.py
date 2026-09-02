@@ -10,6 +10,7 @@ import yaml
 
 from projects.caliper.cli.s3_import import run_s3_import_with_explicit_params
 from projects.caliper.engine.ai_eval import run_ai_eval_export
+from projects.caliper.engine.constants import METADATA_FILE
 from projects.caliper.engine.file_export.artifacts_export_run import run_artifacts_export
 from projects.caliper.engine.file_export.artifacts_import_run import run_artifacts_import
 from projects.caliper.engine.file_export.mlflow_config import load_mlflow_config_yaml
@@ -650,7 +651,7 @@ def kpi_generate(
                 "excluded_test_directories": excluded_summary,
             }
             click.echo("❌ No test directories found - KPI generation failed", err=True)
-            click.echo("   No __test_labels__.yaml files found in artifact directory", err=True)
+            click.echo(f"   No {METADATA_FILE} files found in artifact directory", err=True)
 
             # Show excluded directories if any
             if model.excluded_test_directories:
@@ -844,7 +845,7 @@ def kpi_csv_export(
     "artifacts_dir",
     type=click.Path(path_type=Path, exists=True),
     required=True,
-    help="Root of the artifact tree containing __test_labels__.yaml markers",
+    help=f"Root of the artifact tree containing {METADATA_FILE} markers",
 )
 @click.option(
     "--status-file", type=click.Path(path_type=Path), help="YAML file to write operation status"

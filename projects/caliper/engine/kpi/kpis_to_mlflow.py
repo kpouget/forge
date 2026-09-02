@@ -27,10 +27,6 @@ from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat, Mlflo
 
 logger = logging.getLogger(__name__)
 
-# Metadata file markers (new format preferred, legacy for backwards compatibility)
-METADATA_MARKER = METADATA_FILE
-LEGACY_METADATA_MARKER = LEGACY_METADATA_FILE
-
 
 def _build_run_dir_index(artifact_tree: Path) -> dict[str, Path]:
     """Map run directory names to their paths using metadata markers (with backwards compatibility)."""
@@ -39,12 +35,12 @@ def _build_run_dir_index(artifact_tree: Path) -> dict[str, Path]:
     # Collect directories with either metadata file (new format or legacy)
     metadata_dirs = set()
 
-    for marker in artifact_tree.rglob(METADATA_MARKER):
+    for marker in artifact_tree.rglob(METADATA_FILE):
         if marker.is_file():
             metadata_dirs.add(marker.parent)
 
     # Look for legacy format (for directories that don't have new format)
-    for marker in artifact_tree.rglob(LEGACY_METADATA_MARKER):
+    for marker in artifact_tree.rglob(LEGACY_METADATA_FILE):
         if marker.is_file() and marker.parent not in metadata_dirs:
             metadata_dirs.add(marker.parent)
 
@@ -100,7 +96,7 @@ def generate_metrics_from_kpis(
     """Convert kpis.json into per-run metrics.json and parameters.json files.
 
     For each test entry in kpis.json, finds the matching directory under
-    ``artifact_tree`` (via ``__test_labels__.yaml`` markers) and writes:
+    ``artifact_tree`` (via caliper metadata file markers) and writes:
 
     - ``metrics.json``: ``{kpi_id: value}`` for all scalar KPIs
     - ``parameters.json``: test-level labels as string key-value pairs
@@ -108,7 +104,7 @@ def generate_metrics_from_kpis(
     Args:
         kpis_json_path: Path to the kpis.json file (schema v2).
         artifact_tree: Root of the caliper artifact tree containing
-            test run directories with ``__test_labels__.yaml`` markers.
+            test run directories with caliper metadata file markers.
 
     Returns:
         Status dict with counts and any warnings.
@@ -149,12 +145,6 @@ def generate_metrics_from_kpis(
     for test in kpi_data.tests:
         # Determine test base path for directory matching
         test_base_path = test.run_id
-        if test.metadata.source:
-            # Handle case where source might still be a dict (defensive programming)
-            if isinstance(test.metadata.source, dict):
-                test_base_path = test.metadata.source.get("test_base_path") or test.run_id
-            else:
-                test_base_path = test.metadata.source.test_base_path or test.run_id
 
         run_dir = run_dir_index.get(test_base_path) or run_dir_index.get(test.run_id)
         if run_dir is None:

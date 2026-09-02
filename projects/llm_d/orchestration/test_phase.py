@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from projects.caliper.engine.constants import METADATA_FILE
 from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
 from projects.core.dsl import shell
 from projects.core.dsl.utils import slugify_identifier
@@ -170,7 +171,7 @@ def get_iso_timestamp() -> str:
 def create_test_labels(
     mlflow_destination: dict[str, str] | None = None,
 ) -> None:
-    """Create __test_labels__.yaml with model name, guidellm configuration, and test start time."""
+    """Create caliper metadata file with model name, guidellm configuration, and test start time."""
 
     model_name = runtime_config.get_model_name()
     deployment_profile = runtime_config.get_deployment_profile_name()
@@ -224,7 +225,7 @@ def create_test_labels(
 def update_test_labels_with_timing(
     timing_section: str, timing_event: str, timestamp: str | None = None
 ) -> None:
-    """Update __test_labels__.yaml with timing information.
+    """Update caliper metadata file with timing information.
 
     Args:
         timing_section: Section name (e.g., 'benchmark', 'test')
@@ -234,14 +235,15 @@ def update_test_labels_with_timing(
     if timestamp is None:
         timestamp = get_iso_timestamp()
 
-    test_labels_path = env.ARTIFACT_DIR / "__test_labels__.yaml"
+    test_labels_path = env.ARTIFACT_DIR / METADATA_FILE
+
+    if not test_labels_path.exists():
+        logging.error("Caliper metadata file not found ...")
+        return
 
     # Read existing labels
-    if test_labels_path.exists():
-        with test_labels_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-    else:
-        data = {"version": "1", "labels": {}}
+    with test_labels_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
 
     # Ensure timing section exists
     if "timing" not in data:
@@ -263,21 +265,21 @@ def update_test_labels_with_timing(
 
 
 def update_test_labels_with_status(success: bool, message: str) -> None:
-    """Update __test_labels__.yaml with test execution status and end time.
+    """Update caliper metadata file with test execution status and end time.
 
     Args:
         success: True if test succeeded, False if failed
         message: Status message describing the result
     """
-    test_labels_path = env.ARTIFACT_DIR / "__test_labels__.yaml"
+    test_labels_path = env.ARTIFACT_DIR / METADATA_FILE
 
     # Read existing labels
-    if test_labels_path.exists():
-        with test_labels_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-    else:
-        # Fallback if labels file doesn't exist
-        data = {"version": "1", "labels": {}}
+    if not test_labels_path.exists():
+        logging.error("Caliper metadata file not found ...")
+        return
+
+    with test_labels_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
 
     # Add completion information as separate top-level field
     data["completion"] = {

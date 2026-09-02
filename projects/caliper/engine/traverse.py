@@ -1,4 +1,4 @@
-"""Discover test base directories via __caliper_test_metadata__.yaml or MatrixBenchmarking settings.yaml."""
+"""Discover test base directories via caliper metadata file or MatrixBenchmarking settings.yaml."""
 
 from __future__ import annotations
 
@@ -297,7 +297,7 @@ def _deep_merge_dict(target: dict[str, Any], source: dict[str, Any]) -> None:
 
 
 def _load_labels(path: Path, is_matrixbenchmarking: bool = False) -> dict[str, Any]:
-    """Load labels from either __test_labels__.yaml or MatrixBenchmarking settings.yaml."""
+    """Load labels from either caliper metadata file or MatrixBenchmarking settings.yaml."""
     raw = path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw)
     if data is None:
