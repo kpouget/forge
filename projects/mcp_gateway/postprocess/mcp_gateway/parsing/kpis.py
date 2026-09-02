@@ -254,7 +254,7 @@ class MCPGatewayKpiHandler:
     )
 
     @staticmethod
-    def get_catalog() -> list[dict[str, Any]]:
+    def get_catalog() -> list[KpiCatalogEntry]:
         """Return the KPI catalog built from decorated functions using dataclasses."""
         current_module = inspect.getmodule(MCPGatewayKpiHandler)
         raw_catalog = build_catalog_from_functions(current_module)
@@ -274,7 +274,7 @@ class MCPGatewayKpiHandler:
                 y_unit=entry.get("y_unit", ""),
                 y_help=entry.get("y_help", ""),
             )
-            catalog_entries.append(catalog_entry.to_dict())
+            catalog_entries.append(catalog_entry)
 
         return catalog_entries
 
