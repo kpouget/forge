@@ -16,7 +16,7 @@ import click
 import yaml
 from pydantic import ValidationError
 
-from projects.caliper.engine.constants import LEGACY_METADATA_FILE, METADATA_FILE
+from projects.caliper.engine.constants import METADATA_FILE
 from projects.caliper.engine.kpi.dataclasses import CaliperTestMetadata
 from projects.caliper.orchestration.postprocess import (
     run_postprocess_from_orchestration_config,
@@ -88,17 +88,12 @@ def write_test_labels(
 
     # Define both file paths
     metadata_path = directory / METADATA_FILE
-    legacy_path = directory / LEGACY_METADATA_FILE
 
     # Create directory and write to both files for backward compatibility
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write new format
     with metadata_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
-
-    # Write legacy format (identical content)
-    with legacy_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
 
     # Optionally save project configuration
