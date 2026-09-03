@@ -888,21 +888,19 @@ def run_kpi_analysis(
                 current_comparison_combinations,
             )
 
-            unexpected_labels: list[str] = []
-            irrelevant_keys: list[str] = []
+            unexpected_labels: set[str] = []
+            irrelevant_keys: set[str] = []
             for test in data.get("tests", []):
                 for k, v in test.get("labels", {}).items():
-                    if k not in current_keys:
-                        if k not in unexpected_labels:
-                            unexpected_labels.append(k)
-                        continue
                     if k in excluded_labels:
+                        continue
+                    if k not in current_keys:
+                        unexpected_labels.append(k)
                         continue
                     sv = str(v)
                     if sv not in current_keys[k]:
                         entry = f"{k}={sv}"
-                        if entry not in irrelevant_keys:
-                            irrelevant_keys.append(entry)
+                        irrelevant_keys.append(entry)
 
             source_entry = {
                 "path": str(path),
