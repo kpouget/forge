@@ -47,15 +47,15 @@ class GuideLLMKpiHandler:
 
     LABEL_EXTRACTOR = type("TestLabelExtractor", (), {"extract": _extract_labels})()
 
-     # Metadata fields to include in KPI records but not as labels
-     @staticmethod
-     def extract_metadata(record) -> dict[str, Any]:
-         """Extract metadata fields for KPI records."""
-         config = record.metrics.get("configuration", {})
-         return {
-             "configuration": config,
-             "run_path": record.test_base_path,
-         }
+    # Metadata fields to include in KPI records but not as labels
+    @staticmethod
+    def extract_metadata(record) -> dict[str, Any]:
+        """Extract metadata fields for KPI records."""
+        config = record.metrics.get("configuration", {})
+        return {
+            "configuration": config,
+            "run_path": record.test_base_path,
+        }
 
     @staticmethod
     def get_catalog() -> list[KpiCatalogEntry]:
@@ -193,19 +193,21 @@ class GuideLLMKpiHandler:
 
                 try:
                     # Pass the single record with performance curves to the curve KPI function
-                    value = kpi_func(r)
+                    raw_values = kpi_func(r)
+                    # Convert list of tuples to list of lists for schema compatibility
+                    values = [[float(x), float(y)] for x, y in raw_values] if raw_values else []
                 except (TypeError, ValueError, KeyError):
-                    value = []  # Empty list for failed curve KPIs
+                    values = []  # Empty list for failed curve KPIs
 
                 # Skip curve KPIs with empty or null values
-                if not value or value is None:
+                if not values or values is None:
                     continue
 
                 # Create structured curve KPI record using core dataclass
                 kpi_record = KpiRecord(
                     schema_version="1",
                     kpi_id=kpi_id,
-                    value=value,
+                    values=values,
                     unit=kpi_func._kpi_unit,
                     run_id=r.test_base_path,
                     timestamp=ts,
