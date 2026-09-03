@@ -8,7 +8,6 @@ from typing import Any
 from projects.caliper.engine.kpi import (
     KpiCatalogEntry,
     KpiRecord,
-    SourceInfo,
     build_catalog_from_functions,
     get_kpi_functions,
     is_curve_kpi,
@@ -59,36 +58,17 @@ class GuideLLMKpiHandler:
         }
 
     @staticmethod
-    def get_catalog() -> list[dict[str, Any]]:
+    def get_catalog() -> list[KpiCatalogEntry]:
         """
         Return the KPI catalog for GuideLLM metrics using dataclasses.
 
         Returns:
-            List of KPI catalog entries as dictionaries
+            List of KPI catalog entries as KpiCatalogEntry dataclasses
         """
         # Import the module containing the KPI functions
         from projects.guidellm.postprocess.guidellm.parsing import kpis as guidellm_kpis
 
-        raw_catalog = build_catalog_from_functions(guidellm_kpis)
-
-        # Convert to structured dataclass format
-        catalog_entries = []
-        for entry in raw_catalog:
-            catalog_entry = KpiCatalogEntry(
-                kpi_id=entry.get("kpi_id", ""),
-                name=entry.get("name", ""),
-                unit=entry.get("unit", ""),
-                higher_is_better=entry.get("higher_is_better", True),
-                is_curve=entry.get("is_curve", False),
-                help=entry.get("help", ""),
-                x_unit=entry.get("x_unit", ""),
-                x_help=entry.get("x_help", ""),
-                y_unit=entry.get("y_unit", ""),
-                y_help=entry.get("y_help", ""),
-            )
-            catalog_entries.append(catalog_entry.to_dict())
-
-        return catalog_entries
+        return build_catalog_from_functions(guidellm_kpis)
 
     @staticmethod
     def compute_kpis(
@@ -181,7 +161,6 @@ class GuideLLMKpiHandler:
 
                 # Create structured KPI record using core dataclass
                 kpi_record = KpiRecord(
-                    schema_version="1",
                     kpi_id=kpi_id,
                     value=value,  # Core enforces int|float only
                     unit=kpi_func._kpi_unit,
@@ -190,10 +169,6 @@ class GuideLLMKpiHandler:
                     labels=all_labels,
                     metadata=metadata_fields,
                     is_curve=False,  # Scalar KPI
-                    source=SourceInfo(
-                        test_base_path=r.test_base_path,
-                        plugin_module=model.plugin_module,
-                    ),
                 )
 
                 out.append(kpi_record.to_dict())
@@ -218,33 +193,31 @@ class GuideLLMKpiHandler:
 
                 try:
                     # Pass the single record with performance curves to the curve KPI function
-                    value = kpi_func(r)
+                    raw_values = kpi_func(r)
+                    # Convert list of tuples to list of lists for schema compatibility
+                    values = [[float(x), float(y)] for x, y in raw_values] if raw_values else []
                 except (TypeError, ValueError, KeyError):
-                    value = []  # Empty list for failed curve KPIs
+                    values = []  # Empty list for failed curve KPIs
 
                 # Skip curve KPIs with empty or null values
-                if not value or value is None:
+                if not values or values is None:
                     continue
 
                 # Create structured curve KPI record using core dataclass
                 kpi_record = KpiRecord(
                     schema_version="1",
                     kpi_id=kpi_id,
-                    value=value,
+                    values=values,
                     unit=kpi_func._kpi_unit,
                     run_id=r.test_base_path,
                     timestamp=ts,
                     labels=kpi_labels,
                     metadata=metadata_fields,
                     is_curve=True,  # curve KPI
-                    source=SourceInfo(
-                        test_base_path=r.test_base_path,
-                        plugin_module=model.plugin_module,
-                    ),
                     x_unit=kpi_func._kpi_x_unit,
                     x_help=kpi_func._kpi_x_help,
-                    y_unit=getattr(kpi_func, "_kpi_y_unit", None) or kpi_func._kpi_unit,
-                    y_help=getattr(kpi_func, "_kpi_y_help", None) or kpi_func._kpi_help,
+                    y_unit=kpi_func._kpi_y_unit,
+                    y_help=kpi_func._kpi_y_help,
                 )
 
                 out.append(kpi_record.to_dict())

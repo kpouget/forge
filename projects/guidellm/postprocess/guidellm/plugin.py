@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -258,6 +259,10 @@ class GuideLLMPlugin(PostProcessingPlugin):
         from projects.llm_d.postprocess.llm_d import csv_dashboard
 
         return csv_dashboard.export_kpis_to_csv(kpi_records, output_path, include_header_comments)
+
+    def kpi_catalog(self) -> list[KpiCatalogEntry]:
+        """Return catalog of available KPIs for hierarchical formatting."""
+        return self.kpi_handler.get_catalog()
 
     def build_ai_data_payload(self, model: UnifiedRunModel) -> dict[str, Any]:
         """Build AI evaluation payload from the unified model."""

@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from projects.caliper.engine.kpi.analyze import AnalysisConfig
+from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -66,7 +67,7 @@ class LlmDGuideLLMPlugin(GuideLLMPlugin):
             records.append(record)
         return ParseResult(records=records, warnings=parsed.warnings)
 
-    def kpi_catalog(self) -> list[dict[str, Any]]:
+    def kpi_catalog(self) -> list[KpiCatalogEntry]:
         return self.kpi_handler.get_catalog()
 
     def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:

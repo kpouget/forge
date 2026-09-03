@@ -14,7 +14,6 @@ from typing import Any
 from projects.caliper.engine.kpi import (
     KpiCatalogEntry,
     KpiRecord,
-    SourceInfo,
 )
 from projects.caliper.engine.model import (
     ParseResult,
@@ -400,10 +399,6 @@ def compute_dashboard_kpis(model: UnifiedRunModel, *, prefix: str) -> list[dict[
                     labels=kpi_labels,
                     metadata={"run_path": record.test_base_path},  # Move run_path to metadata
                     is_curve=False,  # Scalar KPI
-                    source=SourceInfo(
-                        test_base_path=record.test_base_path,
-                        plugin_module=model.plugin_module,
-                    ),
                 )
                 output.append(kpi_record.to_dict())
     return output
