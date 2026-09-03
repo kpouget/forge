@@ -8,11 +8,15 @@
     "timestamp",
     "labels",
     "metadata",
-    "is_curve"
+    "is_curve",
+    "name",
+    "help"
   ],
   "properties": {
     "schema_version": { "type": "string" },
     "kpi_id": { "type": "string" },
+    "name": { "type": "string" },
+    "help": { "type": "string" },
     "value": { "type": ["number", "string", "null"] },
     "values": {
       "type": "array",

@@ -56,7 +56,16 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> Hierarchic
         kpi_catalog = None
 
     if kpi_catalog:
-        kpi_models = {e.kpi_id: e for e in kpi_catalog}
+        # Normalize catalog entries to KpiCatalogEntry dataclasses for consistent indexing
+        kpi_models = {}
+        for entry in kpi_catalog:
+            if isinstance(entry, dict):
+                # Convert dictionary to KpiCatalogEntry dataclass
+                catalog_entry = KpiCatalogEntry.from_dict(entry)
+            else:
+                # Already a KpiCatalogEntry instance
+                catalog_entry = entry
+            kpi_models[catalog_entry.kpi_id] = catalog_entry
 
     # First pass: determine which labels vary across KPIs in the same run
     run_label_values: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
@@ -114,13 +123,8 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> Hierarchic
             raw_value = kpi.get("values")
             if raw_value is None:
                 raw_value = kpi.get("value", [])  # Backward compatibility
-            final_value = {
-                "data_points": [{"x": float(x), "y": float(y)} for x, y in raw_value],
-                "count": len(raw_value),
-            }
         else:
             raw_value = kpi.get("value")
-            final_value = raw_value
 
         # Build KPI record using catalog entry (either real or constructed from KPI)
         kpi_record = {
@@ -139,7 +143,7 @@ def transform_kpis_to_hierarchical_format(kpis: list[dict], model) -> Hierarchic
         if catalog_entry.is_curve:
             kpi_record["values"] = raw_value  # Raw coordinate pairs for curve KPIs
         else:
-            kpi_record["value"] = final_value  # Scalar value for scalar KPIs
+            kpi_record["value"] = raw_value  # Scalar value for scalar KPIs
 
         # Build output record using HierarchicalKpi dataclass
         kpi_output = HierarchicalKpi(**kpi_record)
@@ -212,9 +216,9 @@ def flatten_hierarchical_kpis(data: dict[str, Any]) -> list[dict[str, Any]]:
         }
         for kpi in test.get("kpis", []):
             record = dict(test_base)
-            record["kpi_id"] = kpi.get("id")
+            record["kpi_id"] = kpi.get("kpi_id")
             for k, v in kpi.items():
-                if k == "id":
+                if k == "kpi_id":
                     pass
                 elif k == "labels":
                     record[k] = {} | test_base["labels"] | v

@@ -23,7 +23,8 @@ from projects.caliper.engine.constants import (
     METRICS_FILE,
     PARAMETERS_FILE,
 )
-from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat, MlflowConversionResult
+from projects.caliper.engine.kpi.dataclasses import HierarchicalKpiFormat
+from projects.caliper.engine.kpi.report_dataclasses import MlflowConversionResult
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,14 @@ def generate_metrics_from_kpis(
         # Process KPIs using the simplified structure
         metrics: dict[str, Any] = {}
         for kpi in test.kpis:
-            metrics[kpi.kpi_id] = kpi.values if kpi.is_curve else kpi.value
+            if kpi.is_curve:
+                # Convert coordinate pairs to point dictionaries for MLflow
+                if kpi.values:
+                    metrics[kpi.kpi_id] = [{"x": float(x), "y": float(y)} for x, y in kpi.values]
+            else:
+                # For scalar KPIs, use the value field
+                if kpi.value is not None:
+                    metrics[kpi.kpi_id] = kpi.value
 
         # Write files with error handling
         try:

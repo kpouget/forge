@@ -1,15 +1,9 @@
 """KPI generation, OpenSearch, regression."""
 
 from .dataclasses import (
-    AnalysisSummary,
-    BaselineSummary,
-    ConfigSummary,
     KpiCatalogEntry,
     KpiRecord,
-    OverallStatus,
     RegressionFinding,
-    RegressionReport,
-    TestSummary,
 )
 from .decorators import (
     Curve,
@@ -22,6 +16,14 @@ from .decorators import (
     create_label_extractor,
     get_kpi_functions,
     is_curve_kpi,
+)
+from .report_dataclasses import (
+    AnalysisSummary,
+    BaselineSummary,
+    ConfigSummary,
+    OverallStatus,
+    RegressionReport,
+    TestSummary,
 )
 
 __all__ = [

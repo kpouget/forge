@@ -881,7 +881,7 @@ def kpis_to_mlflow_cmd(
         full_traceback = traceback.format_exc()
 
         # Create failure result for unexpected exceptions
-        from projects.caliper.engine.kpi.dataclasses import MlflowConversionResult
+        from projects.caliper.engine.kpi.report_dataclasses import MlflowConversionResult
 
         exception_result = MlflowConversionResult(
             status="failed",
