@@ -535,6 +535,10 @@ def _load_project_config(config_file_src, config_chunk_files):
         return config
 
     for chunk_file in config_chunk_files:
+        if chunk_file.name.startswith("."):
+            logger.info(f"Ignore hidden file '{chunk_file.parent}'")
+            continue
+
         with open(chunk_file) as chunk_f:
             chunk_value = yaml.safe_load(chunk_f)
 
