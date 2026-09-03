@@ -22,6 +22,7 @@ from projects.caliper.engine.load_plugin import load_plugin
 from projects.caliper.engine.parse import run_parse
 from projects.caliper.engine.plugin_config import resolve_plugin_module_string
 from projects.caliper.engine.visualize import run_visualize
+from projects.caliper.public import StatusLevel
 
 
 def _exit_with_help(ctx: click.Context, msg: str, code: int = 1) -> None:
@@ -1010,11 +1011,16 @@ def analyse_kpis_cmd(
     )
 
     # Display result
-    if status_data.success:
+    if status_data.success and status_data.status == StatusLevel.WARNING:
+        click.echo("⚠️ KPI analysis completed with warning")
+    elif status_data.success:
         click.echo("✅ KPI analysis completed with success")
     else:
         error_msg = status_data.error or f"Status: {status_data.status}"
         click.echo(f"❌ KPI analysis failed: {error_msg}", err=True)
+
+    if status_data.message:
+        click.echo("> " + status_data.message)
 
     # Write status file if requested
     if status_file:
