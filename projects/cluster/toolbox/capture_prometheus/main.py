@@ -35,7 +35,7 @@ TSDB_PATH = "/prometheus"
 def run(
     start_time: datetime,
     end_time: datetime,
-    output_dir: str | Path,
+    output_dir: str | Path | None = None,
     *,
     pod_name: str = PROMETHEUS_POD,
     namespace: str = PROMETHEUS_NAMESPACE,
@@ -50,7 +50,7 @@ def run(
     Args:
         start_time: Start of the capture window (UTC)
         end_time: End of the capture window (UTC)
-        output_dir: Directory to write the metrics archive into
+        output_dir: Directory to write the metrics archive into (optional, defaults to artifacts_dir/prom_db)
         pod_name: Prometheus pod to extract from
         namespace: Namespace where Prometheus runs
         container: Container name within the Prometheus pod
@@ -97,7 +97,10 @@ def validate_parameters(args, ctx):
             f"Tests longer than 2 hours require persistent block handling (not yet implemented)."
         )
 
-    ctx.output_dir = Path(args.output_dir)
+    if args.output_dir is not None:
+        ctx.output_dir = Path(args.output_dir)
+    else:
+        ctx.output_dir = args.artifacts_dir / "prom_db"
     ctx.output_dir.mkdir(parents=True, exist_ok=True)
     ctx.start_ms = int(ctx.start_time.timestamp() * 1000)
     ctx.end_ms = int(ctx.end_time.timestamp() * 1000)
