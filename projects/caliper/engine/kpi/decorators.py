@@ -18,9 +18,7 @@ class KPIMetadata:
     def __call__(self, func: Callable) -> Callable:
         func._kpi_help = self.help
         func._kpi_unit = self.unit
-        # For scalar KPIs, y-axis is the KPI value itself
-        func._kpi_y_unit = self.unit
-        func._kpi_y_help = self.help
+
         return func
 
 
@@ -57,25 +55,25 @@ class Curve:
     def __init__(
         self,
         x_unit: str,
-        x_help: str,
         y_unit: str | None = None,
+        x_help: str | None = None,
         y_help: str | None = None,
         x_format: str | None = None,
         y_format: str | None = None,
     ):
         self.x_unit = x_unit
-        self.x_help = x_help
         self.y_unit = y_unit
-        self.y_help = y_help
         self.x_format = x_format
         self.y_format = y_format
+        self.x_help = x_help
+        self.y_help = y_help
 
     def __call__(self, func: Callable) -> Callable:
         func._kpi_is_curve = True
         func._kpi_x_unit = self.x_unit
+        func._kpi_y_help = self.y_help
         func._kpi_x_help = self.x_help
         func._kpi_y_unit = self.y_unit
-        func._kpi_y_help = self.y_help
         func._kpi_x_format = self.x_format
         func._kpi_y_format = self.y_format
         return func
@@ -208,14 +206,13 @@ def build_catalog_from_functions(module) -> list[KpiCatalogEntry]:
             catalog_entry = KpiCatalogEntry(
                 kpi_id=kpi_id,
                 name=name,
-                unit=func._kpi_unit,
                 higher_is_better=func._kpi_higher_is_better,
                 is_curve=True,
                 help=func._kpi_help,
                 x_unit=func._kpi_x_unit,
                 x_help=func._kpi_x_help,
-                y_unit=getattr(func, "_kpi_y_unit", None) or func._kpi_unit,
-                y_help=getattr(func, "_kpi_y_help", None) or func._kpi_help,
+                y_unit=func._kpi_y_unit,
+                y_help=func._kpi_y_help,
             )
         else:
             catalog_entry = KpiCatalogEntry(
@@ -225,10 +222,6 @@ def build_catalog_from_functions(module) -> list[KpiCatalogEntry]:
                 higher_is_better=func._kpi_higher_is_better,
                 is_curve=False,
                 help=func._kpi_help,
-                x_unit="",
-                x_help="",
-                y_unit=func._kpi_y_unit,
-                y_help=func._kpi_y_help,
             )
 
         catalog.append(catalog_entry)

@@ -41,7 +41,8 @@ class KpiRecord:
     """Core KPI record structure used by all plugins."""
 
     kpi_id: str
-    value: Any  # Can be scalar, list, or complex data structure
+    value: Any = None  # For scalar KPIs
+    values: list[list[float]] = field(default_factory=list)  # For curve KPIs (list of [x, y] pairs)
     schema_version: str = "1"
     unit: str = ""
     higher_is_better: bool = True
@@ -60,25 +61,30 @@ class KpiRecord:
         """Convert to dictionary for JSON serialization."""
         result = asdict(self)
 
-        # Only include curve fields if this is a curve KPI
-        if not self.is_curve:
-            # Remove curve-specific fields for scalar KPIs
+        # Include correct value field based on curve type
+        if self.is_curve:
+            # For curve KPIs: include 'values', remove 'value' and scalar-specific fields
+            result.pop("value", None)
+            result.pop("unit", None)
+        else:
+            # For scalar KPIs: include 'value', remove 'values' and curve-specific fields
+            result.pop("values", None)
             result.pop("x_unit", None)
             result.pop("x_help", None)
             result.pop("y_unit", None)
             result.pop("y_help", None)
-        else:
-            result.pop("unit", None)
 
         return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KpiRecord:
         """Create KpiRecord from dictionary data."""
+        is_curve = data.get("is_curve", False)
 
         return cls(
             kpi_id=data["kpi_id"],
-            value=data["value"],
+            value=data.get("value") if not is_curve else None,
+            values=data.get("values", []) if is_curve else [],
             schema_version=data.get("schema_version", "1"),
             unit=data.get("unit", ""),
             higher_is_better=data.get("higher_is_better", True),
@@ -86,7 +92,7 @@ class KpiRecord:
             metadata=data.get("metadata", {}),
             timestamp=data.get("timestamp", ""),
             run_id=data.get("run_id", ""),
-            is_curve=data.get("is_curve", False),
+            is_curve=is_curve,
             x_unit=data.get("x_unit", ""),
             x_help=data.get("x_help", ""),
             y_unit=data.get("y_unit", ""),
@@ -433,11 +439,14 @@ class HierarchicalTestEntry:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        result = asdict(self)
-        # Ensure metadata is properly serialized
-        if isinstance(self.metadata, TestMetadata):
-            result["metadata"] = self.metadata.to_dict()
-        return result
+        return {
+            "run_id": self.run_id,
+            "labels": self.labels,
+            "metadata": self.metadata.to_dict()
+            if isinstance(self.metadata, TestMetadata)
+            else self.metadata,
+            "kpis": [kpi.to_dict() for kpi in self.kpis],
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HierarchicalTestEntry:
@@ -467,16 +476,14 @@ class HierarchicalTestEntry:
 class HierarchicalKpi:
     """Individual KPI entry in hierarchical format."""
 
-    id: str  # KPI identifier (maps to kpi_id in flat format)  # noqa: A003
-    value: Any  # KPI value (scalar or structured)
+    kpi_id: str  # KPI identifier
+    value: float | int | str | None = None  # For scalar KPIs
+    values: list[list[float]] | None = None  # For curve KPIs (list of [x, y] coordinate pairs)
     name: str = ""
     unit: str = ""
     higher_is_better: bool = False
     is_curve: bool = False
     help: str = ""  # noqa: A003
-    description: str = ""
-    category: str = ""
-    tags: list[str] = field(default_factory=list)
     # Curve KPI support fields
     x_unit: str = ""
     x_help: str = ""
@@ -485,22 +492,35 @@ class HierarchicalKpi:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return asdict(self)
+        result = asdict(self)
+
+        # Include correct value field based on curve type
+        if self.is_curve:
+            # For curve KPIs: include 'values', remove 'value' and scalar-specific fields
+            result.pop("value", None)
+            result.pop("unit", None)
+        else:
+            # For scalar KPIs: include 'value', remove 'values' and curve-specific fields
+            result.pop("values", None)
+            result.pop("x_unit", None)
+            result.pop("y_unit", None)
+            result.pop("x_help", None)
+            result.pop("y_help", None)
+
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpi:
         """Create HierarchicalKpi from dictionary data."""
         return cls(
-            id=data.get("id", ""),
+            kpi_id=data.get("id", ""),
             value=data.get("value"),
+            values=data.get("values"),
             name=data.get("name", ""),
             unit=data.get("unit", ""),
             higher_is_better=data.get("higher_is_better", False),
             is_curve=data.get("is_curve", False),
             help=data.get("help", ""),
-            description=data.get("description", ""),
-            category=data.get("category", ""),
-            tags=data.get("tags", []),
             x_unit=data.get("x_unit", ""),
             x_help=data.get("x_help", ""),
             y_unit=data.get("y_unit", ""),

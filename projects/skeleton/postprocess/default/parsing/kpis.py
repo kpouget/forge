@@ -109,32 +109,49 @@ class SkeletonKpiHandler:
             # Compute each KPI
             for kpi_id, kpi_func in kpi_functions.items():
                 try:
-                    value = kpi_func(record)
+                    raw_value = kpi_func(record)
                 except (TypeError, ValueError, KeyError):
                     continue  # Skip failed KPIs
 
                 # Skip null/empty values
-                if value is None or (isinstance(value, list) and not value):
+                if raw_value is None or (isinstance(raw_value, list) and not raw_value):
                     continue
 
-                # Create KPI record using annotations
-                kpi_record = KpiRecord(
-                    kpi_id=kpi_id,
-                    value=value,
-                    unit=kpi_func._kpi_unit,
-                    run_id=record.test_base_path,
-                    timestamp=timestamp,
-                    labels=labels,
-                    higher_is_better=kpi_func._kpi_higher_is_better,
-                    is_curve=is_curve_kpi(kpi_func),
-                    y_unit=kpi_func._kpi_y_unit,
-                    y_help=kpi_func._kpi_y_help,
-                )
+                # Create KPI record using kwargs to avoid duplication
+                is_curve = is_curve_kpi(kpi_func)
 
-                # Add x-axis metadata for curve KPIs
-                if is_curve_kpi(kpi_func):
-                    kpi_record.x_unit = kpi_func._kpi_x_unit
-                    kpi_record.x_help = kpi_func._kpi_x_help
+                # Common parameters for both curve and scalar KPIs
+                kpi_kwargs = {
+                    "kpi_id": kpi_id,
+                    "run_id": record.test_base_path,
+                    "timestamp": timestamp,
+                    "labels": labels,
+                    "higher_is_better": kpi_func._kpi_higher_is_better,
+                    "is_curve": is_curve,
+                }
+
+                # Add type-specific parameters
+                if is_curve:
+                    # Convert list of tuples to list of lists for schema compatibility
+                    values = [[float(x), float(y)] for x, y in raw_value] if raw_value else []
+                    kpi_kwargs.update(
+                        {
+                            "values": values,  # For curve KPIs, converted to list of [x, y] pairs
+                            "x_unit": kpi_func._kpi_x_unit,
+                            "x_help": kpi_func._kpi_x_help,
+                            "y_unit": kpi_func._kpi_y_unit,
+                            "y_help": kpi_func._kpi_y_help,
+                        }
+                    )
+                else:
+                    kpi_kwargs.update(
+                        {
+                            "value": raw_value,  # For scalar KPIs
+                            "unit": kpi_func._kpi_unit,
+                        }
+                    )
+
+                kpi_record = KpiRecord(**kpi_kwargs)
 
                 kpis.append(kpi_record.to_dict())
 

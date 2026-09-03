@@ -56,32 +56,6 @@ def _build_run_dir_index(artifact_tree: Path) -> dict[str, Path]:
     return index
 
 
-def _is_scalar(value: Any) -> bool:
-    """Check if a KPI value is a scalar number (not curve data)."""
-    return isinstance(value, int | float) and not isinstance(value, bool)
-
-
-def _extract_curve_points(value: Any) -> list[dict[str, float]] | None:
-    """Extract sorted (x, y) data points from a curve KPI value.
-
-    Returns a list of ``{"x": ..., "y": ...}`` dicts sorted by x,
-    or ``None`` if the value is not a valid curve structure.
-    """
-    if not isinstance(value, dict):
-        return None
-    data_points = value.get("data_points")
-    if not isinstance(data_points, list) or not data_points:
-        return None
-    points = []
-    for pt in data_points:
-        if isinstance(pt, dict) and _is_scalar(pt.get("x")) and _is_scalar(pt.get("y")):
-            points.append({"x": float(pt["x"]), "y": float(pt["y"])})
-    if not points:
-        return None
-    points.sort(key=lambda p: p["x"])
-    return points
-
-
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -151,18 +125,10 @@ def generate_metrics_from_kpis(
             warnings.append(f"No matching directory for run_id={test.run_id!r}")
             continue
 
-        # Process KPIs with type safety
+        # Process KPIs using the simplified structure
         metrics: dict[str, Any] = {}
         for kpi in test.kpis:
-            if not kpi.id:
-                continue
-
-            if kpi.is_curve:
-                points = _extract_curve_points(kpi.value)
-                if points:
-                    metrics[kpi.id] = points
-            elif _is_scalar(kpi.value):
-                metrics[kpi.id] = kpi.value
+            metrics[kpi.kpi_id] = kpi.values if kpi.is_curve else kpi.value
 
         # Write files with error handling
         try:
