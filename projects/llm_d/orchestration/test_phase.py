@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from projects.caliper.engine.constants import METADATA_FILE
+from projects.cluster.toolbox.capture_prometheus.main import run as capture_prometheus
 from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
 from projects.core.dsl import shell
 from projects.core.dsl.utils import slugify_identifier
@@ -222,24 +223,21 @@ def create_test_labels(
         logger.debug("No fournos job file found at: %s", fournos_source)
 
 
-def update_test_labels_with_timing(
-    timing_section: str, timing_event: str, timestamp: str | None = None
-) -> None:
+def update_test_labels_with_timing(timing_section: str, timing_event: str) -> datetime:
     """Update caliper metadata file with timing information.
 
     Args:
         timing_section: Section name (e.g., 'benchmark', 'test')
         timing_event: Event name (e.g., 'start', 'end')
-        timestamp: Optional ISO timestamp. If None, uses current time.
     """
-    if timestamp is None:
-        timestamp = get_iso_timestamp()
+    timestamp_dt = datetime.now(UTC)
+    timestamp = timestamp_dt.isoformat().replace("+00:00", "Z")
 
     test_labels_path = env.ARTIFACT_DIR / METADATA_FILE
 
     if not test_labels_path.exists():
         logging.error("Caliper metadata file not found ...")
-        return
+        return datetime.now(UTC)
 
     # Read existing labels
     with test_labels_path.open("r", encoding="utf-8") as f:
@@ -262,6 +260,8 @@ def update_test_labels_with_timing(
     logger.info(
         "Updated test labels with timing: %s.%s = %s", timing_section, timing_event, timestamp
     )
+
+    return timestamp_dt
 
 
 def update_test_labels_with_status(success: bool, message: str) -> None:
@@ -788,7 +788,7 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         return
 
     # Add benchmark start timing
-    update_test_labels_with_timing("benchmark", "start")
+    start_time = update_test_labels_with_timing("benchmark", "start")
 
     try:
         benchmark_key = runtime_config.get_benchmark_keys()[0]
@@ -817,7 +817,14 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
             )
     finally:
         # Add benchmark end timing (even if benchmark failed)
-        update_test_labels_with_timing("benchmark", "end")
+        end_time = update_test_labels_with_timing("benchmark", "end")
+
+        # Capture prometheus metrics if enabled
+        if config.project.get_config("prom", print=False).get("capture", {}).get("enabled", False):
+            try:
+                capture_prometheus(start_time, end_time)
+            except Exception as e:
+                logging.warning(f"Failed to capture Prometheus metrics: {e}")
 
 
 def capture_inference_service_state(llmisvc_name: str) -> None:
