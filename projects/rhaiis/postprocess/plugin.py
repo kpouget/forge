@@ -15,6 +15,25 @@ from .kpis import RhaiisKpiHandler
 from .parser import RhaiisParser
 
 
+def _prefix_caching_from_runtime_args(runtime_args: str) -> str:
+    """Return "yes"/"no" from the enable/no-enable-prefix-caching flag in
+    runtime_args, or "" if neither is set. If both appear, the last one
+    wins (matches vLLM/argparse's BooleanOptionalAction behavior).
+    """
+    result = ""
+    for part in runtime_args.split(";"):
+        key, sep, value = part.strip().partition(":")
+        if not sep:
+            continue
+        key = key.strip()
+        value = value.strip().lower()
+        if key == "no-enable-prefix-caching":
+            result = "no" if value == "true" else "yes"
+        elif key == "enable-prefix-caching":
+            result = "yes" if value == "true" else "no"
+    return result
+
+
 class RhaiisPlugin(PostProcessingPlugin):
     def __init__(self) -> None:
         self.parser = RhaiisParser()
@@ -91,6 +110,11 @@ class RhaiisPlugin(PostProcessingPlugin):
                 "guidellm_version": labels.get("guidellm_version", ""),
                 "mlflow_run_id": labels.get("mlflow_run_id", ""),
                 "mlflow_experiment_id": labels.get("mlflow_experiment_id", ""),
+                "turns": labels.get("turns", ""),
+                "prefix_tokens": labels.get("prefix_tokens", ""),
+                "prefix_count": labels.get("prefix_count", ""),
+                "request_type": labels.get("request_type", ""),
+                "prefix_caching": _prefix_caching_from_runtime_args(labels.get("runtime_args", "")),
             }
 
         return export_dashboard_kpis_to_csv(
