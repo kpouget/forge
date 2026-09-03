@@ -11,6 +11,35 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+def _convert_historical_kpi_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert historical KPI format to current format.
+
+    Historical format uses:
+    - 'id' instead of 'kpi_id'
+    - 'is_2d' instead of 'is_curve'
+    - value.data_points structure for curve data
+    """
+
+    # Convert historical format
+    converted = data.copy()
+
+    # Convert ID field
+    converted["kpi_id"] = data["id"]
+
+    # Convert curve flag
+    converted["is_curve"] = data.get("is_2d", False) or data.get("is_curve", False)
+
+    # Convert curve data structure
+    if converted["is_curve"] and isinstance(data.get("value"), dict):
+        data_points = data["value"].get("data_points", [])
+        converted["values"] = [
+            [point["x"], point["y"]] for point in data_points if isinstance(point, dict)
+        ]
+        converted["value"] = None  # Clear value since it's curve data
+
+    return converted
+
+
 @dataclass
 class HierarchicalKpi:
     """Base KPI structure with common fields for both hierarchical and flat formats."""
@@ -53,10 +82,15 @@ class HierarchicalKpi:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HierarchicalKpi:
         """Create HierarchicalKpi from dictionary data."""
+
+        # Convert historical format to current format if needed
+        if "id" in data or "kpi_id" not in data:
+            data = _convert_historical_kpi_data(data)
+
         return cls(
             kpi_id=data.get("kpi_id", ""),
             value=data.get("value"),
-            values=data.get("values"),
+            values=data.get("values", []),
             name=data.get("name", ""),
             unit=data.get("unit", ""),
             higher_is_better=data.get("higher_is_better", False),
