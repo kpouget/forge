@@ -30,7 +30,7 @@ class KPICsvExporter:
         self.schema = KPICsvSchema()
         self.include_curve_kpis = include_curve_kpis
 
-    def export_kpis_to_csv(
+    def export_dashboard_csv(
         self,
         kpi_records: list[dict[str, Any]],
         output_path: Path,
@@ -128,7 +128,7 @@ class KPICsvExporter:
         kpi_records = kpi_handler.compute_kpis(model)
 
         # Export to CSV
-        return self.export_kpis_to_csv(kpi_records, output_path, include_header_comments)
+        return self.export_dashboard_csv(kpi_records, output_path, include_header_comments)
 
     def get_csv_schema_info(self) -> dict[str, Any]:
         """Get information about the CSV schema."""
@@ -171,7 +171,7 @@ class KPICsvExporter:
         return self.export_from_model(model, output_path, include_header_comments)
 
 
-def quick_export_kpis_to_csv(
+def quick_export_dashboard_csv(
     records: list[Any],
     output_path: Path | str,
     include_header_comments: bool = True,
@@ -193,7 +193,7 @@ def quick_export_kpis_to_csv(
     # Determine if we have KPI records or UnifiedResultRecord objects
     if records and isinstance(records[0], dict) and "kpi_id" in records[0]:
         # These are KPI records
-        return exporter.export_kpis_to_csv(records, output_path, include_header_comments)
+        return exporter.export_dashboard_csv(records, output_path, include_header_comments)
     else:
         # These are UnifiedResultRecord objects
         return exporter.export_records_from_list(records, output_path, include_header_comments)
