@@ -21,6 +21,7 @@ from .report_dataclasses import (
     AnalysisSummary,
     BaselineSummary,
     ConfigSummary,
+    KpiComputationStatus,
     OverallStatus,
     RegressionReport,
     TestSummary,
@@ -32,7 +33,8 @@ __all__ = [
     "KpiCatalogEntry",
     "RegressionFinding",
     "RegressionReport",
-    # Status enum
+    # Status dataclasses
+    "KpiComputationStatus",
     "OverallStatus",
     # Summary dataclasses
     "AnalysisSummary",
