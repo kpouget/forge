@@ -83,8 +83,8 @@ matrix_benchmarking = [
     "pandas",
 ]
 agentic_review = [
-    "httpx", 
-    "langchain-openai", 
+    "httpx",
+    "langchain-openai",
     "langchain-core",
 ]
 
