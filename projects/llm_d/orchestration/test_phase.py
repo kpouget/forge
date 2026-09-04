@@ -820,11 +820,8 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         end_time = update_test_labels_with_timing("benchmark", "end")
 
         # Capture prometheus metrics if enabled
-        if config.project.get_config("prom", print=False).get("capture", {}).get("enabled", False):
-            try:
-                capture_prometheus(start_time, end_time)
-            except Exception as e:
-                logging.warning(f"Failed to capture Prometheus metrics: {e}")
+        if config.project.get_config("prom.capture.enabled"):
+            capture_prometheus(start_time, end_time)
 
 
 def capture_inference_service_state(llmisvc_name: str) -> None:

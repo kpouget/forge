@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.kpi import KpiComputationStatus, KpiRecord
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -74,12 +75,13 @@ class RhaiisPlugin(PostProcessingPlugin):
     ) -> list[str]:
         return []
 
-    def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:
+    def compute_kpis(self, model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
+        """Compute KPIs using dataclasses with status details."""
         return self.kpi_handler.compute_kpis(model)
 
     def export_kpis_to_csv(
         self,
-        kpi_records: list[dict[str, Any]],
+        kpi_records: list[KpiRecord],
         output_path: Path,
         include_header_comments: bool = True,
     ) -> str:

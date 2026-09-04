@@ -7,6 +7,7 @@ from typing import Any
 
 from projects.caliper.engine.kpi import (
     KpiCatalogEntry,
+    KpiComputationStatus,
     KpiRecord,
     build_catalog_from_functions,
     get_kpi_functions,
@@ -73,7 +74,7 @@ class GuideLLMKpiHandler:
     @staticmethod
     def compute_kpis(
         model: UnifiedRunModel,
-    ) -> list[dict[str, Any]] | tuple[list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[KpiRecord], KpiComputationStatus]:
         """
         Compute KPI values from the unified model.
 
@@ -84,7 +85,7 @@ class GuideLLMKpiHandler:
             List of KPI records, or tuple of (KPI records, status details) if warnings present
         """
         ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        out: list[dict[str, Any]] = []
+        out: list[KpiRecord] = []
 
         # Import the module containing the KPI functions
         from projects.guidellm.postprocess.guidellm.parsing import kpis as guidellm_kpis
@@ -99,7 +100,8 @@ class GuideLLMKpiHandler:
         ]
 
         if not valid_records:
-            return out
+            status = KpiComputationStatus.success_status(0, len(model.unified_result_records))
+            return out, status
 
         # Check for unknown gpu_type in records
         unknown_gpu_records = []
@@ -109,7 +111,7 @@ class GuideLLMKpiHandler:
             if gpu_type and gpu_type.lower() == "unknown":
                 unknown_gpu_records.append(r.test_base_path)
 
-        # If unknown GPU types found, return empty KPIs with error status
+        # If unknown GPU types found, return failure status
         if unknown_gpu_records:
             error_msg = (
                 f"Found gpu_type='unknown' in {len(unknown_gpu_records)} test paths: "
@@ -117,15 +119,8 @@ class GuideLLMKpiHandler:
                 "Unknown GPU types prevent reliable KPI analysis. "
                 "Please ensure GPU detection is working correctly or set gpu_type manually in test labels."
             )
-
-            status_details = {
-                "status": "failed",
-                "success": False,
-                "message": error_msg,
-                "warnings": [],
-            }
-
-            return [], status_details
+            status = KpiComputationStatus.failure_status(error_msg)
+            return [], status
 
         # Group records by test path for curve KPIs (same test, different rates)
         from collections import defaultdict
@@ -133,6 +128,9 @@ class GuideLLMKpiHandler:
         records_by_test = defaultdict(list)
         for r in valid_records:
             records_by_test[r.test_base_path].append(r)
+
+        # Track which records actually produced KPIs
+        processed_records = set()
 
         # Generate scalar KPIs for each record
         for r in valid_records:
@@ -171,7 +169,8 @@ class GuideLLMKpiHandler:
                     is_curve=False,  # Scalar KPI
                 )
 
-                out.append(kpi_record.to_dict())
+                out.append(kpi_record)
+                processed_records.add(r.test_base_path)  # Track that this record produced a KPI
 
         # Generate curve KPIs for records that have performance curves
         for r in valid_records:
@@ -220,6 +219,9 @@ class GuideLLMKpiHandler:
                     y_help=kpi_func._kpi_y_help,
                 )
 
-                out.append(kpi_record.to_dict())
+                out.append(kpi_record)
+                processed_records.add(r.test_base_path)  # Track that this record produced a KPI
 
-        return out
+        # Create success status
+        status = KpiComputationStatus.success_status(len(processed_records), len(valid_records))
+        return out, status

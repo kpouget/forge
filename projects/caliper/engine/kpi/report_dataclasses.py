@@ -322,6 +322,52 @@ class RegressionTestResult:
 
 
 @dataclass
+class KpiComputationStatus:
+    """Status result from KPI computation operations."""
+
+    status: str  # "success", "failed", "warning"
+    success: bool
+    message: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    tests_processed: int = 0
+    total_tests: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> KpiComputationStatus:
+        """Create KpiComputationStatus from dictionary data."""
+        return cls(**data)
+
+    @classmethod
+    def success_status(
+        cls, tests_processed: int, total_tests: int | None = None
+    ) -> KpiComputationStatus:
+        """Create a success status."""
+        return cls(
+            status="success",
+            success=True,
+            tests_processed=tests_processed,
+            total_tests=total_tests or tests_processed,
+        )
+
+    @classmethod
+    def failure_status(
+        cls, message: str, tests_processed: int = 0, total_tests: int = 0
+    ) -> KpiComputationStatus:
+        """Create a failure status."""
+        return cls(
+            status="failed",
+            success=False,
+            message=message,
+            tests_processed=tests_processed,
+            total_tests=total_tests,
+        )
+
+
+@dataclass
 class MlflowConversionResult:
     """Result of converting KPIs to MLflow format."""
 

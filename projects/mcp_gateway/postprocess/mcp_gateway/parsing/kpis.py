@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import inspect
 from datetime import UTC, datetime
-from typing import Any
 
 from projects.caliper.engine.kpi import (
     Format,
     HigherBetter,
     KpiCatalogEntry,
+    KpiComputationStatus,
     KPIMetadata,
     KpiRecord,
     LowerBetter,
@@ -259,10 +259,10 @@ class MCPGatewayKpiHandler:
         return build_catalog_from_functions(current_module)
 
     @staticmethod
-    def compute_kpis(model: UnifiedRunModel) -> list[dict[str, Any]]:
+    def compute_kpis(model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
         """Compute KPI values from the unified model."""
         ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        out: list[dict[str, Any]] = []
+        out: list[KpiRecord] = []
         current_module = inspect.getmodule(MCPGatewayKpiHandler)
         kpi_functions = get_kpi_functions(current_module)
 
@@ -273,7 +273,8 @@ class MCPGatewayKpiHandler:
         ]
 
         if not valid_records:
-            return out
+            status = KpiComputationStatus.success_status(0, len(model.unified_result_records))
+            return out, status
 
         for r in valid_records:
             base_labels = {**r.distinguishing_labels}
@@ -308,6 +309,8 @@ class MCPGatewayKpiHandler:
                     is_curve=False,  # Scalar KPI
                 )
 
-                out.append(kpi_record.to_dict())
+                out.append(kpi_record)
 
-        return out
+        # Create success status
+        status = KpiComputationStatus.success_status(len(valid_records), len(valid_records))
+        return out, status
