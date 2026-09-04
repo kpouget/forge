@@ -8,8 +8,8 @@ from typing import Any
 
 import yaml
 
+from projects.caliper.engine.kpi import KpiCatalogEntry, KpiComputationStatus, KpiRecord
 from projects.caliper.engine.kpi.analyze import AnalysisConfig
-from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -45,6 +45,9 @@ analysis_config = AnalysisConfig(
 class LlmDGuideLLMPlugin(GuideLLMPlugin):
     """Keep generic GuideLLM outputs and add the llm-d dashboard projection."""
 
+    def __init__(self):
+        super().__init__()
+
     def parse(self, nodes: list[TestBaseNode]) -> ParseResult:
         parsed = enrich_guidellm_parse_result(super().parse(nodes), nodes)
         nodes_by_path = {str(node.test_path): node for node in nodes}
@@ -70,12 +73,13 @@ class LlmDGuideLLMPlugin(GuideLLMPlugin):
     def kpi_catalog(self) -> list[KpiCatalogEntry]:
         return self.kpi_handler.get_catalog()
 
-    def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:
+    def compute_kpis(self, model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
+        """Compute KPI values using dataclasses with status details."""
         return super().compute_kpis(model)
 
     def export_kpis_to_csv(
         self,
-        kpi_records: list[dict[str, Any]],
+        kpi_records: list[KpiRecord],
         output_path: Path,
         include_header_comments: bool = True,
     ) -> str:

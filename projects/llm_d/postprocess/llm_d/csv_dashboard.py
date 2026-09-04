@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.kpi.dataclasses import KpiRecord
+
 DASHBOARD_FIELDNAMES = [
     "run",
     "accelerator",
@@ -63,7 +65,7 @@ DASHBOARD_FIELDNAMES = [
 
 
 def export_kpis_to_csv(
-    kpi_records: list[dict[str, Any]],
+    kpi_records: list[KpiRecord],
     output_path: Path,
     include_header_comments: bool = True,
 ) -> str:
