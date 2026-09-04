@@ -132,7 +132,17 @@ def generate_metrics_from_kpis(
             if kpi.is_curve:
                 # Convert coordinate pairs to point dictionaries for MLflow
                 if kpi.values:
-                    metrics[kpi.kpi_id] = [{"x": float(x), "y": float(y)} for x, y in kpi.values]
+                    # Validate that x values are integers (MLflow step values must be integers)
+                    curve_points = []
+                    for i, (x, y) in enumerate(kpi.values):
+                        if not isinstance(x, (int, float)) or x != int(x):
+                            raise ValueError(
+                                f"Curve KPI '{kpi.kpi_id}' in test '{test.run_id}': "
+                                f"data point {i} has non-integer step x={x!r} "
+                                f"(MLflow steps must be integers)"
+                            )
+                        curve_points.append({"x": float(x), "y": float(y)})
+                    metrics[kpi.kpi_id] = curve_points
             else:
                 # For scalar KPIs, use the value field
                 if kpi.value is not None:
