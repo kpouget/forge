@@ -75,6 +75,8 @@ class LlmDGuideLLMPlugin(GuideLLMPlugin):
 
     def compute_kpis(self, model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
         """Compute KPI values using dataclasses with status details."""
+        # Store model for independent dashboard KPI generation in CSV export
+        self._cached_model = model
         return super().compute_kpis(model)
 
     def export_kpis_to_csv(
@@ -86,7 +88,11 @@ class LlmDGuideLLMPlugin(GuideLLMPlugin):
         """Export KPI records to CSV format with llm-d dashboard schema."""
         from . import csv_dashboard
 
-        return csv_dashboard.export_kpis_to_csv(kpi_records, output_path, include_header_comments)
+        # Pass the cached model to the CSV export function
+        cached_model = getattr(self, "_cached_model", None)
+        return csv_dashboard.export_kpis_to_csv(
+            kpi_records, output_path, include_header_comments, model=cached_model
+        )
 
 
 def get_plugin() -> PostProcessingPlugin:
