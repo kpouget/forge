@@ -6,8 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from projects.caliper.engine.kpi import KpiCatalogEntry, KpiComputationStatus, KpiRecord
 from projects.caliper.engine.kpi.analyze import AnalysisConfig
-from projects.caliper.engine.kpi.dataclasses import KpiCatalogEntry
 from projects.caliper.engine.model import (
     ParseResult,
     PostProcessingPlugin,
@@ -90,7 +90,7 @@ class SkeletonDefaultPlugin(PostProcessingPlugin):
         )
         return paths
 
-    def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:
+    def compute_kpis(self, model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
         """Compute KPI values from the unified model."""
         return self.kpi_handler.compute_kpis(model)
 

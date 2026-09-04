@@ -6,13 +6,13 @@ import inspect
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from projects.caliper.engine.kpi import (
     # KPI function decorators and utilities
     Format,
     HigherBetter,
     KpiCatalogEntry,
+    KpiComputationStatus,
     KPIMetadata,
     KpiRecord,
     LowerBetter,
@@ -93,11 +93,11 @@ class SkeletonKpiHandler:
         return build_catalog_from_functions(current_module)
 
     @staticmethod
-    def compute_kpis(model: UnifiedRunModel) -> list[dict[str, Any]]:
+    def compute_kpis(model: UnifiedRunModel) -> tuple[list[KpiRecord], KpiComputationStatus]:
         """Compute KPI values using annotated functions."""
         current_module = inspect.getmodule(SkeletonKpiHandler)
         kpi_functions = get_kpi_functions(current_module)
-        kpis = []
+        kpis: list[KpiRecord] = []
         timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for record in model.unified_result_records:
@@ -153,6 +153,8 @@ class SkeletonKpiHandler:
 
                 kpi_record = KpiRecord(**kpi_kwargs)
 
-                kpis.append(kpi_record.to_dict())
+                kpis.append(kpi_record)
 
-        return kpis
+        # Create success status
+        status = KpiComputationStatus.success_status(len(kpis), len(model.unified_result_records))
+        return kpis, status
