@@ -327,7 +327,6 @@ def _load_test_labels(test_dir: Path) -> dict[str, Any]:
 def _run_dashboard_csv(
     postprocess_config: CaliperOrchestrationPostprocessConfig,
     output_dir: Path,
-    kpi_json_path: Path,
     base_dir: Path,
     manifest_path: Path | None,
     step_logs_dir: Path,
@@ -1052,12 +1051,29 @@ class CaliperPostprocessOrchestrator:
 
         Runs automatically after kpis.json generation succeeds. Uses
         ``caliper kpi kpis-to-mlflow`` via fork/exec like all other steps.
+
+        Note: This step is optional and only runs if artifacts_to_kpis step was executed successfully.
         """
+        # Check if artifacts_to_kpis step exists and was successful
         kpi_step = self._get_step("artifacts_to_kpis")
         if not kpi_step or kpi_step.get("status") != "success":
+            # artifacts_to_kpis step was not run or failed - skip MLflow metrics generation
+            return
+
+        # Check if artifacts_to_kpis is enabled in config
+        if (
+            not hasattr(self.config.kpi, "artifacts_to_kpis")
+            or not self.config.kpi.artifacts_to_kpis.enabled
+        ):
+            # artifacts_to_kpis disabled - skip MLflow metrics generation
             return
 
         kpis_json_path = self.output_dir / self.config.kpi.artifacts_to_kpis.output
+
+        # Check if the KPI JSON file actually exists
+        if not kpis_json_path.exists():
+            # No KPI JSON file available - skip MLflow metrics generation
+            return
 
         status_file = _generate_automatic_status_file_path(self.output_dir, "kpis_to_mlflow")
 
@@ -1104,11 +1120,9 @@ class CaliperPostprocessOrchestrator:
             )
             return
 
-        kpi_json_path = self.output_dir / self.config.kpi.artifacts_to_kpis.output
         result = _run_dashboard_csv(
             self.config,
             self.output_dir,
-            kpi_json_path,
             self.tree_root,
             self.manifest_path,
             self.step_logs_dir,

@@ -793,7 +793,7 @@ def kpi_csv_export(
         # Export to dashboard CSV using the new architecture
         from projects.caliper.engine.kpi.csv_export import export_dashboard_csv
 
-        result_path = export_dashboard_csv(
+        result_path, kpi_count = export_dashboard_csv(
             plugin=plugin,
             model=model,
             output_path=output,
@@ -802,10 +802,11 @@ def kpi_csv_export(
         status_data = {
             "success": True,
             "output_file": str(result_path),
+            "kpi_count": kpi_count,
             "record_count": len(model.unified_result_records),
         }
         click.echo(
-            f"Generated dashboard CSV from {len(model.unified_result_records)} records: {result_path}"
+            f"Generated dashboard CSV with {kpi_count} KPI rows from {len(model.unified_result_records)} records: {result_path}"
         )
     except Exception as e:  # noqa: BLE001
         import traceback
