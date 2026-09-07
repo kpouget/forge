@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Caliper KPI Dashboard{% endblock %}
+
+{% block header_title %}KPI Dashboard{% endblock %}
+
+{% block header_subtitle %}Performance Metrics Report - {{ total_tests }} test(s), {{ total_kpis }} KPI(s){% endblock %}
+
+{% block content %}
+<!-- Summary Statistics -->
+<div class="summary-grid">
+    <div class="summary-card">
+        <h3>{{ total_tests }}</h3>
+        <p>Test Runs</p>
+    </div>
+    <div class="summary-card">
+        <h3>{{ total_kpis }}</h3>
+        <p>Total KPIs</p>
+    </div>
+    <div class="summary-card">
+        <h3>{{ curve_kpis_count }}</h3>
+        <p>Curve KPIs</p>
+    </div>
+    <div class="summary-card">
+        <h3>{{ scalar_kpis_count }}</h3>
+        <p>Scalar KPIs</p>
+    </div>
+</div>
+
+<!-- Test Results -->
+{% for test in tests %}
+<div class="card">
+    <h2>Test Run: {{ test.run_id }}</h2>
+
+    {% if test.metadata and test.metadata.timestamp %}
+    <p class="timestamp">Generated: {{ test.metadata.timestamp }}</p>
+    {% endif %}
+
+    <!-- Test Labels -->
+    {% if test.labels %}
+    <div style="margin: 1rem 0;">
+        <strong>Labels:</strong>
+        <div class="label-list">
+            {% for key, value in test.labels.items() %}
+            <span class="label-item">{{ key }}: {{ value }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- KPI Table -->
+    <table>
+        <thead>
+            <tr>
+                <th>KPI</th>
+                <th>Value</th>
+                <th>Unit</th>
+                <th>Type</th>
+                <th>Trend</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for kpi in test.kpis %}
+            <tr>
+                <td><strong>{{ kpi.name or kpi.kpi_id }}</strong></td>
+                <td class="metric-value">
+                    {% if kpi.is_curve %}
+                        {% if kpi.values_count > 0 %}
+                        {{ kpi.values_count }} points
+                        {% else %}
+                        No data
+                        {% endif %}
+                    {% else %}
+                        {% if kpi.value is not none %}
+                        {{ "%.3f"|format(kpi.value) if kpi.value is number else kpi.value }}
+                        {% else %}
+                        No data
+                        {% endif %}
+                    {% endif %}
+                </td>
+                <td>{{ kpi.unit or '-' }}</td>
+                <td>
+                    {% if kpi.is_curve %}
+                    <span class="badge badge-info">Curve</span>
+                    {% else %}
+                    <span class="badge badge-success">Scalar</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if kpi.higher_is_better %}
+                    <span style="color: green;">↑ Higher Better</span>
+                    {% else %}
+                    <span style="color: orange;">↓ Lower Better</span>
+                    {% endif %}
+                </td>
+                <td>{{ kpi.help or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Charts for Curve KPIs -->
+    {% set curve_kpis = test.kpis | selectattr('is_curve', 'equalto', true) | list %}
+    {% if curve_kpis %}
+    <h3 style="margin-top: 2rem;">Curve Visualizations</h3>
+    {% for kpi in curve_kpis %}
+    {% if kpi.values %}
+    <div class="chart-container">
+        <div id="chart-{{ test.run_id }}-{{ kpi.kpi_id }}" style="width: 100%; height: 400px;"></div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if not tests %}
+<div class="card">
+    <h2>No Data Available</h2>
+    <p>No KPI data was found in the provided file.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Generate charts for curve KPIs
+{% for test in tests %}
+{% for kpi in test.kpis %}
+{% if kpi.is_curve and kpi.values and kpi.values_count > 0 %}
+(function() {
+    try {
+        // Use the pre-serialized data directly
+        const rawData = {{ kpi.values_json }};
+
+        if (!Array.isArray(rawData)) {
+            console.error('KPI values is not an array for {{ kpi.kpi_id }}:', rawData);
+            return;
+        }
+
+        const x_values = rawData.map(point => point[0]);
+        const y_values = rawData.map(point => point[1]);
+
+        const trace = {
+            x: x_values,
+            y: y_values,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: '{{ kpi.name or kpi.kpi_id }}',
+            line: {
+                color: '#667eea',
+                width: 2
+            },
+            marker: {
+                size: 6,
+                color: '#667eea'
+            }
+        };
+
+        const layout = {
+            title: {
+                text: '{{ kpi.name or kpi.kpi_id }}{% if kpi.help %} - {{ kpi.help }}{% endif %}',
+                font: { size: 16 }
+            },
+            xaxis: {
+                title: '{{ kpi.x_unit or "X-axis" }}{% if kpi.x_help %} ({{ kpi.x_help }}){% endif %}',
+                showgrid: true,
+                gridcolor: '#e0e0e0'
+            },
+            yaxis: {
+                title: '{{ kpi.unit or "Y-axis" }}{% if kpi.y_help %} ({{ kpi.y_help }}){% endif %}',
+                showgrid: true,
+                gridcolor: '#e0e0e0'
+            },
+            plot_bgcolor: 'white',
+            paper_bgcolor: 'white',
+            margin: { t: 50, r: 20, b: 60, l: 80 }
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+        };
+
+        Plotly.newPlot('chart-{{ test.run_id }}-{{ kpi.kpi_id }}', [trace], layout, config);
+    } catch (error) {
+        console.error('Error generating chart for {{ kpi.kpi_id }}:', error);
+        document.getElementById('chart-{{ test.run_id }}-{{ kpi.kpi_id }}').innerHTML = '<p>Error loading chart</p>';
+    }
+})();
+{% endif %}
+{% endfor %}
+{% endfor %}
+</script>
+{% endblock %}

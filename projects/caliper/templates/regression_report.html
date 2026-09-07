@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}Caliper Regression Analysis{% endblock %}
+
+{% block header_title %}Regression Analysis Report{% endblock %}
+
+{% block header_subtitle %}
+Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ tested.total_kpis }} KPIs
+{% endblock %}
+
+{% block content %}
+<!-- Overall Status -->
+<div class="summary-grid">
+    <div class="summary-card">
+        <h3 style="color: {% if overall.verdict == 'PASS' %}#28a745{% elif overall.verdict == 'REGRESSION_DETECTED' %}#dc3545{% else %}#ffc107{% endif %};">
+            {{ overall.verdict.replace('_', ' ').title() }}
+        </h3>
+        <p>Overall Status</p>
+    </div>
+    <div class="summary-card">
+        <h3>{{ tested.total_kpis }}</h3>
+        <p>Total KPIs</p>
+    </div>
+    <div class="summary-card">
+        <h3 style="color: #28a745;">{{ tested.pass_count }}</h3>
+        <p>Passed</p>
+    </div>
+    <div class="summary-card">
+        <h3 style="color: #dc3545;">{{ tested.regression }}</h3>
+        <p>Regressions</p>
+    </div>
+    {% if tested.skipped > 0 %}
+    <div class="summary-card">
+        <h3 style="color: #6c757d;">{{ tested.skipped }}</h3>
+        <p>Skipped</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Analysis Information -->
+<div class="card">
+    <h2>Analysis Information</h2>
+
+    {% if analysis.timestamp %}
+    <p class="timestamp">Analysis completed: {{ analysis.timestamp }}</p>
+    {% endif %}
+
+    <table style="margin-top: 1rem;">
+        <tr>
+            <th style="width: 30%;">Configuration</th>
+            <th>Value</th>
+        </tr>
+        {% if config.comparison_labels %}
+        <tr>
+            <td>Comparison Labels</td>
+            <td>{{ config.comparison_labels | join(', ') }}</td>
+        </tr>
+        {% endif %}
+        {% if config.ignored_labels %}
+        <tr>
+            <td>Ignored Labels</td>
+            <td>{{ config.ignored_labels | join(', ') }}</td>
+        </tr>
+        {% endif %}
+        {% if config.sorting_labels %}
+        <tr>
+            <td>Sorting Labels</td>
+            <td>{{ config.sorting_labels | join(', ') }}</td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+
+<!-- Regression Results -->
+{% set regression_results = results | selectattr('verdict', 'equalto', 'REGRESSION') | list %}
+{% if regression_results %}
+<div class="card">
+    <h2>Regressions Detected ({{ regression_results|length }})</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>KPI</th>
+                <th>Current Value</th>
+                <th>Baseline Mean</th>
+                <th>Change</th>
+                <th>Algorithm</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in regression_results %}
+            <tr>
+                <td>
+                    <strong>{{ result.kpi_id }}</strong>
+                    {% if result.run_id %}
+                    <br><small>{{ result.run_id }}</small>
+                    {% endif %}
+                </td>
+                <td class="metric-value">
+                    {% if result.current_value %}
+                        {% if result.is_curve %}
+                            {% if result.current_value.values %}
+                            {{ result.current_value.values|length }} points
+                            {% else %}
+                            No data
+                            {% endif %}
+                        {% else %}
+                            {% if result.current_value.value is not none %}
+                            {{ "%.3f"|format(result.current_value.value) if result.current_value.value is number else result.current_value.value }}
+                            {% else %}
+                            No data
+                            {% endif %}
+                        {% endif %}
+                    {% else %}
+                    No data
+                    {% endif %}
+                </td>
+                <td class="metric-value">
+                    {% if result.details and result.details.baseline_mean is defined %}
+                    {{ "%.3f"|format(result.details.baseline_mean) if result.details.baseline_mean is number else result.details.baseline_mean }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if result.details and result.details.relative_change is defined %}
+                    <span style="color: {% if result.details.relative_change < 0 %}#dc3545{% else %}#28a745{% endif %};">
+                        {{ "%+.1f%%"|format(result.details.relative_change * 100) }}
+                    </span>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge badge-info">{{ result.details.algorithm if result.details and result.details.algorithm else 'Unknown' }}</span>
+                </td>
+                <td>
+                    {% if result.details %}
+                    <small>
+                        Baselines: {{ result.baseline_count }}<br>
+                        {% if result.details.config %}
+                        Threshold: {{ result.details.config.max_relative_regression if result.details.config.max_relative_regression is defined else 'N/A' }}
+                        {% endif %}
+                    </small>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- All Results -->
+<div class="card">
+    <h2>All Test Results</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>KPI</th>
+                <th>Verdict</th>
+                <th>Current Value</th>
+                <th>Baselines</th>
+                <th>Labels</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in results %}
+            <tr>
+                <td>
+                    <strong>{{ result.kpi_id }}</strong>
+                    {% if result.run_id %}
+                    <br><small>{{ result.run_id }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge {% if result.verdict == 'PASS' %}badge-success{% elif result.verdict == 'REGRESSION' %}badge-danger{% elif result.verdict == 'SKIPPED' %}badge-warning{% else %}badge-info{% endif %}">
+                        {{ result.verdict }}
+                    </span>
+                </td>
+                <td class="metric-value">
+                    {% if result.current_value %}
+                        {% if result.is_curve %}
+                            {% if result.current_value.values %}
+                            {{ result.current_value.values|length }} points
+                            {% else %}
+                            No data
+                            {% endif %}
+                        {% else %}
+                            {% if result.current_value.value is not none %}
+                            {{ "%.3f"|format(result.current_value.value) if result.current_value.value is number else result.current_value.value }}
+                            {% else %}
+                            No data
+                            {% endif %}
+                        {% endif %}
+                    {% else %}
+                    No data
+                    {% endif %}
+                </td>
+                <td>{{ result.baseline_count }}</td>
+                <td>
+                    {% if result.labels and result.labels.comparison_keys %}
+                    <div class="label-list">
+                        {% for key, value in result.labels.comparison_keys.items() %}
+                        <span class="label-item">{{ key }}: {{ value }}</span>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Regression Trend Chart -->
+{% set regression_data = results | selectattr('verdict', 'equalto', 'REGRESSION') | selectattr('details.relative_change', 'defined') | list %}
+{% if regression_data %}
+<div class="card">
+    <h2>Regression Trend Visualization</h2>
+    <div class="chart-container">
+        <div id="regression-chart" style="width: 100%; height: 400px;"></div>
+    </div>
+</div>
+{% endif %}
+
+{% if not results %}
+<div class="card">
+    <h2>No Results Available</h2>
+    <p>No regression analysis results were found in the provided file.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if regression_data %}
+<script>
+// Generate regression trend chart
+(function() {
+    const regressionData = {{ regression_data | tojson }};
+
+    const kpi_names = regressionData.map(r => r.kpi_id);
+    const changes = regressionData.map(r => r.details ? r.details.relative_change * 100 : 0);
+    const colors = changes.map(change => change < 0 ? '#dc3545' : '#28a745');
+
+    const trace = {
+        x: kpi_names,
+        y: changes,
+        type: 'bar',
+        marker: {
+            color: colors,
+            line: {
+                color: '#333',
+                width: 1
+            }
+        },
+        hovertemplate: '<b>%{x}</b><br>Change: %{y:.1f}%<extra></extra>'
+    };
+
+    const layout = {
+        title: {
+            text: 'Regression Changes by KPI',
+            font: { size: 18 }
+        },
+        xaxis: {
+            title: 'KPI',
+            tickangle: -45
+        },
+        yaxis: {
+            title: 'Relative Change (%)',
+            showgrid: true,
+            gridcolor: '#e0e0e0',
+            zeroline: true,
+            zerolinecolor: '#333',
+            zerolinewidth: 2
+        },
+        plot_bgcolor: 'white',
+        paper_bgcolor: 'white',
+        margin: { t: 60, r: 20, b: 120, l: 80 }
+    };
+
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+    };
+
+    Plotly.newPlot('regression-chart', [trace], layout, config);
+})();
+</script>
+{% endif %}
+{% endblock %}
