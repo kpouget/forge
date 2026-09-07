@@ -235,6 +235,15 @@ def build_kpi_csv_export_command(
     # CSV export specific options
     cmd.extend(["--output", str(output_file)])
 
+    # Include/exclude labels (parent-level filtering)
+    if config.filtering.include_labels:
+        for label in config.filtering.include_labels:
+            cmd.extend(["--include-label", label])
+
+    if config.filtering.exclude_labels:
+        for label in config.filtering.exclude_labels:
+            cmd.extend(["--exclude-label", label])
+
     # Status file for orchestration
     cmd.extend(["--status-file", str(status_file)])
 

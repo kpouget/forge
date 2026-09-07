@@ -751,6 +751,7 @@ def kpi_generate(
 
 @click.command("csv-export")
 @_workspace_cli_options
+@_label_filter_options
 @click.option("--output", type=click.Path(path_type=Path), required=True, help="Output CSV file")
 @click.option(
     "--status-file", type=click.Path(path_type=Path), help="YAML file to write operation status"
@@ -759,6 +760,8 @@ def kpi_generate(
 def kpi_csv_export(
     ctx: click.Context,
     output: Path,
+    include_label: tuple[str, ...],
+    exclude_label: tuple[str, ...],
     artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module_override: str | None,
@@ -773,6 +776,9 @@ def kpi_csv_export(
     mod, plugin = _plugin_tuple(ctx)
     artifact_root: Path = _root_obj(ctx)["base_dir"]
 
+    # Parse label filters
+    include_filter, exclude_filter = _parse_label_filters(include_label, exclude_label)
+
     status_data = {"success": False}
 
     try:
@@ -785,8 +791,8 @@ def kpi_csv_export(
             plugin=plugin,
             use_cache=True,  # Use cache for performance
             show_parameter_matrix=False,  # No need to show matrix for CSV export
-            include_label_filter=None,
-            exclude_label_filter=None,
+            include_label_filter=include_filter,
+            exclude_label_filter=exclude_filter,
             verbose_parsing=False,
         )
 
