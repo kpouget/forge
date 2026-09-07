@@ -10,7 +10,6 @@ def export_dashboard_csv(
     plugin: object,
     model: object,
     output_path: Path,
-    include_header_comments: bool = True,
 ) -> str:
     """
     Export dashboard CSV using the plugin's new export_dashboard_csv method.
@@ -19,7 +18,6 @@ def export_dashboard_csv(
         plugin: PostProcessingPlugin instance with export_dashboard_csv method
         model: UnifiedRunModel for generating dashboard KPIs independently
         output_path: Path where to write the CSV file
-        include_header_comments: Whether to include descriptive header comments
 
     Returns:
         Path to the generated CSV file as string

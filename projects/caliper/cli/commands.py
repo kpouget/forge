@@ -753,9 +753,6 @@ def kpi_generate(
 @_workspace_cli_options
 @click.option("--output", type=click.Path(path_type=Path), required=True, help="Output CSV file")
 @click.option(
-    "--include-header-comments", is_flag=True, default=True, help="Include header comments in CSV"
-)
-@click.option(
     "--status-file", type=click.Path(path_type=Path), help="YAML file to write operation status"
 )
 @click.pass_context
@@ -765,7 +762,6 @@ def kpi_csv_export(
     artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module_override: str | None,
-    include_header_comments: bool,
     status_file: Path | None,
 ) -> None:
     _apply_workspace_cli_overrides(
@@ -801,7 +797,6 @@ def kpi_csv_export(
             plugin=plugin,
             model=model,
             output_path=output,
-            include_header_comments=include_header_comments,
         )
 
         status_data = {

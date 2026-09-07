@@ -235,9 +235,6 @@ def build_kpi_csv_export_command(
     # CSV export specific options
     cmd.extend(["--output", str(output_file)])
 
-    if config.kpi.dashboard_csv.include_header_comments:
-        cmd.append("--include-header-comments")
-
     # Status file for orchestration
     cmd.extend(["--status-file", str(status_file)])
 

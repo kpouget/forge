@@ -83,10 +83,6 @@ class CaliperOrchestrationDashboardCsvSection(BaseModel):
         default="dashboard.csv",
         description="CSV filename or path; relative paths resolve under the post-processing artifact dir.",
     )
-    include_header_comments: bool = Field(
-        default=True,
-        description="Whether to include descriptive header comments in the CSV file.",
-    )
 
 
 class CaliperOrchestrationArtifactsToAiDataSection(BaseModel):
