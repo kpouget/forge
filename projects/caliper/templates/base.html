@@ -199,6 +199,43 @@
                 border: 1px solid #ddd;
             }
         }
+
+        /* Error styling */
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            margin: 0.5rem 0;
+        }
+
+        .console-error {
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            border-left: 4px solid #dc3545;
+            padding-left: 1rem;
+        }
+
+        /* Console error override for better visibility */
+        .console-error-display {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 400px;
+            z-index: 9999;
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 2px solid #f5c6cb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-family: monospace;
+            font-size: 0.875rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
     </style>
 
     {% block extra_head %}{% endblock %}
@@ -215,5 +252,43 @@
     </div>
 
     {% block extra_js %}{% endblock %}
+
+    <script>
+    // Console error handler to display errors with red background
+    let errorCount = 0;
+    const originalConsoleError = console.error;
+
+    console.error = function(...args) {
+        // Call the original console.error
+        originalConsoleError.apply(console, args);
+
+        // Create visual error display
+        if (errorCount < 5) { // Limit to prevent spam
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'console-error-display';
+            errorDiv.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 0.5rem;">Console Error #${errorCount + 1}:</div>
+                <div>${args.join(' ')}</div>
+                <button onclick="this.parentElement.remove()" style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: #721c24; cursor: pointer; font-size: 1.2rem;">×</button>
+            `;
+
+            document.body.appendChild(errorDiv);
+
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (errorDiv.parentElement) {
+                    errorDiv.remove();
+                }
+            }, 10000);
+
+            errorCount++;
+        }
+    };
+
+    // Window error handler for uncaught errors
+    window.addEventListener('error', function(event) {
+        console.error('Uncaught Error:', event.error?.message || event.message);
+    });
+    </script>
 </body>
 </html>

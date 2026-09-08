@@ -105,13 +105,23 @@ class HTMLGenerator:
             else:
                 data = report_data
 
+            # Filter regression results with relative change for visualization
+            results = data.get("results", [])
+            regression_data = [
+                result
+                for result in results
+                if result.get("verdict") == "REGRESSION"
+                and result.get("details", {}).get("relative_change") is not None
+            ]
+
             html_content = template.render(
                 report=data,
                 overall=data.get("overall", {}),
                 tested=data.get("tested", {}),
-                results=data.get("results", []),
+                results=results,
                 analysis=data.get("analysis", {}),
                 config=data.get("config", {}),
+                regression_data=regression_data,
             )
 
             output_file.parent.mkdir(parents=True, exist_ok=True)
