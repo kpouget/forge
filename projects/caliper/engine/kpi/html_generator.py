@@ -121,6 +121,7 @@ class HTMLGenerator:
                 results=results,
                 analysis=data.get("analysis", {}),
                 config=data.get("config", {}),
+                input_data=data.get("input_data", {}),
                 regression_data=regression_data,
             )
 

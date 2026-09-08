@@ -492,6 +492,293 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
     <p>No regression analysis results were found in the provided file.</p>
 </div>
 {% endif %}
+
+<!-- Input Data Sources -->
+<div class="card">
+    <h2>Input Data Sources</h2>
+
+    {% if input_data %}
+    <!-- Current Source -->
+    {% if input_data.current_source %}
+    <h3 style="margin-bottom: 0.75rem; color: #495057;">Current Data</h3>
+    <table style="margin-bottom: 2rem;">
+        <tbody>
+            {% for key, value in input_data.current_source.items() %}
+            <tr>
+                <td style="font-weight: 600; width: 30%; color: #495057;">{{ key|title|replace('_', ' ') }}</td>
+                <td>
+                    {% if key in ['file_path', 'path', 'source'] %}
+                    <code style="font-size: 0.875rem; background: #f8f9fa; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">{{ value }}</code>
+
+                    {% elif key == 'comparison_keys' and value %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        {% for item in value %}
+                        <span style="background: #007bff; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500;">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+
+                    {% elif key == 'ignored_keys' and value %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        {% for item in value %}
+                        <span style="background: #6c757d; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500;">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+
+                    {% elif key == 'relevant_common_keys' and value %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        {% for item in value %}
+                        <span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500;">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+
+                    {% elif key == 'relevant_distinct_keys' and value %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        {% for item in value %}
+                        {% if item %}
+                        <span style="background: #17a2b8; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500;">{{ item }}</span>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {% elif key == 'relevant_distinct_labels' and value %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        {% for item in value %}
+                        {% if item %}
+                        <span style="background: #fd7e14; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500;">{{ item }}</span>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {% elif key in ['relevant_count', 'irrelevant_count'] %}
+                    <span style="font-family: monospace; background: #e9ecef; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">{{ value }}</span>
+
+                    {% elif key in ['timestamp', 'modified', 'created'] %}
+                    <span class="timestamp">{{ value }}</span>
+                    {% elif key in ['size', 'file_size'] %}
+                    <span style="font-family: monospace;">{{ value }}</span>
+                    {% elif key in ['type', 'format'] %}
+                    <span class="badge badge-info">{{ value }}</span>
+                    {% else %}
+                    {{ value }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Baseline Sources -->
+    {% if input_data.baseline_sources %}
+    <h3 style="margin-bottom: 0.75rem; color: #495057;">Baseline Data Sources</h3>
+
+    <!-- Relevant Sources -->
+    {% if input_data.baseline_sources.relevant_sources %}
+    <h4 style="margin-bottom: 0.5rem; color: #28a745; font-size: 1rem; cursor: pointer; user-select: none;" onclick="toggleSourceSection('relevant-sources')" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+        <span id="relevant-sources-icon">▶</span> ✓ Relevant Sources ({{ input_data.baseline_sources.relevant_sources|length }})
+    </h4>
+    <div id="relevant-sources-content" style="margin-bottom: 1.5rem; display: none;">
+        {% for source in input_data.baseline_sources.relevant_sources %}
+        <div style="margin-bottom: 1rem; border: 1px solid #c3e6cb; border-radius: 0.5rem; overflow: hidden;">
+            <!-- File Path Header -->
+            <div style="background: #d4edda; padding: 0.75rem; border-bottom: 1px solid #c3e6cb;">
+                <code style="font-size: 0.875rem; font-weight: 600; color: #155724;">{{ source.path }}</code>
+            </div>
+
+            <!-- Details Panel -->
+            <div style="padding: 0.75rem; background: white;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; align-items: start;">
+
+                    <!-- Version & Count -->
+                    <div>
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #495057; font-size: 0.875rem;">Version:</strong>
+                            {% if source.comparison_keys %}
+                            <div style="margin-top: 0.25rem;">
+                                {% for key in source.comparison_keys %}
+                                <span style="background: #007bff; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">{{ key }}</span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span style="color: #6c757d;">-</span>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Relevant Count:</strong>
+                            <span style="font-family: monospace; background: #e9ecef; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.relevant_count }}</span>
+                        </div>
+
+                        {% if source.same_version_count is defined %}
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Same Version Count:</strong>
+                            <span style="font-family: monospace; background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.same_version_count }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if source.total_count is defined %}
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Total Count:</strong>
+                            <span style="font-family: monospace; background: #d1ecf1; color: #0c5460; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.total_count }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Ignored Keys -->
+                    <div>
+                        <strong style="color: #495057; font-size: 0.875rem;">Ignored Keys:</strong>
+                        {% if source.ignored_keys %}
+                        <div style="margin-top: 0.25rem;">
+                            {% for key in source.ignored_keys %}
+                            <div style="display: block; margin-bottom: 0.25rem;">
+                                <span style="background: #6c757d; color: white; padding: 0.2rem 0.4rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500; display: inline-block;">{{ key }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div style="margin-top: 0.25rem;">
+                            <span style="color: #6c757d; font-style: italic;">None</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Common Keys -->
+                    <div>
+                        <strong style="color: #495057; font-size: 0.875rem;">Common Keys ({{ source.relevant_common_keys|length if source.relevant_common_keys else 0 }}):</strong>
+                        {% if source.relevant_common_keys %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;">
+                            {% for key in source.relevant_common_keys %}
+                            <span style="background: #28a745; color: white; padding: 0.2rem 0.4rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500;">{{ key }}</span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div style="margin-top: 0.25rem;">
+                            <span style="color: #6c757d; font-style: italic;">None</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Irrelevant Sources -->
+    {% if input_data.baseline_sources.irrelevant_sources %}
+    <h4 style="margin-bottom: 0.5rem; color: #6c757d; font-size: 1rem; cursor: pointer; user-select: none;" onclick="toggleSourceSection('irrelevant-sources')" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+        <span id="irrelevant-sources-icon">▶</span> ✗ Irrelevant Sources ({{ input_data.baseline_sources.irrelevant_sources|length }})
+    </h4>
+    <div id="irrelevant-sources-content" style="display: none;">
+        {% for source in input_data.baseline_sources.irrelevant_sources %}
+        <div style="margin-bottom: 1rem; border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden;">
+            <!-- File Path Header -->
+            <div style="background: #e9ecef; padding: 0.75rem; border-bottom: 1px solid #dee2e6;">
+                <code style="font-size: 0.875rem; font-weight: 600; color: #495057;">{{ source.path }}</code>
+            </div>
+
+            <!-- Details Panel -->
+            <div style="padding: 0.75rem; background: white;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; align-items: start;">
+
+                    <!-- Version & Count -->
+                    <div>
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #495057; font-size: 0.875rem;">Version:</strong>
+                            {% if source.comparison_keys %}
+                            <div style="margin-top: 0.25rem;">
+                                {% for key in source.comparison_keys %}
+                                <span style="background: #007bff; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">{{ key }}</span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span style="color: #6c757d;">-</span>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Irrelevant Count:</strong>
+                            <span style="font-family: monospace; background: #e9ecef; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.irrelevant_count }}</span>
+                        </div>
+
+                        {% if source.same_version_count is defined %}
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Same Version Count:</strong>
+                            <span style="font-family: monospace; background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.same_version_count }}</span>
+                        </div>
+                        {% endif %}
+
+                        {% if source.total_count is defined %}
+                        <div>
+                            <strong style="color: #495057; font-size: 0.875rem;">Total Count:</strong>
+                            <span style="font-family: monospace; background: #d1ecf1; color: #0c5460; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.total_count }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Common Keys -->
+                    {% if source.relevant_common_keys %}
+                    <div>
+                        <strong style="color: #495057; font-size: 0.875rem;">Common Keys ({{ source.relevant_common_keys|length }}):</strong>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;">
+                            {% for key in source.relevant_common_keys %}
+                            <span style="background: #28a745; color: white; padding: 0.2rem 0.4rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500;">{{ key }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Ignored Keys -->
+                    <div>
+                        <strong style="color: #495057; font-size: 0.875rem;">Ignored Keys:</strong>
+                        {% if source.ignored_keys %}
+                        <div style="margin-top: 0.25rem;">
+                            {% for key in source.ignored_keys %}
+                            <div style="display: block; margin-bottom: 0.25rem;">
+                                <span style="background: #6c757d; color: white; padding: 0.2rem 0.4rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500; display: inline-block;">{{ key }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div style="margin-top: 0.25rem;">
+                            <span style="color: #6c757d; font-style: italic;">None</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Irrelevant Keys -->
+                    <div>
+                        <strong style="color: #495057; font-size: 0.875rem;">Irrelevant Keys:</strong>
+                        {% if source.irrelevant_keys %}
+                        <div style="margin-top: 0.25rem;">
+                            {% for key in source.irrelevant_keys %}
+                            <div style="display: block; margin-bottom: 0.25rem;">
+                                <span style="background: #f8d7da; color: #721c24; padding: 0.2rem 0.4rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500; display: inline-block;">{{ key }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div style="margin-top: 0.25rem;">
+                            <span style="color: #6c757d; font-style: italic;">None</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% else %}
+    <div style="text-align: center; color: #6c757d; padding: 2rem;">
+        <p>Input data source information not available</p>
+        <small style="font-size: 0.875rem;">This information is populated by the regression analysis engine</small>
+    </div>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -771,6 +1058,7 @@ window.regressionResultsData = [
     {
         kpi_id: '{{ result.kpi_id }}',
         verdict: '{{ result.verdict }}',
+        run_id: '{{ result.run_id }}',
         is_curve: {{ result.is_curve | tojson }},
         current_value: {{ result.current_value | tojson | safe }},
         baseline_values: {{ result.baseline_values | tojson | safe }},
@@ -1068,6 +1356,20 @@ document.addEventListener('DOMContentLoaded', function() {
         updateAUCDetails();
     }, 100);
 });
+
+// Toggle function for collapsible source sections
+function toggleSourceSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const icon = document.getElementById(`${sectionId}-icon`);
+
+    if (content.style.display === 'none' || content.style.display === '') {
+        content.style.display = 'block';
+        icon.textContent = '▼';
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
 
 </script>
 
