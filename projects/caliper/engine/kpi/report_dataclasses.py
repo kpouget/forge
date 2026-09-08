@@ -114,6 +114,12 @@ class ResultEntry:
     baseline_values: list[dict[str, Any]] = field(default_factory=list)
     baseline_count: int = 0
     details: dict[str, Any] = field(default_factory=dict)
+    unit: str = ""
+    help: str = ""
+    x_unit: str = ""
+    x_help: str = ""
+    y_unit: str = ""
+    y_help: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -324,6 +330,12 @@ class RegressionTestResult:
     baseline_count: int = 0
     reason: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
+    unit: str = ""
+    help: str = ""
+    x_unit: str = ""
+    x_help: str = ""
+    y_unit: str = ""
+    y_help: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
