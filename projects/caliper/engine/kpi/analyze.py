@@ -549,6 +549,9 @@ def _summarize_label_sets(
 
     seen_all = []
     seen_filtered = []
+    same_version_count = 0
+    total_count = len(all_labels)
+
     for labels in all_labels:
         # Use unified filtering logic
         filtered = _filter_labels_for_matching(labels, set(config.ignored_labels))
@@ -564,6 +567,7 @@ def _summarize_label_sets(
                 (k, str(labels[k])) for k in config.comparison_labels if k in labels
             )
             if baseline_comparison_keys in current_comparison_combinations:
+                same_version_count += 1
                 continue
 
         if filtered and filtered not in seen_filtered:
@@ -602,6 +606,8 @@ def _summarize_label_sets(
         "relevant_distinct_labels": distinct_labels,
         "relevant_count": len(seen_filtered),
         "irrelevant_count": len(seen_all) - len(seen_filtered),
+        "same_version_count": same_version_count,
+        "total_count": total_count,
     }
 
 
