@@ -37,7 +37,7 @@ class HTMLGenerator:
     def generate_kpi_html(self, kpi_data: dict | list, output_file: Path) -> None:
         """Generate HTML report from KPI data."""
         try:
-            template = self.env.get_template("kpi_dashboard.html")
+            template = self.env.get_template("kpi_listing.html")
 
             # Handle both hierarchical (dict) and flat (list) formats
             if isinstance(kpi_data, dict):

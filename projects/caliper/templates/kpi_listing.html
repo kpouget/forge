@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Caliper KPI Dashboard{% endblock %}
+{% block title %}Caliper KPI Report{% endblock %}
 
-{% block header_title %}KPI Dashboard{% endblock %}
+{% block header_title %}KPI Report{% endblock %}
 
 {% block header_subtitle %}Performance Metrics Report - {{ total_tests }} test(s), {{ total_kpis }} KPI(s){% endblock %}
 
@@ -220,7 +220,7 @@
         {% for kpi in test.kpis %}
         {% if kpi.kpi_id == kpi_id and kpi.is_curve and kpi.values_list and kpi.values_list|length > 0 %}
         // Data for {{ test.run_id }}
-        const rawData_{{ test.run_id|replace('-', '_')|replace('.', '_') }} = {{ kpi.values_json }};
+        let rawData = {{ kpi.values_list|tojson|safe }};
 
         if (!firstKpi) {
             firstKpi = {
@@ -233,9 +233,9 @@
             };
         }
 
-        if (Array.isArray(rawData_{{ test.run_id|replace('-', '_')|replace('.', '_') }}) && rawData_{{ test.run_id|replace('-', '_')|replace('.', '_') }}.length > 0) {
-            const x_values = rawData_{{ test.run_id|replace('-', '_')|replace('.', '_') }}.map(point => point[0]);
-            const y_values = rawData_{{ test.run_id|replace('-', '_')|replace('.', '_') }}.map(point => point[1]);
+        if (Array.isArray(rawData) && rawData.length > 0) {
+            let x_values = rawData.map(point => point[0]);
+            let y_values = rawData.map(point => point[1]);
 
             traces.push({
                 x: x_values,

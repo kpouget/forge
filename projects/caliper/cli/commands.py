@@ -737,7 +737,7 @@ def kpi_generate(
                     html_output = output.with_suffix(".html")
                     generate_kpi_html_from_file(output, html_output)
                     click.echo(f"📄 Generated HTML report: {html_output}")
-                    status_data["html_output_file"] = str(html_output)
+                    status_data["html_file"] = str(html_output)
                 except Exception as e:
                     click.echo(f"⚠️  Failed to generate HTML report: {e}", err=True)
                     status_data["html_generation_error"] = str(e)
@@ -1067,6 +1067,9 @@ def analyse_kpis_cmd(
             html_output = output.with_suffix(".html")
             generate_regression_html_from_file(output, html_output)
             click.echo(f"📄 Generated HTML regression report: {html_output}")
+
+            # Store HTML file path in status data for notifications
+            status_data.html_file = str(html_output)
         except Exception as e:
             click.echo(f"⚠️  Failed to generate HTML report: {e}", err=True)
 
