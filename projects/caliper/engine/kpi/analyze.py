@@ -75,7 +75,7 @@ def create_analysis_summary(
 
     passes = [r for r in results if r.verdict == Verdict.PASS]
     regressions = [r for r in results if r.verdict == Verdict.REGRESSION]
-    skipped = [r for r in results if r.verdict == Verdict.SKIPPED]
+    skipped = [r for r in results if r.verdict in (Verdict.SKIPPED, Verdict.NO_BASELINE)]
 
     test_summary = TestSummary(
         total_kpis=len(results),
@@ -385,7 +385,7 @@ def _scalar_relative_change_regression(
         return base
 
     if len(scalar_entries) < min_baseline_points:
-        base.verdict = Verdict.SKIPPED
+        base.verdict = Verdict.NO_BASELINE
         base.reason = f"insufficient baselines ({len(scalar_entries)} < {min_baseline_points})"
         return base
 
@@ -441,7 +441,7 @@ def _curve_auc_change_regression(
     ]
 
     if len(auc_baselines) < min_baseline_points:
-        base.verdict = Verdict.SKIPPED
+        base.verdict = Verdict.NO_BASELINE
         base.reason = f"insufficient curve baselines ({len(auc_baselines)} < {min_baseline_points})"
         return base
 
@@ -512,9 +512,14 @@ def _sort_results(
     results: list[RegressionTestResult], sorting_labels: list[str]
 ) -> list[RegressionTestResult]:
     """Sort results by sorting labels extracted from labels, then by kpi_id.
-    SKIPPED entries are placed after tested entries."""
+    SKIPPED and NO_BASELINE entries are placed after tested entries."""
 
-    verdict_order = {Verdict.PASS: 0, Verdict.REGRESSION: 1, Verdict.SKIPPED: 2}
+    verdict_order = {
+        Verdict.PASS: 0,
+        Verdict.REGRESSION: 1,
+        Verdict.SKIPPED: 2,
+        Verdict.NO_BASELINE: 2,
+    }
 
     def sort_key(r: RegressionTestResult) -> tuple:
         label_key = tuple(str(r.labels.get(k, "")) for k in sorting_labels)
@@ -627,7 +632,7 @@ def _build_report(
     """Build the final report structure using original format."""
     regressions = [r for r in results if r.verdict == Verdict.REGRESSION]
     passes = [r for r in results if r.verdict == Verdict.PASS]
-    skipped = [r for r in results if r.verdict == Verdict.SKIPPED]
+    skipped = [r for r in results if r.verdict in (Verdict.SKIPPED, Verdict.NO_BASELINE)]
 
     if regressions:
         overall_status = OverallStatus.REGRESSION_DETECTED

@@ -226,7 +226,7 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
                     {% endif %}
                 </td>
                 <td>
-                    <span class="badge {% if result.verdict == 'PASS' %}badge-success{% elif result.verdict == 'REGRESSION' %}badge-danger{% elif result.verdict == 'SKIPPED' %}badge-warning{% else %}badge-info{% endif %}">
+                    <span class="badge {% if result.verdict == 'PASS' %}badge-success{% elif result.verdict == 'REGRESSION' %}badge-danger{% elif result.verdict == 'SKIPPED' or result.verdict == 'NO_BASELINE' %}badge-warning{% else %}badge-info{% endif %}">
                         {{ result.verdict }}
                     </span>
                 </td>
@@ -1154,7 +1154,7 @@ function populateFilterOptions() {
     // Populate verdict filters
     const verdictContainer = document.getElementById('verdict-filters');
     Array.from(verdicts).sort().forEach(verdict => {
-        const badgeClass = verdict === 'PASS' ? 'badge-success' : verdict === 'REGRESSION' ? 'badge-danger' : verdict === 'SKIPPED' ? 'badge-warning' : 'badge-info';
+        const badgeClass = verdict === 'PASS' ? 'badge-success' : verdict === 'REGRESSION' ? 'badge-danger' : (verdict === 'SKIPPED' || verdict === 'NO_BASELINE') ? 'badge-warning' : 'badge-info';
         const label = document.createElement('label');
         label.style.cssText = 'display: block; margin-bottom: 0.25rem; font-size: 0.875rem;';
         label.innerHTML = `<input type="checkbox" class="verdict-filter" value="${verdict}" checked style="margin-right: 0.5rem;"> <span class="badge ${badgeClass}" style="font-size: 0.75rem;">${verdict}</span>`;

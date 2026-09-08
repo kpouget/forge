@@ -33,6 +33,7 @@ class Verdict(StrEnum):
     PASS = "PASS"
     REGRESSION = "REGRESSION"
     SKIPPED = "SKIPPED"
+    NO_BASELINE = "NO_BASELINE"
 
 
 @dataclass
