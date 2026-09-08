@@ -21,6 +21,7 @@ from projects.caliper.engine.kpi.report_dataclasses import (
     AnalysisSummary,
     CurrentValueInfo,
     InputDataSection,
+    LabelSetSummary,
     OverallSection,
     OverallStatus,
     RegressionReport,
@@ -521,7 +522,7 @@ def _summarize_label_sets(
     config: AnalysisConfig,
     current_keys: dict[str, set[str]] | None = None,
     current_comparison_combinations: set[frozenset] | None = None,
-) -> dict[str, Any]:
+) -> LabelSetSummary:
     """Summarize label sets found in a hierarchical KPI doc.
 
     Args:
@@ -594,21 +595,19 @@ def _summarize_label_sets(
     else:
         common, distinct_keys, distinct_labels = [], [], []
 
-    return {
-        "comparison_keys": sorted(
+    return LabelSetSummary(
+        comparison_keys=sorted(
             f"{k}={v}" for k in config.comparison_labels for v in _unique_values(k)
         ),
-        "ignored_keys": sorted(
-            f"{k}={v}" for k in config.ignored_labels for v in _unique_values(k)
-        ),
-        "relevant_common_keys": common,
-        "relevant_distinct_keys": distinct_keys,
-        "relevant_distinct_labels": distinct_labels,
-        "relevant_count": len(seen_filtered),
-        "irrelevant_count": len(seen_all) - len(seen_filtered),
-        "same_version_count": same_version_count,
-        "total_count": total_count,
-    }
+        ignored_keys=sorted(f"{k}={v}" for k in config.ignored_labels for v in _unique_values(k)),
+        relevant_common_keys=common,
+        relevant_distinct_keys=distinct_keys,
+        relevant_distinct_labels=distinct_labels,
+        relevant_count=len(seen_filtered),
+        irrelevant_count=len(seen_all) - len(seen_filtered),
+        same_version_count=same_version_count,
+        total_count=total_count,
+    )
 
 
 def _build_report(
@@ -931,7 +930,7 @@ def run_kpi_analysis(
 
             source_entry = {
                 "path": str(path),
-                **summary,
+                **summary.to_dict(),
                 "unexpected_labels": sorted(unexpected_labels),
                 "irrelevant_keys": sorted(irrelevant_keys),
             }
@@ -942,14 +941,14 @@ def run_kpi_analysis(
                 source_entry.pop("irrelevant_keys")
 
             # Split sources based on relevant_count
-            if summary.get("relevant_count", 0) > 0:
+            if summary.relevant_count > 0:
                 relevant_sources.append(source_entry)
             else:
                 irrelevant_sources.append(source_entry)
 
         current_source = {
             "path": str(current_kpi_file),
-            **_summarize_label_sets(current_data, config, None, None),
+            **_summarize_label_sets(current_data, config, None, None).to_dict(),
         }
 
         if (irr_count := current_source.pop("irrelevant_count")) != 0:

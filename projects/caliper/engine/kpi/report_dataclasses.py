@@ -210,6 +210,34 @@ class OverallSection:
 
 
 @dataclass
+class LabelSetSummary:
+    """Summary of label sets found in a hierarchical KPI document.
+
+    Contains analysis of how many entries are relevant, irrelevant, or filtered
+    for various reasons when comparing against current test data.
+    """
+
+    comparison_keys: list[str] = field(default_factory=list)
+    ignored_keys: list[str] = field(default_factory=list)
+    relevant_common_keys: list[str] = field(default_factory=list)
+    relevant_distinct_keys: list[str] = field(default_factory=list)
+    relevant_distinct_labels: list[str] = field(default_factory=list)
+    relevant_count: int = 0
+    irrelevant_count: int = 0
+    same_version_count: int = 0
+    total_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LabelSetSummary:
+        """Create LabelSetSummary from dictionary data."""
+        return cls(**data)
+
+
+@dataclass
 class InputDataSection:
     """Input data section of the regression report."""
 
