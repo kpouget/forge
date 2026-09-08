@@ -950,12 +950,12 @@ function renderCurveChart(chartId, resultData) {
             font: { size: 16 }
         },
         xaxis: {
-            title: 'Input',
+            title: (resultData.x_help || 'Input') + (resultData.x_unit ? ` (${resultData.x_unit})` : ''),
             showgrid: true,
             gridcolor: '#e0e0e0'
         },
         yaxis: {
-            title: 'Value',
+            title: (resultData.y_help || resultData.kpi_id) + (resultData.y_unit ? ` (${resultData.y_unit})` : ''),
             showgrid: true,
             gridcolor: '#e0e0e0'
         },
@@ -1067,7 +1067,7 @@ function renderScalarChart(chartId, resultData) {
                 showgrid: false
             },
             yaxis: {
-                title: 'Value',
+                title: (resultData.help || resultData.kpi_id) + (resultData.unit ? ` (${resultData.unit})` : ''),
                 showgrid: true,
                 gridcolor: '#e0e0e0'
             },
@@ -1106,7 +1106,13 @@ window.regressionResultsData = [
         baseline_values: {{ result.baseline_values | tojson | safe }},
         labels: {{ result.labels | tojson | safe }},
         details: {{ result.details | tojson | safe }},
-        baseline_count: {{ result.baseline_count }}
+        baseline_count: {{ result.baseline_count }},
+        unit: '{{ result.unit if result.unit else "" }}',
+        help: '{{ result.help if result.help else "" }}',
+        x_unit: '{{ result.x_unit if result.x_unit else "" }}',
+        x_help: '{{ result.x_help if result.x_help else "" }}',
+        y_unit: '{{ result.y_unit if result.y_unit else "" }}',
+        y_help: '{{ result.y_help if result.y_help else "" }}'
     }{{ "," if not loop.last else "" }}
     {% endfor %}
 ];
