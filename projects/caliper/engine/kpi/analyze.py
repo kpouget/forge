@@ -346,6 +346,12 @@ def _run_regression_test(
         ),
         baseline_values=baseline_values_list,
         baseline_count=len(baseline_values_list),
+        unit=current.unit,
+        help=current.help,
+        x_unit=current.x_unit,
+        x_help=current.x_help,
+        y_unit=current.y_unit,
+        y_help=current.y_help,
     )
 
     if is_curve:
@@ -700,6 +706,12 @@ def _build_report(
             baseline_values=result.baseline_values,
             baseline_count=result.baseline_count,
             details=details,
+            unit=result.unit,
+            help=result.help,
+            x_unit=result.x_unit,
+            x_help=result.x_help,
+            y_unit=result.y_unit,
+            y_help=result.y_help,
         )
         result_entries.append(entry)
 
