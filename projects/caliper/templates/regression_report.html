@@ -91,7 +91,7 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
             {% for result in regression_results %}
             <tr>
                 <td>
-                    <strong>{{ result.kpi_id }}</strong>
+                    <strong style="cursor: pointer; color: #007bff; text-decoration: underline;" onclick="scrollToResult('{{ result.kpi_id }}', '{{ result.run_id }}')" onmouseover="this.style.color='#0056b3'" onmouseout="this.style.color='#007bff'">{{ result.kpi_id }}</strong>
                     {% if result.run_id %}
                     <br><small>{{ result.run_id }}</small>
                     {% endif %}
@@ -201,7 +201,7 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
 
         <!-- Filter Actions -->
         <div style="margin-top: 1rem; text-align: right;">
-            <button onclick="clearAllFilters()" style="background: #6c757d; color: white; border: none; padding: 0.375rem 0.75rem; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;">Clear All</button>
+            <button onclick="clearAllFilters()" style="background: #6c757d; color: white; border: none; padding: 0.375rem 0.75rem; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;">Show All</button>
         </div>
     </div>
 
@@ -218,7 +218,7 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
         </thead>
         <tbody>
             {% for result in results %}
-            <tr>
+            <tr id="result-row-{{ loop.index0 }}" data-kpi-id="{{ result.kpi_id }}" data-run-id="{{ result.run_id }}">
                 <td>
                     <strong>{{ result.kpi_id }}</strong>
                     {% if result.run_id %}
@@ -1368,6 +1368,62 @@ function toggleSourceSection(sectionId) {
     } else {
         content.style.display = 'none';
         icon.textContent = '▶';
+    }
+}
+
+// Scroll to and highlight a specific result in All Test Results
+function scrollToResult(kpiId, runId) {
+    // Find the matching row
+    const rows = document.querySelectorAll('#all-results-table tbody tr[data-kpi-id]');
+    let targetRow = null;
+
+    for (let row of rows) {
+        // Match both kpi_id and run_id for precise targeting
+        if (row.dataset.kpiId === kpiId && row.dataset.runId === runId) {
+            targetRow = row;
+            break;
+        }
+    }
+
+    // If exact match not found, try matching just kpi_id
+    if (!targetRow) {
+        for (let row of rows) {
+            if (row.dataset.kpiId === kpiId) {
+                targetRow = row;
+                break;
+            }
+        }
+    }
+
+    if (targetRow) {
+        // Clear any existing filters to ensure the row is visible
+        const allCheckboxes = document.querySelectorAll('#test-run-filters input, #kpi-id-filters input, #verdict-filters input');
+        allCheckboxes.forEach(cb => cb.checked = true);
+        applyFilters();
+
+        // Small delay to ensure filtering is applied
+        setTimeout(() => {
+            // Scroll to the row smoothly
+            targetRow.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+
+            // Highlight the row temporarily
+            const originalBackground = targetRow.style.background;
+            targetRow.style.background = '#fff3cd';
+            targetRow.style.transition = 'background-color 0.3s ease';
+
+            // Remove highlight after 2 seconds
+            setTimeout(() => {
+                targetRow.style.background = originalBackground;
+                setTimeout(() => {
+                    targetRow.style.transition = '';
+                }, 300);
+            }, 2000);
+        }, 100);
+    } else {
+        console.warn('Could not find result row for KPI:', kpiId, 'Run ID:', runId);
     }
 }
 
