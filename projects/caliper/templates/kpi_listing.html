@@ -219,41 +219,42 @@
         {% for test in tests %}
         {% for kpi in test.kpis %}
         {% if kpi.kpi_id == kpi_id and kpi.is_curve and kpi.values_list and kpi.values_list|length > 0 %}
-        // Data for {{ test.run_id }}
-        let rawData = {{ kpi.values_list|tojson|safe }};
+        (function() { // IIFE for {{ test.run_id }}
+            const rawData = {{ kpi.values_list|tojson|safe }};
 
-        if (!firstKpi) {
-            firstKpi = {
-                name: '{{ kpi.name or kpi_id }}',
-                unit: '{{ kpi.unit or "" }}',
-                x_unit: '{{ kpi.x_unit or "" }}',
-                help: '{{ kpi.help or "" }}',
-                x_help: '{{ kpi.x_help or "" }}',
-                y_help: '{{ kpi.y_help or "" }}'
-            };
-        }
+            if (!firstKpi) {
+                firstKpi = {
+                    name: '{{ kpi.name or kpi_id }}',
+                    unit: '{{ kpi.unit or "" }}',
+                    x_unit: '{{ kpi.x_unit or "" }}',
+                    help: '{{ kpi.help or "" }}',
+                    x_help: '{{ kpi.x_help or "" }}',
+                    y_help: '{{ kpi.y_help or "" }}'
+                };
+            }
 
-        if (Array.isArray(rawData) && rawData.length > 0) {
-            let x_values = rawData.map(point => point[0]);
-            let y_values = rawData.map(point => point[1]);
+            if (Array.isArray(rawData) && rawData.length > 0) {
+                const x_values = rawData.map(point => point[0]);
+                const y_values = rawData.map(point => point[1]);
 
-            traces.push({
-                x: x_values,
-                y: y_values,
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: '{{ test.run_id }}',
-                line: {
-                    color: colors[colorIndex % colors.length],
-                    width: 2
-                },
-                marker: {
-                    size: 6,
-                    color: colors[colorIndex % colors.length]
-                }
-            });
-            colorIndex++;
-        }
+                traces.push({
+                    x: x_values,
+                    y: y_values,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: '{{ test.run_id }}',
+                    line: {
+                        color: colors[colorIndex % colors.length],
+                        width: 2
+                    },
+                    marker: {
+                        size: 6,
+                        color: colors[colorIndex % colors.length]
+                    }
+                });
+                colorIndex++;
+            }
+        })();
         {% endif %}
         {% endfor %}
         {% endfor %}
