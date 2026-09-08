@@ -426,38 +426,80 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
                         <h6 style="margin: 0 0 0.75rem 0; color: #495057; font-size: 0.875rem;">Curve AUC Analysis</h6>
                         <div style="background: white; padding: 0.75rem; border: 1px solid #ddd; border-radius: 0.25rem;">
 
-                            {% if result.current_value and result.current_value['values'] %}
-                            <div style="margin-bottom: 0.5rem;">
-                                <strong>Current AUC:</strong>
-                                <span id="current-auc-{{ loop.index0 }}" style="font-family: monospace;">Calculating...</span>
-                            </div>
-                            {% endif %}
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: left; font-weight: 600;">Version</th>
+                                        <th style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-weight: 600;">AUC Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Current AUC row -->
+                                    <tr style="background-color: #e7f3ff; font-weight: 600;">
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6;">
+                                            Current
+                                            {% if result.current_value.comparison_keys %}
+                                            <br><small style="color: #6c757d; font-weight: normal;">
+                                                {% for key, value in result.current_value.comparison_keys.items() %}
+                                                {{ key }}={{ value }}{% if not loop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </small>
+                                            {% endif %}
+                                        </td>
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
+                                            {{ "%.3f"|format(result.details.current_auc) }}
+                                        </td>
+                                    </tr>
 
-                            {% if result.current_value and result.current_value['values'] %}
-                            <div style="margin-bottom: 0.75rem;">
-                                <strong>AUC Change:</strong>
-                                <span id="auc-change-{{ loop.index0 }}" style="font-family: monospace;">Calculating...</span>
-                            </div>
-                            {% endif %}
+                                    <!-- Historical AUC rows -->
+                                    {% if result.details.baseline_aucs %}
+                                    {% for baseline in result.details.baseline_aucs %}
+                                    <tr>
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6;">
+                                            {% if baseline.comparison_keys %}
+                                            {% for key, value in baseline.comparison_keys.items() %}
+                                            {{ key }}={{ value }}{% if not loop.last %}, {% endif %}
+                                            {% endfor %}
+                                            {% else %}
+                                            Historical {{ loop.index }}
+                                            {% endif %}
+                                        </td>
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
+                                            {{ "%.3f"|format(baseline.value) }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
 
-                            {% if result.baseline_values %}
-                            <div>
-                                <strong>Historical AUC Values:</strong>
-                                <table id="historical-auc-table-{{ loop.index0 }}" style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.875rem;">
-                                    <thead>
-                                        <tr style="background-color: #f8f9fa;">
-                                            <th style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: left; font-weight: 600;">Baseline</th>
-                                            <th style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-weight: 600;">AUC Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td colspan="2" style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: center; color: #6c757d;">Calculating...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                                    <!-- Baseline mean row -->
+                                    <tr style="background-color: #f8f9fa; font-weight: 600;">
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6;">
+                                            <em>Baseline Mean</em>
+                                        </td>
+                                        <td style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">
+                                            {{ "%.3f"|format(result.details.baseline_mean_auc) }}
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+
+                            <!-- Summary Information -->
+                            <div style="margin-top: 1rem; padding: 0.5rem; background: #f8f9fa; border-radius: 0.25rem;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div>
+                                        <strong style="color: #495057;">Relative Change:</strong>
+                                        <span style="font-family: monospace; color: {% if result.details.relative_change > 0 %}#dc3545{% else %}#28a745{% endif %};">
+                                            {{ "%+.1f%%"|format(result.details.relative_change) }}
+                                        </span>
+                                    </div>
+                                    {% if result.details.config and result.details.config.max_relative_regression %}
+                                    <div>
+                                        <strong style="color: #495057;">Regression Threshold:</strong>
+                                        <span style="font-family: monospace;">{{ "%+.1f%%"|format(result.details.config.max_relative_regression * 100) }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
-                            {% endif %}
                         </div>
 
                         {% elif result.details.algorithm == 'SCALAR_RELATIVE_CHANGE' %}
@@ -1069,103 +1111,6 @@ window.regressionResultsData = [
     {% endfor %}
 ];
 
-// Calculate AUC for curve data
-function calculateAUC(values) {
-    if (!values || values.length < 2) {
-        return 0;
-    }
-
-    let auc = 0;
-    for (let i = 1; i < values.length; i++) {
-        const x1 = values[i-1][0];
-        const y1 = values[i-1][1];
-        const x2 = values[i][0];
-        const y2 = values[i][1];
-
-        // Trapezoidal rule
-        const width = x2 - x1;
-        const avgHeight = (y1 + y2) / 2;
-        auc += width * avgHeight;
-    }
-
-    return auc;
-}
-
-// Calculate and display AUC details for curve KPIs
-function updateAUCDetails() {
-    if (!window.regressionResultsData) {
-        console.warn('Regression results data not available');
-        return;
-    }
-
-    window.regressionResultsData.forEach((result, index) => {
-        if (result.details && result.details.algorithm === 'CURVE_AUC_CHANGE' && result.is_curve) {
-
-            // Calculate current AUC
-            if (result.current_value && result.current_value.values) {
-                const currentAUC = calculateAUC(result.current_value.values);
-                const currentAUCElement = document.getElementById(`current-auc-${index}`);
-                if (currentAUCElement) {
-                    currentAUCElement.textContent = currentAUC.toFixed(3);
-                    currentAUCElement.style.color = '#333';
-                }
-            }
-
-            // Calculate historical AUC values and populate table
-            if (result.baseline_values) {
-                const historicalAUCs = [];
-                const tableElement = document.getElementById(`historical-auc-table-${index}`);
-
-                if (tableElement) {
-                    const tbody = tableElement.querySelector('tbody');
-                    if (tbody) {
-                        // Clear existing rows
-                        tbody.innerHTML = '';
-
-                        result.baseline_values.forEach((baseline, histIndex) => {
-                            if (baseline && baseline.value) {
-                                const auc = calculateAUC(baseline.value);
-                                historicalAUCs.push(auc);
-
-                                const label = baseline.comparison_keys ?
-                                    Object.entries(baseline.comparison_keys).map(([k,v]) => `${k}=${v}`).join(', ') :
-                                    `Historical ${histIndex + 1}`;
-
-                                // Create table row
-                                const row = document.createElement('tr');
-                                row.innerHTML = `
-                                    <td style="padding: 0.5rem; border: 1px solid #dee2e6;">${label}</td>
-                                    <td style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: right; font-family: monospace;">${auc.toFixed(3)}</td>
-                                `;
-                                tbody.appendChild(row);
-                            }
-                        });
-
-                        // If no data, show placeholder
-                        if (tbody.children.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="2" style="padding: 0.5rem; border: 1px solid #dee2e6; text-align: center; color: #6c757d;">No historical data available</td></tr>';
-                        }
-                    }
-                }
-
-                // Calculate AUC change
-                if (result.current_value && result.current_value.values && historicalAUCs.length > 0) {
-                    const currentAUC = calculateAUC(result.current_value.values);
-                    const avgHistoricalAUC = historicalAUCs.reduce((sum, auc) => sum + auc, 0) / historicalAUCs.length;
-                    const aucChange = currentAUC - avgHistoricalAUC;
-                    const aucChangePercent = avgHistoricalAUC !== 0 ? (aucChange / avgHistoricalAUC) * 100 : 0;
-
-                    const aucChangeElement = document.getElementById(`auc-change-${index}`);
-                    if (aucChangeElement) {
-                        const sign = aucChange >= 0 ? '+' : '';
-                        aucChangeElement.innerHTML = `${sign}${aucChange.toFixed(3)} (${sign}${aucChangePercent.toFixed(2)}%)`;
-                        aucChangeElement.style.color = aucChange >= 0 ? '#dc3545' : '#28a745';
-                    }
-                }
-            }
-        }
-    });
-}
 
 // Filter functionality
 function populateFilterOptions() {
@@ -1348,12 +1293,11 @@ function clearAllFilters() {
     applyFilters();
 }
 
-// Initialize filters and AUC calculations when the page loads
+// Initialize filters when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Small delay to ensure regression data is fully loaded
     setTimeout(() => {
         populateFilterOptions();
-        updateAUCDetails();
     }, 100);
 });
 
