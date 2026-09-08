@@ -561,7 +561,7 @@ def _summarize_label_sets(
 
     seen_all = []
     seen_filtered = []
-    same_version_count = 0
+    irrelevant_keys = []
     total_count = len(all_labels)
 
     for labels in all_labels:
@@ -579,7 +579,11 @@ def _summarize_label_sets(
                 (k, str(labels[k])) for k in config.comparison_labels if k in labels
             )
             if baseline_comparison_keys in current_comparison_combinations:
-                same_version_count += 1
+                # Add comparison keys to irrelevant_keys instead of counting
+                for k, v in baseline_comparison_keys:
+                    key_str = f"{k}={v}"
+                    if key_str not in irrelevant_keys:
+                        irrelevant_keys.append(key_str)
                 continue
 
         if filtered and filtered not in seen_filtered:
@@ -614,9 +618,9 @@ def _summarize_label_sets(
         relevant_common_keys=common,
         relevant_distinct_keys=distinct_keys,
         relevant_distinct_labels=distinct_labels,
+        irrelevant_keys=sorted(irrelevant_keys),
         relevant_count=len(seen_filtered),
         irrelevant_count=len(seen_all) - len(seen_filtered),
-        same_version_count=same_version_count,
         total_count=total_count,
     )
 
@@ -890,7 +894,7 @@ def run_kpi_analysis(
         # Run regression tests
         results: list[RegressionTestResult] = []
 
-        baseline_skipped_totals: dict[str, int] = {"same_version": 0, "duplicate": 0}
+        baseline_skipped_totals: dict[str, int] = {"duplicate": 0}
 
         for test in current_data.tests:
             test_labels = test.labels
@@ -907,7 +911,6 @@ def run_kpi_analysis(
                     for ck, baseline_entry in baseline_dict.items()
                     if ck != current_ck
                 ]
-                baseline_skipped_totals["same_version"] += len(baseline_dict) - len(baselines)
 
                 if not baselines:
                     _log_baseline_miss(kpi.kpi_id, mk, baseline_index)
@@ -945,16 +948,19 @@ def run_kpi_analysis(
                         entry = f"{k}={sv}"
                         irrelevant_keys.add(entry)
 
+            # Merge irrelevant_keys from summary (includes comparison keys) with local irrelevant_keys
+            all_irrelevant_keys = set(summary.irrelevant_keys) | irrelevant_keys
+
             source_entry = {
                 "path": str(path),
                 **summary.to_dict(),
                 "unexpected_labels": sorted(unexpected_labels),
-                "irrelevant_keys": sorted(irrelevant_keys),
+                "irrelevant_keys": sorted(all_irrelevant_keys),
             }
 
             if not unexpected_labels:
                 source_entry.pop("unexpected_labels")
-            if not irrelevant_keys:
+            if not all_irrelevant_keys:
                 source_entry.pop("irrelevant_keys")
 
             # Split sources based on relevant_count
@@ -971,8 +977,6 @@ def run_kpi_analysis(
         if (irr_count := current_source.pop("irrelevant_count")) != 0:
             logger.error(f"Found {irr_count} irrelevant entries in the current_source. Expected 0.")
         logger.info(f"Found {len(relevant_sources)} relevant files")
-        if not baseline_skipped_totals["same_version"]:
-            baseline_skipped_totals.pop("same_version")
         if not baseline_skipped_totals["duplicate"]:
             baseline_skipped_totals.pop("duplicate")
 

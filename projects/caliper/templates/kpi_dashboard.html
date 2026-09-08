@@ -175,18 +175,18 @@
 <div class="card">
     <h2>Curve Visualizations</h2>
     {% for kpi_id in curve_kpi_ids %}
-    {% set first_kpi = none %}
+    {% set ns = namespace(first_kpi=none) %}
     {% for test in tests %}
         {% for kpi in test.kpis %}
             {% if kpi.kpi_id == kpi_id and kpi.is_curve %}
-                {% if not first_kpi %}
-                    {% set first_kpi = kpi %}
+                {% if not ns.first_kpi %}
+                    {% set ns.first_kpi = kpi %}
                 {% endif %}
             {% endif %}
         {% endfor %}
     {% endfor %}
     <div style="margin-bottom: 2rem;">
-        <h3>{{ first_kpi.name or kpi_id if first_kpi else kpi_id }}</h3>
+        <h3>{{ ns.first_kpi.name or kpi_id if ns.first_kpi else kpi_id }}</h3>
         <div class="chart-container">
             <div id="chart-{{ kpi_id }}" style="width: 100%; height: 400px;"></div>
         </div>

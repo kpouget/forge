@@ -489,7 +489,7 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
                                     <div>
                                         <strong style="color: #495057;">Relative Change:</strong>
                                         <span style="font-family: monospace; color: {% if result.details.relative_change > 0 %}#dc3545{% else %}#28a745{% endif %};">
-                                            {{ "%+.1f%%"|format(result.details.relative_change) }}
+                                            {{ "%+.1f%%"|format(result.details.relative_change * 100) }}
                                         </span>
                                     </div>
                                     {% if result.details.config and result.details.config.max_relative_regression %}
@@ -651,12 +651,6 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
                             <span style="font-family: monospace; background: #e9ecef; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.relevant_count }}</span>
                         </div>
 
-                        {% if source.same_version_count is defined %}
-                        <div>
-                            <strong style="color: #495057; font-size: 0.875rem;">Same Version Count:</strong>
-                            <span style="font-family: monospace; background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.same_version_count }}</span>
-                        </div>
-                        {% endif %}
 
                         {% if source.total_count is defined %}
                         <div>
@@ -743,12 +737,6 @@ Status: {{ overall.verdict }} | {{ tested.regression }} regressions found in {{ 
                             <span style="font-family: monospace; background: #e9ecef; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.irrelevant_count }}</span>
                         </div>
 
-                        {% if source.same_version_count is defined %}
-                        <div>
-                            <strong style="color: #495057; font-size: 0.875rem;">Same Version Count:</strong>
-                            <span style="font-family: monospace; background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600; margin-left: 0.5rem;">{{ source.same_version_count }}</span>
-                        </div>
-                        {% endif %}
 
                         {% if source.total_count is defined %}
                         <div>

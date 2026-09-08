@@ -229,9 +229,9 @@ class LabelSetSummary:
     relevant_common_keys: list[str] = field(default_factory=list)
     relevant_distinct_keys: list[str] = field(default_factory=list)
     relevant_distinct_labels: list[str] = field(default_factory=list)
+    irrelevant_keys: list[str] = field(default_factory=list)
     relevant_count: int = 0
     irrelevant_count: int = 0
-    same_version_count: int = 0
     total_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
