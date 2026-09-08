@@ -52,6 +52,7 @@ class HTMLGenerator:
             total_kpis = 0
             curve_kpis_count = 0
             scalar_kpis_count = 0
+            curve_kpi_ids = set()  # Track unique curve KPI IDs
 
             for test in tests:
                 for kpi in test.get("kpis", []):
@@ -61,9 +62,13 @@ class HTMLGenerator:
                         # Add values count and prepare chart data
                         values = kpi.get("values", [])
                         kpi["values_count"] = len(values) if values else 0
-                        # Pre-serialize the values as JSON string for safe template usage
+                        # Store clean values list for template iteration
+                        kpi["values_list"] = list(values) if values else []
+                        # Pre-serialize the values as JSON string for safe chart usage
                         if values:
                             kpi["values_json"] = json.dumps(values)
+                            # Add to curve KPI IDs set if it has data
+                            curve_kpi_ids.add(kpi.get("kpi_id"))
                         else:
                             kpi["values_json"] = "[]"
                     else:
@@ -76,6 +81,7 @@ class HTMLGenerator:
                 total_kpis=total_kpis,
                 curve_kpis_count=curve_kpis_count,
                 scalar_kpis_count=scalar_kpis_count,
+                curve_kpi_ids=sorted(curve_kpi_ids),  # Pass sorted list of curve KPI IDs
             )
 
             output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -174,7 +180,9 @@ class HTMLGenerator:
             if kpi_data["is_curve"]:
                 values = kpi_data.get("values", [])
                 kpi_data["values_count"] = len(values) if values else 0
-                # Pre-serialize the values as JSON string for safe template usage
+                # Store clean values list for template iteration
+                kpi_data["values_list"] = list(values) if values else []
+                # Pre-serialize the values as JSON string for safe chart usage
                 if values:
                     kpi_data["values_json"] = json.dumps(values)
                 else:
