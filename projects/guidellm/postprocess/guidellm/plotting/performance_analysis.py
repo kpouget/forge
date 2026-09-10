@@ -83,20 +83,93 @@ def _read_html_content(html_path: str | Path) -> str:
             # Import re for regex operations
             import re
 
-            # Extract body content to avoid HTML document conflicts but keep all scripts
-            body_match = re.search(r"<body[^>]*>(.*?)</body>", content, re.DOTALL | re.IGNORECASE)
-            if body_match:
-                body_content = body_match.group(1)
-                body_size_kb = len(body_content.encode("utf-8")) / 1024
-                logger.debug(f"   ✅ Extracted body content: {body_size_kb:.1f} KB")
-                return body_content
+            # Extract optimized content - remove Plotly script includes but keep plot div and Plotly.newPlot calls
+            optimized_content = _extract_optimized_plot_content(content)
+
+            if optimized_content:
+                optimized_size_kb = len(optimized_content.encode("utf-8")) / 1024
+                logger.debug(
+                    f"   ✅ Optimized content: {optimized_size_kb:.1f} KB (reduced from {content_size_kb:.1f} KB)"
+                )
+                return optimized_content
             else:
-                # If no body tags found, use full content
-                logger.debug("   ⚠️  No body tags found, using full content")
-                logger.debug(f"   📄 Using full HTML content: {content_size_kb:.1f} KB")
-                return content
+                # Fallback to body extraction if optimization fails
+                body_match = re.search(
+                    r"<body[^>]*>(.*?)</body>", content, re.DOTALL | re.IGNORECASE
+                )
+                if body_match:
+                    body_content = body_match.group(1)
+                    body_size_kb = len(body_content.encode("utf-8")) / 1024
+                    logger.debug(
+                        f"   ⚠️  Optimization failed, using body content: {body_size_kb:.1f} KB"
+                    )
+                    return body_content
+                else:
+                    logger.debug("   ⚠️  No body tags found, using full content")
+                    return content
     except Exception as e:
         logger.warning(f"❌ Failed to read HTML content from {html_path}: {e}")
+        return ""
+
+
+def _extract_optimized_plot_content(html_content: str) -> str:
+    """Extract only the essential plot content without duplicate Plotly scripts.
+
+    Args:
+        html_content: Full HTML content from Plotly-generated file
+
+    Returns:
+        Optimized content with plot div and necessary scripts only
+    """
+    import re
+
+    try:
+        # Find the plot div (usually has id that starts with a UUID-like string)
+        plot_div_match = re.search(
+            r'<div[^>]*(?:class="[^"]*plotly-graph-div[^"]*"|id="[^"]*")[^>]*>.*?</div>',
+            html_content,
+            re.DOTALL | re.IGNORECASE,
+        )
+
+        if not plot_div_match:
+            logger.debug("   ⚠️  No plot div found, trying alternative extraction")
+            return ""
+
+        plot_div = plot_div_match.group(0)
+
+        # Extract any Plotly.newPlot or Plotly.plot calls (but not the script src tags)
+        plotly_calls = []
+
+        # Look for Plotly.newPlot calls
+        newplot_matches = re.finditer(
+            r"Plotly\.(?:newPlot|plot)\s*\([^)]+\);?", html_content, re.DOTALL | re.IGNORECASE
+        )
+
+        for match in newplot_matches:
+            plotly_calls.append(match.group(0))
+
+        # Also look for any window.PLOTLYENV or plot configuration
+        config_match = re.search(
+            r"window\.PLOTLYENV[^;]+;", html_content, re.DOTALL | re.IGNORECASE
+        )
+
+        # Combine the essential parts
+        essential_parts = [plot_div]
+
+        if plotly_calls:
+            script_content = "\n".join(plotly_calls)
+            essential_parts.append(f"<script>{script_content}</script>")
+
+        if config_match:
+            essential_parts.append(f"<script>{config_match.group(0)}</script>")
+
+        optimized_content = "\n".join(essential_parts)
+        logger.debug(f"   🎯 Extracted plot div + {len(plotly_calls)} Plotly calls")
+
+        return optimized_content
+
+    except Exception as e:
+        logger.debug(f"   ❌ Plot content optimization failed: {e}")
         return ""
 
 
