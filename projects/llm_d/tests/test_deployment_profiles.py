@@ -21,7 +21,7 @@ DEPLOYMENT_PRESETS = [
 CONFIG_OVERRIDES = {
     "runtime.kserve.dry_run": True,
     "caliper.postprocess.enabled": False,
-    "agentic.enabled": False,
+    "agentic_review.enabled": False,
 }
 
 # Check for save deployments mode via environment variable
