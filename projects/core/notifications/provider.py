@@ -100,7 +100,7 @@ def collect_failure_errors(artifact_dir: Path | None) -> str:
             errors.append(f"{failure_file.parent.name}: unknown error")
             continue
 
-        summary = content.split("---")[0].strip()
+        summary = content.split("\n---\n")[0].strip()
         if not summary:
             summary = content.split("\n\n")[0].strip()
             logger.info(
