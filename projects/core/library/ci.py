@@ -185,13 +185,6 @@ def handle_ci_exception(e: Exception) -> None:
 def _display_error_summary(e: Exception) -> None:
     """Display a comprehensive error summary on screen and write to FAILURES file."""
 
-    # Build the error summary as a list of lines
-    logger.error("")
-    logger.error("=" * 80)
-    logger.error("🚨 CI EXECUTION FAILED")
-    logger.error("=" * 80)
-    logger.error("")
-
     summary_lines = []
     if isinstance(e, TaskExecutionError):
         summary_lines += dsl_toolbox.get_task_execution_error(e)
@@ -200,22 +193,18 @@ def _display_error_summary(e: Exception) -> None:
 
     # mind that any thing below a '---\n' will be cut in the notification
 
-    # Add the full stacktrace
-    summary_lines.append(f"--- 📍{e.__class__.__name__} STACKTRACE ---")
-    summary_lines.append(f"--- 📍{str(e)}")
-    summary_lines.append("")
-
     full_traceback = traceback.format_exc().splitlines()
-    # Add each line of the stacktrace with proper indentation
     for line in full_traceback:
         summary_lines.append(f"   {line}")
 
     if not isinstance(e, TaskExecutionError):
         summary_lines.append("---")  # add the details marker after the stacktrace
 
-    # Display on screen
-    for line in summary_lines:
-        logger.error(line)
+    header = "\n".join(["", "=" * 80, "🚨 CI EXECUTION FAILED", "=" * 80, ""])
+    logger.error(header)
+    logger.error("--- 📍%s STACKTRACE ---", e.__class__.__name__)
+    logger.error("--- 📍%s", e)
+    logger.info("\n".join([""] + summary_lines + ["=" * 80]))
 
     # Attempt to write to FAILURES file if environment is initialized
     try:
@@ -227,8 +216,6 @@ def _display_error_summary(e: Exception) -> None:
             )
     except Exception as write_error:
         logger.warning(f"Could not save error summary to file: {write_error}")
-
-    logger.error("=" * 80)
 
 
 def _write_error_summary_to_file(summary_lines: list) -> None:
