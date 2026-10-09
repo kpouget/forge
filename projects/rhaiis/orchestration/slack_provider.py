@@ -11,6 +11,7 @@ from projects.core.notifications.provider import (
     SlackNotificationProvider,
     collect_failure_errors,
     collect_notification_files,
+    collect_step_failure_summaries,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,37 +103,26 @@ class RhaiisSlackProvider(SlackNotificationProvider):
         if failed or not success:
             emoji = ":x:"
             title = "RHAIIS Pipeline Failed"
-            failure_search_dir = env.BASE_ARTIFACT_DIR.parent
-            logger.info(
-                f"Searching for failure errors in {failure_search_dir} "
-                f"(BASE_ARTIFACT_DIR={env.BASE_ARTIFACT_DIR})"
-            )
-            collected_errors = collect_failure_errors(failure_search_dir)
-            if not collected_errors:
-                logger.warning(
-                    f"No failure errors collected, falling back to finish_reason={context.finish_reason!r}"
-                )
-            error_text = "```\n" + (collected_errors or context.finish_reason) + "\n```"
         else:
             emoji = ":white_check_mark:"
             title = "RHAIIS Pipeline Succeeded"
-            error_text = ""
 
-        test_desc, regular_notifs, failure_reviews = collect_notification_files(
+        test_desc, _regular_notifs, _failure_reviews = collect_notification_files(
             env.BASE_ARTIFACT_DIR.parent
         )
+
+        step_failures = collect_step_failure_summaries(env.BASE_ARTIFACT_DIR.parent)
 
         parts = [
             f"{emoji} *{title}*\n",
         ]
 
-        if test_desc:
-            parts.append(test_desc)
+        if step_failures:
+            parts.extend(step_failures)
             parts.append("")
 
-        for notif in regular_notifs:
-            parts.append("")
-            parts.append(notif)
+        if test_desc:
+            parts.append(test_desc)
             parts.append("")
 
         parts.append(
@@ -150,15 +140,46 @@ class RhaiisSlackProvider(SlackNotificationProvider):
             f"{mlflow_line}"
         )
 
-        if failure_reviews or error_text:
-            parts.append("*Error:*")
-
-        for review in failure_reviews:
-            parts.append("")
-            parts.append(review)
-            parts.append("")
-
-        if error_text:
-            parts.append(error_text)
-
         return "\n".join(parts).rstrip("\n")
+
+    def format_thread_replies(self, context: NotificationContext) -> list[str]:
+        _test_desc, regular_notifs, failure_reviews = collect_notification_files(
+            env.BASE_ARTIFACT_DIR.parent
+        )
+
+        replies = []
+
+        if regular_notifs:
+            notif_parts = ["*Notifications:*"]
+            for notif in regular_notifs:
+                notif_parts.append("")
+                notif_parts.append(notif)
+            replies.append("\n".join(notif_parts).rstrip("\n"))
+
+        status = context.status or {}
+        success = status.get("success", False)
+        failed = context.finish_reason in ("failed", "export failed", "aborted")
+
+        if failed or not success:
+            failure_search_dir = env.BASE_ARTIFACT_DIR.parent
+            logger.info(
+                f"Searching for failure errors in {failure_search_dir} "
+                f"(BASE_ARTIFACT_DIR={env.BASE_ARTIFACT_DIR})"
+            )
+            collected_errors = collect_failure_errors(failure_search_dir)
+            if not collected_errors:
+                logger.warning(
+                    f"No failure errors collected, falling back to "
+                    f"finish_reason={context.finish_reason!r}"
+                )
+            error_text = "```\n" + (collected_errors or context.finish_reason) + "\n```"
+
+            error_parts = ["*Error:*"]
+            for review in failure_reviews:
+                error_parts.append("")
+                error_parts.append(review)
+                error_parts.append("")
+            error_parts.append(error_text)
+            replies.append("\n".join(error_parts).rstrip("\n"))
+
+        return replies
