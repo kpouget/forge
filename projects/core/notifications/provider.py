@@ -224,9 +224,39 @@ class SlackNotificationProvider(ABC):
         """Return True to also post the thread reply in the channel. Default: False."""
         return False
 
+    def format_thread_replies(self, context: NotificationContext) -> list[str]:
+        """Return messages to post as thread replies after the main message."""
+        return []
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _post_thread_replies(
+        self,
+        client,
+        context: NotificationContext,
+        *,
+        thread_ts: str | None,
+        channel_id: str,
+        dry_run: bool,
+    ) -> bool:
+        replies = self.format_thread_replies(context)
+        if not replies:
+            return True
+
+        for reply in replies:
+            if dry_run:
+                logger.info("Would post thread reply:\n%s", reply)
+                continue
+
+            _, ok = slack_api.send_message(
+                client, message=reply, main_ts=thread_ts, channel_id=channel_id
+            )
+            if not ok:
+                return False
+
+        return True
 
     @staticmethod
     def _save_message_to_file(message: str, context: NotificationContext) -> None:
@@ -276,10 +306,17 @@ class SlackNotificationProvider(ABC):
         if anchor is None:
             if dry_run:
                 logger.info("Would post channel message:\n%s", message)
-                return True
+                return self._post_thread_replies(
+                    client, context, thread_ts=None, channel_id=channel_id, dry_run=True
+                )
 
-            _, ok = slack_api.send_message(client, message=message, channel_id=channel_id)
-            return ok
+            msg_ts, ok = slack_api.send_message(client, message=message, channel_id=channel_id)
+            if not ok:
+                return False
+
+            return self._post_thread_replies(
+                client, context, thread_ts=msg_ts, channel_id=channel_id, dry_run=False
+            )
 
         channel_msg_ts, _ = slack_api.search_channel_message(client, anchor, channel_id=channel_id)
 
@@ -296,7 +333,9 @@ class SlackNotificationProvider(ABC):
 
         if dry_run:
             logger.info("Would post thread message:\n%s", message)
-            return True
+            return self._post_thread_replies(
+                client, context, thread_ts=channel_msg_ts, channel_id=channel_id, dry_run=True
+            )
 
         _, ok = slack_api.send_message(
             client,
@@ -305,4 +344,9 @@ class SlackNotificationProvider(ABC):
             channel_id=channel_id,
             reply_broadcast=self.reply_broadcast(context),
         )
-        return ok
+        if not ok:
+            return False
+
+        return self._post_thread_replies(
+            client, context, thread_ts=channel_msg_ts, channel_id=channel_id, dry_run=False
+        )
