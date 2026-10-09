@@ -72,7 +72,7 @@ def collect_notification_files(
         elif name.startswith("FAILURE_REVIEW"):
             failure_reviews.append(f">{formatted}")
         else:
-            regular.append(f"* [notif] {name}\n>{formatted}")
+            regular.append(f"• [notif] {name}\n>{formatted}")
 
     return test_description, regular, failure_reviews
 
@@ -113,6 +113,40 @@ def collect_failure_errors(artifact_dir: Path | None) -> str:
         logger.warning(f"collect_failure_errors: no FAILURE.txt files found in {artifact_dir}/*/")
 
     return "\n".join(errors)
+
+
+def collect_step_failure_summaries(artifact_dir: Path | None) -> list[str]:
+    """Collect summary lines for non-success steps from exit_status.yaml files.
+
+    Returns a list of formatted bullet lines, one per failed step.
+    """
+    from projects.core.library.ci import ExitStatus
+
+    if not artifact_dir or not artifact_dir.is_dir():
+        return []
+
+    bullets = []
+    for step_dir in sorted(artifact_dir.glob("*")):
+        if not step_dir.is_dir() or step_dir.name.startswith(".") or step_dir.name == "lost+found":
+            continue
+        if step_dir.name == CI_METADATA_DIRNAME:
+            continue
+
+        try:
+            exit_status = ExitStatus.load(step_dir / CI_METADATA_DIRNAME)
+        except Exception:
+            continue
+
+        if not exit_status.records or exit_status.is_success:
+            continue
+
+        primary = exit_status.primary
+        msg = f"• *{step_dir.name}* — `{primary.category}`"
+        if primary.reason:
+            msg += f" → _{primary.reason}_"
+        bullets.append(msg)
+
+    return bullets
 
 
 class SlackNotificationProvider(ABC):
