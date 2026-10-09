@@ -8,7 +8,6 @@ SlackNotificationProvider and pass it to CIApp.
 from __future__ import annotations
 
 import logging
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,14 +70,15 @@ class SlackNotificationProvider(ABC):
     def format_message(self, context: NotificationContext) -> str:
         """Format the Slack message body."""
 
-    def get_thread_anchor(self, context: NotificationContext) -> str:
-        """Return the thread anchor text for grouping messages in a thread."""
+    def get_thread_anchor(self, context: NotificationContext) -> str | None:
+        """Return the thread anchor text for grouping messages in a thread.
+
+        Returns None when there is no PR, so the message is posted directly
+        to the main channel without threading.
+        """
         if context.pr_number:
             return f"Thread for {context.project_name} PR #{context.pr_number}"
-        if context.job_type == "periodic":
-            job_name = os.environ.get("JOB_NAME_SAFE", context.project_name)
-            return f"Thread for {context.project_name} periodic `{job_name}`"
-        return f"Thread for {context.project_name} run"
+        return None
 
     def get_thread_channel_message(self, context: NotificationContext, anchor: str) -> str:
         """Return the channel message that creates the thread.
@@ -155,6 +155,14 @@ class SlackNotificationProvider(ABC):
         if not client:
             logger.error("Provider %s: failed to init Slack client", type(self).__name__)
             return False
+
+        if anchor is None:
+            if dry_run:
+                logger.info("Would post channel message:\n%s", message)
+                return True
+
+            _, ok = slack_api.send_message(client, message=message, channel_id=channel_id)
+            return ok
 
         channel_msg_ts, _ = slack_api.search_channel_message(client, anchor, channel_id=channel_id)
 
