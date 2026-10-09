@@ -96,8 +96,18 @@ def collect_failure_errors(artifact_dir: Path | None) -> str:
     for failure_file in sorted(artifact_dir.glob("*/FAILURE.txt")):
         logger.info(f"collect_failure_errors: found {failure_file}")
         content = failure_file.read_text().strip()
-        summary = content.split("---")[0].strip() if content else "unknown error"
-        errors.append(f"{summary}")
+        if not content:
+            errors.append(f"{failure_file.parent.name}: unknown error")
+            continue
+
+        summary = content.split("---")[0].strip()
+        if not summary:
+            summary = content.split("\n\n")[0].strip()
+            logger.info(
+                f"collect_failure_errors: nothing before '---' separator, "
+                f"using first paragraph as summary: {summary!r}"
+            )
+        errors.append(summary)
 
     if not errors:
         logger.warning(f"collect_failure_errors: no FAILURE.txt files found in {artifact_dir}/*/")
