@@ -373,7 +373,7 @@ def ensure_kubeconfig_works():
 
     kubeconfig = os.environ.get("KUBECONFIG")
     if not kubeconfig:
-        raise CIError("KUBECONFIG environment variable is not set", ExitCategory.INFRA_FAILURE)
+        raise CIError("KUBECONFIG environment variable is not set", ExitCategory.CONFIG_ERROR)
 
     logger.info(f"KUBECONFIG is set to {kubeconfig}")
 
