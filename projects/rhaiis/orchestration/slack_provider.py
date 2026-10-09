@@ -4,68 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 
 from projects.core.library import env
-from projects.core.notifications.provider import NotificationContext, SlackNotificationProvider
+from projects.core.notifications.provider import (
+    NotificationContext,
+    SlackNotificationProvider,
+    collect_failure_errors,
+    collect_notification_files,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _format_notification_content(content: str) -> str:
-    """Format notification content for Slack: quote lines and convert bold markers."""
-    return content.replace("\n", "\n>").replace("**", "*")
-
-
-def _collect_notification_files(
-    artifact_dir: Path | None,
-) -> tuple[str, list[str], list[str]]:
-    """Collect notification files from all 000__ci_metadata/notifications/ dirs.
-
-    Returns (test_description, regular_notifications, failure_reviews).
-    """
-    if not artifact_dir or not artifact_dir.is_dir():
-        return "", [], []
-
-    import re
-
-    from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
-
-    test_description = ""
-    regular = []
-    failure_reviews = []
-
-    for nf in sorted(artifact_dir.rglob(f"{CI_METADATA_DIRNAME}/notifications/*.txt")):
-        content = nf.read_text().strip()
-        if not content:
-            continue
-
-        stem = nf.stem
-        name = re.sub(r"^\d+__", "", stem)
-        formatted = _format_notification_content(content[:1500])
-
-        if name == "TEST_DESCRIPTION":
-            test_description = f">{formatted}"
-        elif name.startswith("FAILURE_REVIEW"):
-            failure_reviews.append(f">{formatted}")
-        else:
-            regular.append(f"* [notif] {name}\n>{formatted}")
-
-    return test_description, regular, failure_reviews
-
-
-def _collect_failure_errors(artifact_dir: Path | None) -> str:
-    """Collect error summaries from FAILURE files across pipeline steps."""
-    if not artifact_dir or not artifact_dir.is_dir():
-        return ""
-
-    errors = []
-    for failure_file in sorted(artifact_dir.glob("*/FAILURE.txt")):
-        content = failure_file.read_text().strip()
-        summary = content.split("---")[0].strip() if content else "unknown error"
-        errors.append(f"{summary}")
-
-    return "\n".join(errors)
 
 
 class RhaiisSlackProvider(SlackNotificationProvider):
@@ -154,17 +102,23 @@ class RhaiisSlackProvider(SlackNotificationProvider):
         if failed or not success:
             emoji = ":x:"
             title = "RHAIIS Pipeline Failed"
-            error_text = (
-                "```\n"
-                + (_collect_failure_errors(env.BASE_ARTIFACT_DIR.parent) or context.finish_reason)
-                + "\n```"
+            failure_search_dir = env.BASE_ARTIFACT_DIR.parent
+            logger.info(
+                f"Searching for failure errors in {failure_search_dir} "
+                f"(BASE_ARTIFACT_DIR={env.BASE_ARTIFACT_DIR})"
             )
+            collected_errors = collect_failure_errors(failure_search_dir)
+            if not collected_errors:
+                logger.warning(
+                    f"No failure errors collected, falling back to finish_reason={context.finish_reason!r}"
+                )
+            error_text = "```\n" + (collected_errors or context.finish_reason) + "\n```"
         else:
             emoji = ":white_check_mark:"
             title = "RHAIIS Pipeline Succeeded"
             error_text = ""
 
-        test_desc, regular_notifs, failure_reviews = _collect_notification_files(
+        test_desc, regular_notifs, failure_reviews = collect_notification_files(
             env.BASE_ARTIFACT_DIR.parent
         )
 

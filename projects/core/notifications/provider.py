@@ -8,12 +8,14 @@ SlackNotificationProvider and pass it to CIApp.
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import projects.core.notifications.slack.api as slack_api
+from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
 from projects.core.library import vault
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,77 @@ class NotificationContext:
     job_type: str | None = None
     artifact_dir: Path | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for notification providers
+# ---------------------------------------------------------------------------
+
+
+def format_notification_content(content: str) -> str:
+    """Format notification content for Slack: quote lines and convert bold markers."""
+    return content.replace("\n", "\n>").replace("**", "*")
+
+
+def collect_notification_files(
+    artifact_dir: Path | None,
+) -> tuple[str, list[str], list[str]]:
+    """Collect notification files from all 000__ci_metadata/notifications/ dirs.
+
+    Returns (test_description, regular_notifications, failure_reviews).
+    """
+    if not artifact_dir or not artifact_dir.is_dir():
+        return "", [], []
+
+    test_description = ""
+    regular = []
+    failure_reviews = []
+
+    for nf in sorted(artifact_dir.rglob(f"{CI_METADATA_DIRNAME}/notifications/*.txt")):
+        content = nf.read_text().strip()
+        if not content:
+            continue
+
+        stem = nf.stem
+        name = re.sub(r"^\d+__", "", stem)
+        formatted = format_notification_content(content[:1500])
+
+        if name == "TEST_DESCRIPTION":
+            test_description = f">{formatted}"
+        elif name.startswith("FAILURE_REVIEW"):
+            failure_reviews.append(f">{formatted}")
+        else:
+            regular.append(f"* [notif] {name}\n>{formatted}")
+
+    return test_description, regular, failure_reviews
+
+
+def collect_failure_errors(artifact_dir: Path | None) -> str:
+    """Collect error summaries from FAILURE files across pipeline steps."""
+    if not artifact_dir or not artifact_dir.is_dir():
+        logger.warning(
+            f"collect_failure_errors: artifact_dir={artifact_dir!r} is not a valid directory"
+        )
+        return ""
+
+    logger.info(f"collect_failure_errors: searching for */FAILURE.txt in {artifact_dir}")
+    step_dirs = sorted(d for d in artifact_dir.iterdir() if d.is_dir())
+    logger.info(
+        f"collect_failure_errors: found {len(step_dirs)} subdirectories: "
+        + ", ".join(d.name for d in step_dirs)
+    )
+
+    errors = []
+    for failure_file in sorted(artifact_dir.glob("*/FAILURE.txt")):
+        logger.info(f"collect_failure_errors: found {failure_file}")
+        content = failure_file.read_text().strip()
+        summary = content.split("---")[0].strip() if content else "unknown error"
+        errors.append(f"{summary}")
+
+    if not errors:
+        logger.warning(f"collect_failure_errors: no FAILURE.txt files found in {artifact_dir}/*/")
+
+    return "\n".join(errors)
 
 
 class SlackNotificationProvider(ABC):
