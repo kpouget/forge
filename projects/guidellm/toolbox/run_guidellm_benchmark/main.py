@@ -1264,6 +1264,8 @@ def capture_guidellm_state(*, artifact_dir: Path, namespace: str, benchmark_name
 
     logs_dir = artifacts_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
+    describe_dir = artifacts_dir / "describe"
+    describe_dir.mkdir(parents=True, exist_ok=True)
 
     pod_names = _get_job_pod_names(namespace, benchmark_name)
     for pod_name in pod_names:
@@ -1285,7 +1287,7 @@ def capture_guidellm_state(*, artifact_dir: Path, namespace: str, benchmark_name
             namespace,
             check=False,
             log_stdout=False,
-            stdout_dest=logs_dir / f"guidellm_benchmark_{pod_name}.describe.txt",
+            stdout_dest=describe_dir / f"guidellm_benchmark_{pod_name}.describe.txt",
         )
 
 
