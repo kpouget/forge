@@ -41,6 +41,7 @@ def run(
     deploy_monitor: bool = True,
     skip_router: bool = False,
     maas_gateway_label: str = "",
+    served_model_names: list[str] | None = None,
 ) -> str:
     """Build and deploy an llm-d simulator LLMInferenceService.
 
@@ -60,6 +61,7 @@ def run(
         deploy_monitor: If True, deploy ServiceMonitor for monitoring.
         skip_router: If True, set spec.router to empty (no scheduler, no gateway routing).
         maas_gateway_label: MaaS gateway label value. When set, adds MaaS labels and annotations.
+        served_model_names: Additional model names to serve (--served-model-name flags).
     """
     ctx = execute_tasks(locals())
 
@@ -90,6 +92,7 @@ def build_manifest(args, ctx):
                 "skip_router": args.skip_router,
                 "deploy_monitor": args.deploy_monitor,
                 "maas_gateway_label": args.maas_gateway_label,
+                "served_model_names": args.served_model_names or [],
             },
         )
     )
@@ -237,12 +240,10 @@ def apply_destination_rule_inferencepool(args, ctx):
     return _apply_destination_rule(args, pool_host)
 
 
+@retry(attempts=18, delay=10, backoff=1.0)
 @task
 def apply_destination_rule_workload(args, ctx):
     """Create a DestinationRule to disable TLS to the workload service."""
-    if not args.skip_router:
-        return "Skipped (router handles routing)"
-
     workload_host = f"{args.name}-kserve-workload-svc.{args.namespace}.svc.cluster.local"
     return _apply_destination_rule(args, workload_host)
 
