@@ -96,9 +96,20 @@ def create_deployment(args, ctx):
 
 @task
 def create_service(args, ctx):
-    """Render and apply the sim Service."""
+    """Render and apply the sim Service with ownerReference to the Deployment."""
     src_dir = args.artifact_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
+
+    deployment_uid = oc(
+        "get",
+        "deployment",
+        args.name,
+        "-n",
+        args.namespace,
+        "-o",
+        "jsonpath={.metadata.uid}",
+        log_stdout=True,
+    ).stdout.strip()
 
     manifest = yaml.safe_load(
         render_template(
@@ -107,6 +118,7 @@ def create_service(args, ctx):
                 "name": args.name,
                 "namespace": args.namespace,
                 "port": args.port,
+                "deployment_uid": deployment_uid,
             },
         )
     )
