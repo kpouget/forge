@@ -59,16 +59,18 @@ spec:
                   key: HF_TOKEN
                   optional: true
 {% endif %}
+{% if api_key_secret %}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ api_key_secret }}
+                  key: auth_token
+{% endif %}
           volumeMounts:
             - name: home
               mountPath: /home/guidellm
             - name: results
               mountPath: /results
-{% if api_key_secret %}
-            - name: auth-token
-              mountPath: /secrets/auth-token
-              readOnly: true
-{% endif %}
         - name: guidellm-sidecar
           image: {{ image }}
           command: ["/bin/sh", "-c"]
@@ -101,8 +103,3 @@ spec:
           emptyDir: {}
         - name: results
           emptyDir: {}
-{% if api_key_secret %}
-        - name: auth-token
-          secret:
-            secretName: {{ api_key_secret }}
-{% endif %}

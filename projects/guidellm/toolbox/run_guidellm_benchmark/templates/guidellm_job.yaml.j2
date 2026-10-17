@@ -59,24 +59,21 @@ spec:
                   key: HF_TOKEN
                   optional: true
 {% endif %}
+{% if api_key_secret %}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ api_key_secret }}
+                  key: auth_token
+{% endif %}
           volumeMounts:
             - name: home
               mountPath: /home/guidellm
             - name: results
               mountPath: /results
-{% if api_key_secret %}
-            - name: auth-token
-              mountPath: /secrets/auth-token
-              readOnly: true
-{% endif %}
       volumes:
         - name: home
           emptyDir: {}
         - name: results
           persistentVolumeClaim:
             claimName: {{ name }}
-{% if api_key_secret %}
-        - name: auth-token
-          secret:
-            secretName: {{ api_key_secret }}
-{% endif %}
