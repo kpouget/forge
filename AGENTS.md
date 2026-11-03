@@ -11,8 +11,54 @@ Key paths:
 - `projects/NAME/toolbox` — lower layer of the test harness (toolbox of scripts altering the state of the cluster, using the DSL language)
 - `projects/NAME/test` — unit testing of the test harness
 - `projects/core/dsl/` — shared DSL (task execution, k8s utilities, shell helpers)
-- `fournos/gitops/` — Tekton pipelines and GitOps base workflows
+- `fournos/gitops/` — Tekton pipelines and GitOps base workflows (irrelevant for most Forge work — do not explore unless explicitly asked)
+- `projects/fournos_launcher/` — Fournos launcher orchestration (irrelevant for most Forge work — do not explore unless explicitly asked)
 - `docs/` — project documentation
+
+# SYSTEM DIRECTIVE: Intent-Driven Development (IDD)
+This repository uses Intent-Driven Development. Your primary objective is to execute declarative specifications exactly as written. You are a compiler for English logic contracts.
+
+## Order of Operations
+Before creating or modifying any source code, you MUST execute the following sequence:
+1. **Module Rules:** Scan the target directory for an `index.intent.md`. Apply its module-level boundaries to your task.
+2. **File Contracts:** Read the specific `[filename].intent.md` associated with your target file. There is a strict 1-to-1 mapping between a Python file and its intent file.
+3. **Execution:** Generate or modify `[filename].py` to perfectly satisfy the English contract. Do not hallucinate features outside the spec.
+
+## Strict Parsing Rules
+* **Respect the Frontmatter:** You may only modify the file specified in the `target_file` YAML frontmatter. You may only import dependencies explicitly listed in `allowed_imports`. Hallucinating imports outside this list is a critical failure.
+* **Constraints are Absolute:** The `Constraints` section of the intent file is non-negotiable. Negative constraints (e.g., "Do not", "Never") take precedence over all other instructions.
+* **No Scope Creep:** You must satisfy the `Core Intent` and stop. Do not add undocumented features, do not abstract prematurely, and do not over-engineer.
+* **Verification is Mandatory:** You must write tests exactly as specified in the `Verification Hooks` section. The logic is not complete until these tests pass.
+
+## Code Preservation and Human Coexistence
+Human maintainers and AI agents share this codebase. You must respect human-optimized code.
+
+* **Surgical Preservation:** When modifying an existing file, you must surgically preserve all existing logic, variables, and algorithms unless they explicitly violate the `[filename].intent.md` constraints or the direct user prompt. Do not rewrite human code simply to match a different style.
+* **Agent-Lock Blocks:** Human maintainers will fence off complex or fragile code using specific comments.
+
+```python
+# [AGENT-LOCK: START]
+def highly_optimized_function():
+...
+# [AGENT-LOCK: END]
+```
+
+## Architectural Boundaries & Layering
+This codebase enforces strict directory-based module layering. When modifying a file, look at its directory path to determine its allowed dependencies. You are strictly forbidden from creating circular dependencies or importing from higher-level layers.
+
+* **Orchestration Layer (`projects/NAME/orchestration/`):**
+  - *Allowed:* May import from `projects/*/toolbox/` and `projects/caliper/orchestration`.
+  - *Constraint:* You may only import public exports (defined in `__init__.py` or explicitly public functions). Do not deep-import internal files.
+  - *Constraint:* NEVER import from `projects/*/orchestration/` or `projects/caliper/engine`.
+
+* **Toolbox Layer (`projects/NAME/toolbox/`):**
+  - *Allowed:* Agnostic utilities only. Standard library and external pip dependencies.
+  - *Constraint:* NEVER import from `projects/*/orchestration/` or `projects/core/library`.
+
+* **Caliper Layer (`projects/caliper/`):**
+  - *Standalone:* NEVER import from any other `project/*`
+
+If a requested change requires violating these directory boundaries, reject the task and state that the architecture forbids it.
 
 ## Security: Secret Handling (CRITICAL)
 
